@@ -1,0 +1,132 @@
+{
+  "name": "forgelens",
+  "displayName": "ForgeLens",
+  "description": "Safe editor-native coding assistant powered by local TrueForge",
+  "version": "0.1.9",
+  "publisher": "forgelens-team",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:forgelens.start"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "forgelens.start",
+        "title": "ForgeLens: Open Agent"
+      },
+      {
+        "command": "forgelens.inline",
+        "title": "ForgeLens: Edit Selection"
+      },
+      {
+        "command": "forgelens.review",
+        "title": "ForgeLens: Review Pending Hunks"
+      },
+      {
+        "command": "forgelens.cancel",
+        "title": "ForgeLens: Cancel Run"
+      },
+      {
+        "command": "forgelens.undo",
+        "title": "ForgeLens: Undo Last Accepted Change"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "forgelens.inline",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "ForgeLens",
+      "properties": {
+        "forgelens.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8790",
+          "description": "Local TrueForge URL"
+        },
+        "forgelens.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model ID configured in TrueForge"
+        },
+        "forgelens.fallbackModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional second model configured in TrueForge"
+        },
+        "forgelens.contextBudget": {
+          "type": "number",
+          "default": 24000,
+          "minimum": 1000,
+          "maximum": 100000,
+          "description": "Maximum context characters"
+        },
+        "forgelens.preloadTools": {
+          "type": "boolean",
+          "default": false,
+          "description": "Preload editor tool schemas for local models that struggle with deferred tool discovery. Default keeps deferred loading."
+        },
+        "forgelens.reasoningEffort": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Optional provider-supported reasoning effort. Empty uses provider default; none can reduce local CPU latency."
+        },
+        "forgelens.runTimeoutMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0.1,
+          "maximum": 30,
+          "description": "Per-run deadline in minutes. On expiry, stop without automatic replay; staged edits still require review."
+        },
+        "forgelens.modelCallTimeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 1,
+          "maximum": 300,
+          "description": "Maximum seconds to wait for a single model generation through TrueForge. Confirmed timeout may use the configured fallback before any edit is staged."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --sourcemap",
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "package": "npm run check && npm run compile && vsce package --allow-missing-repository"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0",
+    "@truefoundry/trueforge-sdk": "0.185.0",
+    "diff": "8.0.2",
+    "undici": "7.30.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^3.7.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
