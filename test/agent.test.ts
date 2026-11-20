@@ -18,9 +18,10 @@ test('published agent definition uses the same instructions as the runtime',()=>
 
 test('multi-file instruction transitions from bounded discovery to an exposed plan and staged writes',()=>{
  assert.match(instructions,/Call find_relevant_files once/);
- assert.match(instructions,/read at most 2 files/);
+ assert.match(instructions,/Use focused reads with exact line ranges/);
  assert.match(instructions,/report_plan/);
- assert.match(instructions,/propose_write once per file/);
- assert.match(instructions,/After 6 exploration calls/);
+ assert.match(instructions,/call propose_write/);
+ assert.match(instructions,/Targeted recovery reads are allowed/);
+ assert.doesNotMatch(instructions,/After 6 exploration calls|read at most 2 files/);
  assert.doesNotMatch(instructions,/(?:tests|docs|src)\/[\w./-]+/);
 });

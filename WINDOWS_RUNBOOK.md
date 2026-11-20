@@ -72,7 +72,7 @@ Open `http://[::1]:8790` in the browser and verify the configured model ID is ex
 ```powershell
 $env:FLASK_ROOT = $Flask
 $env:EVIDENCE_DIR = $Evidence
-$env:CONTEXT_BUDGET = '4000'
+$env:CONTEXT_BUDGET = '24000'
 $env:DYNAMIC_SUB_AGENTS = 'false'
 $env:RUN_TIMEOUT_MS = '300000'
 $env:MODEL_CALL_TIMEOUT_MS = '120000'

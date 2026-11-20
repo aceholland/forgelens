@@ -2,9 +2,9 @@
 
 A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **Development build, not yet a verified competition submission.** See [verification status](docs/STATUS.md).
 
-## Windows checkpoint: 0.1.11
+## Windows checkpoint: 0.1.12
 
-106 Windows tests, TypeScript checking and extension compilation passed using the existing installed dependencies. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares its existing 4,000-character preview budget across that matching trio.
+108 Windows tests, TypeScript checking and extension compilation passed using the existing installed dependencies. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares the configured preview budget across that matching trio. Focused recovery reads remain available after planning or a rejected edit.
 
 Task A was exercised in the real Windows Extension Development Host on 0.1.10: two reviewed hunks were saved, `off`, `n`, `OFF`, and `N` returned `False`, and only the selected helper changed. A separate Windows headless C check used an unreachable model endpoint with no fallback: zero proposals and all 235 file hashes unchanged. Task B has not passed review and post-save validation. Final-build editor retests and a usable demo recording remain open.
 
@@ -38,7 +38,7 @@ Open this project in VS Code and press F5 using `Run ForgeLens`. In the extensio
 Alternatively:
 ```sh
 npm run package
-code --install-extension forgelens-0.1.11.vsix
+code --install-extension forgelens-0.1.12.vsix
 ```
 Then run **ForgeLens: Open Agent** from the command palette. Select text and press Ctrl+Alt+I (Cmd+Alt+I on Mac) for inline editing.
 
@@ -65,12 +65,12 @@ An isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absen
 
 ## What I changed and why
 - **Ranked discovery:** One tool finds likely implementation, test and documentation files. Showing paths and reasons tells the reviewer what informed the edit.
-- **Six-call exploration limit:** During the previous failed rehearsal, the model read repeatedly without staging edits. The MCP server now stops exploration rather than letting the model keep reading until the run ends.
+- **Bounded recovery:** Repeated unchanged reads return short locators. Individual tool responses are bounded, while targeted recovery reads remain available until the run deadline or TrueForge's 40-iteration limit.
 - **Timeout and fallback:** A per-model timer stops a stalled generation. TrueForge can start the configured fallback only when the first turn has stopped and no edit has been staged.
 - **Review before apply:** Proposals stay out of the working tree until the user applies accepted hunks and saves. Interrupted or empty runs report their outcome instead of claiming completion.
 
-## Phase-gated discovery and optional model fallback (0.1.9)
-The first agent step is `find_relevant_files`, which ranks up to five distinct files using keywords and matching code/documentation symbols. It returns line-ranged previews and reasons, within the configured character budget. The agent may then request at most two focused reads before planning and staging. At the hard limit of six exploration calls, the editor rejects further requests other than `propose_write`. Staging still requires approval and never writes disk. The editor shows the files and reasons returned by the live discovery separately from the agent's planned changes.
+## Discovery, recovery and optional model fallback
+The first agent step is `find_relevant_files`, which ranks up to five distinct files using keywords and matching code/documentation symbols. It returns line-ranged previews and reasons within the configured character budget. The agent can make focused reads, report its plan, and stage exact edits. Targeted reads remain available after planning or a rejected edit; there is no six-call hard gate. Fresh read/search responses use a soft allowance of at least 6,000 characters or the configured context budget, whichever is larger, with a 900-character recovery floor; discovery, metadata and prompt overhead are additional. This is not a cumulative token ceiling. Staging still requires approval and never writes disk. The editor shows live discovery separately from planned changes.
 
 Configure both model entries in **TrueForge**, not inside the extension. See [the single model example](agent/model.example.json) for the loopback Ollama endpoint and cloud-provider placeholders. Choose an authorized fast model in TrueForge and copy its actual ID into VS Code User Settings. The fallback is configured by its TrueForge model ID as well. Don't put credentials in VS Code or commit them. The model deadline defaults to 120 seconds per model generation (`forgelens.modelCallTimeoutSeconds`); the separate total-run deadline defaults to five minutes. On a model timeout, automatic fallback requires confirmation that the prior TrueForge turn stopped and no edits were staged. An ambiguous network interruption does not trigger replay.
 
@@ -84,7 +84,7 @@ $env:TRUEFORGE_MODEL = 'COPY_AUTHORIZED_CLOUD_MODEL_ID_FROM_TRUEFORGE'
 $env:TRUEFORGE_FALLBACK_MODEL = 'COPY_OLLAMA_MODEL_ID_FROM_TRUEFORGE'
 $env:FLASK_ROOT = 'C:\path\to\clean\flask-3.1.3'
 $env:EVIDENCE_DIR = Join-Path $HOME 'forgelens-task-b-evidence'
-$env:CONTEXT_BUDGET = '4000'
+$env:CONTEXT_BUDGET = '24000'
 $env:DYNAMIC_SUB_AGENTS = 'false'
 $env:MODEL_CALL_TIMEOUT_MS = '120000'
 $env:RUN_TIMEOUT_MS = '300000'
@@ -94,7 +94,7 @@ node --import tsx test-local-b.ts
 Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect and apply only genuine proposals in a disposable checkout before running tests. A fallback result is a local-model result, not a cloud pass.
 
 ## Known limitations
-Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Final-release UI retests and recording remain pending. No installed VS Code app was found in the current computer's inventory. No trust setting was changed. Task B has not passed. No completed submission video or submission-ready PDF exists.
+Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Task A also passed in the Windows Extension Development Host on 0.1.10. Final-release UI retests and recording remain pending. No trust setting was changed. Task B has not passed. No completed submission video or submission-ready PDF exists.
 
 0.1.4 reports empty provider output as failure; 0.1.5 handles supported operator questions; 0.1.6 bounds automatic retrieval to four windows and adds bounded neighboring search context. These repairs do not establish model task success. New file creation/deletion, ignore-file parsing and full token budgeting are not implemented. Unsaved accepted buffers must be saved before validation. Ephemeral connectors remain in TrueForge settings after runs. Fallback creates a separate session and is not guaranteed to reconstruct partial reasoning. Humans review/apply staged proposals only after a run ends.
 
@@ -103,7 +103,7 @@ From scratch, no upstream editor fork. MIT license. Ordinary dependencies retain
 
 ## Local-model compatibility (recovery update)
 
-`propose_edit` accepts either full `content` or an `edits` array of `{oldText,newText}`. Exact edits must match once and may not overlap. They are expanded in memory and enter the same proposal preview, inline-scope check, per-hunk review, apply confirmation, and undo flow. They never write files by themselves.
+Agent tools `propose_write` and its legacy alias `propose_edit` require an `edits` array of `{oldText,newText}`. Full-file `content` arguments are rejected. Exact edits must match once and may not overlap. They are expanded in memory and enter the same proposal preview, inline-scope check, per-hunk review, apply confirmation, and undo flow. They never write files by themselves.
 
 Set `forgelens.preloadTools` to `true` for small local models that fail deferred-call schemas. The default remains `false` (TrueForge deferred discovery). Both modes retain tool approval requirements. Configure the model only in TrueForge; the extension never calls Ollama or a model provider directly.
 

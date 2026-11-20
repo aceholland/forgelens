@@ -62,7 +62,7 @@ test('discovery retains original task requirements when the model shortens its q
  const bridge=await startMcp({root,budget:4000,task:'Add a console command covered by a test and documented alongside the other commands.',active:()=>true,propose:async()=>'',command:async()=>'',context:()=>{}});t.after(()=>bridge.close());
  const client=new Client({name:'test',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
  const result=await client.callTool({name:'find_relevant_files',arguments:{query:'JSON configuration'}});
- assert.ok(!result.isError);const text=(result.content as {text:string}[])[0]!.text;const selected=JSON.parse(text.slice(0,text.lastIndexOf('\nbudget:')));
+ assert.ok(!result.isError);const text=(result.content as {text:string}[])[0]!.text;const selected=JSON.parse(text.slice(0,text.lastIndexOf('\nexploration calls used:')));
  assert.deepEqual(selected.items.map((item:{path:string})=>item.path),['src/console.py','tests/test_console.py','docs/console.rst']);
  assert.ok(selected.usedChars<=4000);
 });
@@ -212,7 +212,7 @@ test('MCP repeats are isolated by actual result and refresh does not relax the c
  assert.match(await read(),/fresh content/);
 });
 
-test('six shared discovery attempts include repeat and malformed input; write alone remains available',async t=>{
+test('discovery accounting includes repeats and malformed input without blocking repair reads',async t=>{
  const root=await mkdtemp(path.join(tmpdir(),'forgelens-phase-'));t.after(()=>rm(root,{recursive:true,force:true}));
  const original='alpha\nbeta';await writeFile(path.join(root,'code.py'),original);
  let staged:string|undefined;const plans:unknown[]=[],found:unknown[]=[],calls:string[]=[];
@@ -224,32 +224,27 @@ test('six shared discovery attempts include repeat and malformed input; write al
   const r=await call(name,args);assert.ok(!r.isError,JSON.stringify(r));
   return (r.content as {text:string}[])[0]!.text;
  };
- assert.match(await body('find_relevant_files',{query:'alpha'}),/budget: 1\/6/);
+ assert.match(await body('find_relevant_files',{query:'alpha'}),/exploration calls used: 1/);
  assert.equal(found.length,1);
  assert.deepEqual(calls,['find_relevant_files']);
- assert.match(await body('read_file',{path:'code.py'}),/budget: 2\/6/);
- assert.match(await body('read_file',{path:'code.py'}),/You already did this; proceed to write.*budget: 3\/6/s);
+ assert.match(await body('read_file',{path:'code.py'}),/exploration calls used: 2/);
+ assert.match(await body('read_file',{path:'code.py'}),/You already did this; proceed to write.*exploration calls used: 3/s);
  const invalid=await call('read_file',{path:'code.py',lineCount:0});
  assert.equal(invalid.isError,true);
- assert.match((invalid.content as {text:string}[])[0]!.text,/budget: 4\/6/);
+ assert.match((invalid.content as {text:string}[])[0]!.text,/exploration calls used: 4/);
  assert.equal((await call('read_file',{path:'missing.py'})).isError,true);
  const plan=[{path:'code.py',reason:'Defines the feature'}];
  assert.match(await body('report_plan',{files:plan}),/recorded/i);
  assert.deepEqual(plans,[plan]);
- assert.match(await body('select_context',{query:'alpha'}),/budget: 6\/6/);
+ assert.match(await body('select_context',{query:'alpha'}),/exploration calls used: 6/);
  const write={path:'code.py',edits:[{oldText:'alpha',newText:'changed'}]};
- for(const [name,args] of [
-  ['read_file',{path:'code.py'}],['search_workspace',{query:'alpha'}],
-  ['select_context',{query:'alpha'}],['find_relevant_files',{query:'alpha'}],
-  ['report_plan',{files:plan}],['run_command',{command:'x',args:[]}],['propose_edit',write]
- ] as const){
-  const r=await call(name,args);assert.equal(r.isError,true);
-  assert.match((r.content as {text:string}[])[0]!.text,/Budget exhausted: call propose_write now\./);
- }
- assert.match(await body('propose_write',write),/staged/);
+ assert.match(await body('read_file',{path:'code.py',refresh:true}),/alpha.*exploration calls used: 7/s);
+ assert.match(await body('report_plan',{files:plan}),/recorded/);
+ assert.match(await body('propose_edit',write),/staged/);
+ assert.match(await body('propose_write',{path:'code.py',edits:[{oldText:'changed',newText:'changed again'}]}),/staged/);
  bridge.resetExploration();
- assert.match(await body('read_file',{path:'code.py'}),/changed.*budget: 1\/6/s);
- assert.equal(staged,'changed\nbeta');
+ assert.match(await body('read_file',{path:'code.py'}),/changed again.*exploration calls used: 1/s);
+ assert.equal(staged,'changed again\nbeta');
  assert.equal(await readFile(path.join(root,'code.py'),'utf8'),original);
 });
 
@@ -266,6 +261,29 @@ test('reset rejects a previous-generation operation and leaves new discovery at 
  assert.equal((await call()).isError,true);
  assert.equal(reported,0);
  const current=await call();assert.ok(!current.isError);
- assert.match((current.content as {text:string}[])[0]!.text,/budget: 1\/6/);
+ assert.match((current.content as {text:string}[])[0]!.text,/exploration calls used: 1/);
  assert.equal(reported,1);
+});
+
+test('targeted recovery reads remain available after six exploration attempts',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-recovery-read-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'code.py'),'def existing():\n    return False\n');
+ const bridge=await startMcp({root,budget:24000,active:()=>true,propose:async()=>'',command:async()=>'',context:()=>{}});t.after(()=>bridge.close());
+ const client=new Client({name:'test',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ for(let i=0;i<6;i++)await client.callTool({name:'search_workspace',arguments:{query:`missing-${i}`}});
+ const recovered=await client.callTool({name:'read_file',arguments:{path:'code.py'}});
+ assert.ok(!recovered.isError,JSON.stringify(recovered));assert.match(JSON.stringify(recovered),/def existing/);
+ assert.equal(await readFile(path.join(root,'code.py'),'utf8'),'def existing():\n    return False\n');
+});
+
+test('larger configured retrieval budgets retain useful focused read windows',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-large-read-budget-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'code.py'),Array.from({length:200},(_,i)=>`row-${i+1} ${'x'.repeat(120)}`).join('\n'));
+ const bridge=await startMcp({root,budget:24000,active:()=>true,propose:async()=>'',command:async()=>'',context:()=>{}});t.after(()=>bridge.close());
+ const client=new Client({name:'test',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ for(const startLine of [1,41,81]){
+  const result=await client.callTool({name:'read_file',arguments:{path:'code.py',startLine,lineCount:40}});
+  assert.ok(!result.isError);const text=(result.content as {text:string}[])[0]!.text;
+  assert.ok(text.length>3000,'configured 24K allowance must not shrink a third focused read to 900 characters');assert.ok(text.length<4200);
+ }
 });
