@@ -67,3 +67,47 @@ test('registration failure persists diagnostic result and events without raw sec
  assert.deepEqual(JSON.parse(await readFile(path.join(out,'events.json'),'utf8')),[]);assert.deepEqual(await readdir(target),[]);
  assert.equal(stdout.includes('sensitive-error-fixture'),false);
 });
+
+test('diagnostic syntax gate rejects invalid combined proposals before changing staged state or evidence',async t=>{
+ const {spawnSync}=await import('node:child_process');
+ const {readFile,mkdir}=await import('node:fs/promises');
+ const {runInNewContext}=await import('node:vm');
+ const ts=await import('typescript');
+ const {readWorkspace}=await import('../src/workspace');
+ const {resolveAgentProposal}=await import('../src/patch');
+ const {ReviewStore}=await import('../src/review');
+ const python=process.env.FORGELENS_PYTHON??(process.platform==='win32'?'python':'python3');
+ if(spawnSync(python,['-c','import ast']).status!==0){t.skip('Optional syntax-gate regression requires Python; set FORGELENS_PYTHON.');return;}
+ const base=await mkdtemp(path.join(tmpdir(),'diagnostic-syntax-'));t.after(()=>rm(base,{recursive:true,force:true}));
+ const root=path.join(base,'target'),out=path.join(base,'evidence');await mkdir(root);await mkdir(out);
+ const original='x = a + b\n';await writeFile(path.join(root,'sample.py'),original);
+ const source=await readFile(path.join(process.cwd(),'test-local-b.ts'),'utf8');
+ const tree=ts.createSourceFile('test-local-b.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+ let syntaxCheck='',approve='',propose='';
+ const visit=(node:import('typescript').Node)=>{
+  if(ts.isFunctionDeclaration(node)&&node.name?.text==='checkPythonSyntax')syntaxCheck=node.getText(tree);
+  if(ts.isPropertyAssignment(node)){
+   if(node.name.getText(tree)==='onApproval')approve=node.initializer.getText(tree);
+   if(node.name.getText(tree)==='propose')propose=node.initializer.getText(tree);
+  }
+  ts.forEachChild(node,visit);
+ };
+ visit(tree);assert.ok(syntaxCheck&&approve&&propose,'Use the actual diagnostic callbacks without running a model.');
+ const store=new ReviewStore();
+ const compiled=ts.transpileModule(`${syntaxCheck}\n({approve:${approve},propose:${propose}})`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+ const gate=runInNewContext(compiled,{spawnSync,readWorkspace,resolveAgentProposal,writeFile,path,root,out,python,store});
+ const a={path:'sample.py',edits:[{oldText:'a + b',newText:'a if cond else + b'}]};
+ const b={path:'sample.py',edits:[{oldText:'+ b',newText:''}]};
+ // TrueForge requests approvals for a batch before dispatching either tool.
+ assert.equal(await gate.approve({name:'propose_write',arguments:a}),true);
+ assert.equal(await gate.approve({name:'propose_write',arguments:b}),true);
+ await gate.propose(a.path,resolveAgentProposal(original,a));
+ assert.equal(store.get(a.path)?.proposed,'x = a if cond else + b\n');
+ const evidence=await readFile(path.join(out,'proposals.json'),'utf8');
+ const invalid=resolveAgentProposal(store.get(b.path)!.proposed,b);
+ assert.equal(invalid,'x = a if cond else \n');
+ await assert.rejects(gate.propose(b.path,invalid),/does not parse/);
+ assert.equal(store.get(a.path)?.proposed,'x = a if cond else + b\n');
+ assert.equal(await readFile(path.join(out,'proposals.json'),'utf8'),evidence);
+ assert.equal(await readFile(path.join(root,'sample.py'),'utf8'),original);
+});

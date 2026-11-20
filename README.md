@@ -53,7 +53,7 @@ Then run **ForgeLens: Open Agent** from the command palette. Select text and pre
 
 Run `node scripts/groq-demo-gateway.mjs` in a separate terminal. In TrueForge, configure an OpenAI-compatible provider at `http://127.0.0.1:11435/openai/v1` with model ID `openai/gpt-oss-120b` and your Groq key. The gateway listens only on loopback, forwards to Groq over HTTPS, and retries a rejected tool generation once. Run `node scripts/groq-demo-gateway.mjs --self-check` to exercise its retry and forwarding behavior with a local stub.
 
-This optional helper is separate from the recorded extension bundle. Its live-provider compatibility is not established by the recorded editor checks.
+This optional helper is separate from the recorded extension bundle. Its route, forwarding, streaming and retry behavior passed offline stub checks; live-provider compatibility remains unverified. Its current request deadline does not interrupt a slow incoming body upload.
 
 If your Windows setup requires the system certificate store, use `node --use-system-ca scripts/groq-demo-gateway.mjs` on a Node.js version that supports that flag.
 
@@ -109,6 +109,8 @@ node --import tsx test-local-b.ts
 Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect and apply only genuine proposals in a disposable checkout before running tests. A fallback result is a local-model result, not a cloud pass.
 
 Set `FORGELENS_PYTHON` to a Python executable to enable a syntax check before `.py` proposals are staged. The check parses the proposed source as bytes without executing it, so Windows console encoding does not change Unicode source text.
+
+The optional check runs again on the actual staged candidate before proposal or evidence state changes, covering edits whose approvals were batched against an earlier view. A regression preserves the prior valid overlay and evidence when a combined candidate is invalid. The updated source passed 113 offline tests and TypeScript checking; the recorded extension bundle remains unchanged.
 
 ## Known limitations
 The 0.1.13 Windows editor checks now cover A acceptance/save/Undo, the reviewed four-file B result including its focused follow-up, C fallback/recovery, and active cancellation. B required human test and documentation corrections before its saved verification passed. No trust setting was changed. The final edited A/B/C video, public PDF, their accessible URLs and portal submission remain pending; these editor results do not establish a completed competition submission.
