@@ -2,7 +2,9 @@
 
 A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **The reviewed Windows editor checks, final video and public PDF are complete. Portal submission remains pending.** See [verification status](docs/STATUS.md).
 
-[Watch the 239-second demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk) · [Technical write-up PDF](https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk) · [Installable VSIX](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix) · [Source ZIP](https://github.com/aceholland/forgelens/releases/download/v0.1.13/ForgeLens-0.1.13-source.zip)
+[Watch the narrated editor demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk) · [Revised technical write-up PDF](https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk) · [Installable VSIX](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix) · [Source ZIP](https://github.com/aceholland/forgelens/releases/download/v0.1.13/ForgeLens-0.1.13-source.zip)
+
+Presentation update, 20 November 2026: use the Drive video and PDF links above for the current narrated demo and revised write-up. The [revised PDF is also in this repository](docs/technical-writeup.pdf). The v0.1.13 release preserves its originally published PDF, source archive, VSIX and checksums; its runtime bundle remains unchanged.
 
 ## Windows checkpoint: 0.1.13
 
