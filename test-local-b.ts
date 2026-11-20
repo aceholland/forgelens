@@ -1,4 +1,5 @@
 /** Real TrueForge integration harness. Never generates model output or writes target files. */
+import { spawnSync } from 'node:child_process';
 import { ForgeRunner, registerMcp } from './src/client';
 import { startMcp } from './src/mcp';
 import { ReviewStore } from './src/review';
@@ -8,6 +9,20 @@ import { instructionsForTools } from './src/instructions';
 import { writeFile, mkdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { Metadata,TASK_B_PROMPT,loopbackUrl,toolName,failureMetadata,modelId } from './diagnostics/metadata';
+
+function checkPythonSyntax(python: string, source: string) {
+ const check = spawnSync(python, ['-c', 'import ast, sys; ast.parse(sys.stdin.buffer.read())'], {
+  input: source,
+  encoding: 'utf8',
+  timeout: 4000,
+ });
+ if (check.error || check.status === null) throw new Error('The local Python syntax check could not run.');
+ if (check.status !== 0) {
+  const line = check.stderr.match(/File "<unknown>", line (\d+)/)?.[1];
+  throw new Error(`The proposed Python does not parse${line ? ` at line ${line}` : ''}.`);
+ }
+}
+
 async function main() {
  const startedAt=new Date().toISOString(),started=performance.now();
  const root=path.resolve(process.env.FLASK_ROOT??'../../flask');
@@ -22,6 +37,7 @@ async function main() {
  let phase='configuration',status='error',sessionId='',failure:unknown;
  let mcp:Awaited<ReturnType<typeof startMcp>>|undefined;
  const model=process.env.TRUEFORGE_MODEL;
+ const python=process.env.FORGELENS_PYTHON;
  const budget=Number(process.env.CONTEXT_BUDGET??6000);
  const preloadTools=process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
@@ -60,7 +76,20 @@ async function main() {
     }
     return undefined;
    },
-   onApproval:async d=>{if(!['propose_edit','propose_write'].includes(d.name)||typeof d.arguments.path!=='string')return {allowed:false,reason:'Validation deferred; no target files have been changed.'};try{resolveAgentProposal(store.get(d.arguments.path)?.proposed??await readWorkspace(root,d.arguments.path),d.arguments);return true;}catch(e){return {allowed:false,reason:`Proposal validation failed (not a user rejection): ${e instanceof Error?e.message:String(e)}. Read the staged view and retry exact text.`};}}});
+   onApproval:async d=>{
+    const file=d.arguments.path;
+    if(!['propose_edit','propose_write'].includes(d.name)||typeof file!=='string'){
+     return {allowed:false,reason:'Validation deferred; no target files have been changed.'};
+    }
+    try{
+     const current=store.get(file)?.proposed??await readWorkspace(root,file);
+     const candidate=resolveAgentProposal(current,d.arguments);
+     if(python&&file.endsWith('.py'))checkPythonSyntax(python,candidate);
+     return true;
+    }catch(e){
+     return {allowed:false,reason:`Proposal validation failed (not a user rejection): ${e instanceof Error?e.message:String(e)}. Read the staged view and retry exact text.`};
+    }
+   }});
   const result=await runner.run(prompt);status=result.status;sessionId=result.sessionId;phase='finished';
  }catch(error){failure=failureMetadata(error);}
  finally {

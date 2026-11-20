@@ -45,6 +45,12 @@ code --install-extension forgelens-0.1.13.vsix
 ```
 Then run **ForgeLens: Open Agent** from the command palette. Select text and press Ctrl+Alt+I (Cmd+Alt+I on Mac) for inline editing.
 
+## Groq GPT-OSS in a local TrueForge setup
+
+Run `node scripts/groq-demo-gateway.mjs` in a separate terminal. In TrueForge, configure an OpenAI-compatible provider at `http://127.0.0.1:11435/openai/v1` with model ID `openai/gpt-oss-120b` and your Groq key. The gateway listens only on loopback, forwards to Groq over HTTPS, and retries a rejected tool generation once. Run `node scripts/groq-demo-gateway.mjs --self-check` to exercise its retry and forwarding behavior with a local stub.
+
+If your Windows setup requires the system certificate store, use `node --use-system-ca scripts/groq-demo-gateway.mjs` on a Node.js version that supports that flag.
+
 ## Agent definition
 `agent/forgelens.json` is the versioned agent manifest template. At runtime the extension supplies the selected model and an authenticated ephemeral loopback MCP connector name, then sends the inline manifest to `sessions.create({agent:{spec}})`. This loads the agent through the official SDK; no separate import is required. The shared runtime instructions in `src/instructions.ts` match this template; a regression test checks equality.
 
@@ -95,6 +101,8 @@ node --import tsx test-local-b.ts
 ```
 
 Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect and apply only genuine proposals in a disposable checkout before running tests. A fallback result is a local-model result, not a cloud pass.
+
+Set `FORGELENS_PYTHON` to a Python executable to enable a syntax check before `.py` proposals are staged. The check parses the proposed source as bytes without executing it, so Windows console encoding does not change Unicode source text.
 
 ## Known limitations
 Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Task A passed again in the Windows Extension Development Host on 0.1.13, including saved verification and guarded Undo/Save. Final B/C editor outcomes and recording remain pending. No trust setting was changed. Official Task B has not passed. No completed submission video or submission-ready PDF exists.
