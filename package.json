@@ -2,8 +2,12 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "publisher": "forgelens-team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aceholland/forgelens.git"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.96.0"
