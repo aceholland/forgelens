@@ -4,6 +4,7 @@ test/**
 evidence/**
 .git/**
 .vscode/**
+docs/superpowers/**
 **/*.map
 tsconfig.json
 package-lock.json

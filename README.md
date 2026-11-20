@@ -2,6 +2,12 @@
 
 A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **Development build, not yet a verified competition submission.** See [verification status](docs/STATUS.md).
 
+## Windows checkpoint: 0.1.11
+
+106 Windows tests, TypeScript checking and extension compilation passed using the existing installed dependencies. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares its existing 4,000-character preview budget across that matching trio.
+
+Task A was exercised in the real Windows Extension Development Host on 0.1.10: two reviewed hunks were saved, `off`, `n`, `OFF`, and `N` returned `False`, and only the selected helper changed. A separate Windows headless C check used an unreachable model endpoint with no fallback: zero proposals and all 235 file hashes unchanged. Task B has not passed review and post-save validation. Final-build editor retests and a usable demo recording remain open.
+
 ## Requirements
 - Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
 - A local TrueForge instance and an authorized model configured there. No model key is stored by this extension.
@@ -32,7 +38,7 @@ Open this project in VS Code and press F5 using `Run ForgeLens`. In the extensio
 Alternatively:
 ```sh
 npm run package
-code --install-extension forgelens-0.1.9.vsix
+code --install-extension forgelens-0.1.11.vsix
 ```
 Then run **ForgeLens: Open Agent** from the command palette. Select text and press Ctrl+Alt+I (Cmd+Alt+I on Mac) for inline editing.
 

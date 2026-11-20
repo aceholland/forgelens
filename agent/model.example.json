@@ -1,0 +1,35 @@
+{
+  "_note": "Reference only. Configure providers in TrueForge Settings → Models. Copy only vscodeUserSettings into VS Code User Settings; never commit actual credentials.",
+  "trueForgeSetup": {
+    "cloudPrimary": {
+      "provider": "Choose an authorized fast catalog or OpenAI-compatible provider",
+      "apiKey": "REPLACE_IN_TRUEFORGE_UI_ONLY",
+      "modelId": "REPLACE_WITH_CLOUD_TRUEFORGE_MODEL_ID"
+    },
+    "ollamaFallback": {
+      "type": "custom",
+      "name": "local-ollama",
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "models": [
+        {
+          "name": "qwen-local",
+          "modelId": "qwen35-16k",
+          "properties": {
+            "contextLength": 16384,
+            "maxOutputTokens": 2048
+          }
+        }
+      ],
+      "apiKeyIfPrompted": "ollama"
+    }
+  },
+  "vscodeUserSettings": {
+    "forgelens.baseUrl": "http://127.0.0.1:8790",
+    "forgelens.model": "REPLACE_WITH_CLOUD_TRUEFORGE_MODEL_ID",
+    "forgelens.fallbackModel": "local-ollama/qwen-local",
+    "forgelens.contextBudget": 4000,
+    "forgelens.preloadTools": false,
+    "forgelens.runTimeoutMinutes": 5,
+    "forgelens.modelCallTimeoutSeconds": 120
+  }
+}
