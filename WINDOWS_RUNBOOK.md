@@ -1,6 +1,6 @@
 # ForgeLens Windows handoff: diagnostic, then genuine editor demo
 
-The source checks and real Task A were executed on Windows. Task B still requires a successful reviewed editor run and post-save validation. The diagnostic never applies proposals and does not replace the required VS Code demonstration. Preserve the existing worktree and Python environment; align pytest to the pinned Flask lockfile's `9.0.2` if a newer pytest cannot collect its tests.
+The source checks and real A/B/C editor workflows were executed on Windows. The reviewed Task B result, including its focused case-insensitive masking follow-up, passed 59 CLI tests in 3.28 seconds after native review/apply/save. See [current verification status](docs/STATUS.md) for the disclosed human corrections, four-file result and pending public video/PDF links. The diagnostic never applies proposals and does not replace the required VS Code demonstration. Preserve the existing worktree and Python environment; align pytest to the pinned Flask lockfile's `9.0.2` if a newer pytest cannot collect its tests.
 
 If restarting TrueForge for this authenticated loopback bridge, retain the outbound guard and explicitly permit the bridge's exact IPv4 loopback host in that server process:
 
@@ -15,12 +15,12 @@ This resolves the reproduced HTTP 400 `Outbound URL blocked for host "127.0.0.1"
 
 ## 1. New source and clean isolated Flask worktree
 
-Download the new ZIP attachment from this chat and extract it in Downloads. Use its `ForgeLens-public` folder, not the previous 0.1.9 extraction. Adjust `$Source` only if Windows extracted it elsewhere. Keep the existing TrueForge process and its security settings unchanged.
+Clone the public repository or extract its source ZIP. Set `$Source` to the actual project root containing `package.json` and adjust `$OriginalFlask` to your existing Flask checkout. Keep the existing TrueForge process and its security settings unchanged.
 
 ```powershell
-$Source = 'C:\Users\User\Downloads\ForgeLens-0.1.9-Windows-evaluation\ForgeLens-public'
+$Source = 'C:\path\to\forgelens'
 if (-not (Test-Path (Join-Path $Source 'diagnostics\metadata.ts'))) { throw 'Open the new Windows evaluation ZIP, then set $Source to the actual extracted ForgeLens-public path.' }
-$OriginalFlask = 'C:\Users\User\flask'
+$OriginalFlask = 'C:\path\to\existing\flask'
 $Stamp = Get-Date -Format yyyyMMdd-HHmmss
 $Work = Join-Path $HOME ('forgelens-demo-' + $Stamp)
 $Flask = Join-Path $Work 'flask'

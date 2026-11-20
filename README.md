@@ -1,12 +1,16 @@
 # ForgeLens
 
-A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **Development build, not yet a verified competition submission.** See [verification status](docs/STATUS.md).
+A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **The reviewed Windows editor checks are complete; the final video, public PDF and portal submission are pending.** See [verification status](docs/STATUS.md).
 
 ## Windows checkpoint: 0.1.13
 
-112 Windows tests, TypeScript checking and extension compilation passed. Updated dependencies report zero known vulnerabilities in npm audit. Authenticated MCP requests are limited to 2 MiB and 512 input elements before schema expansion. Exact model edits preserve LF/CRLF line endings; agent tools require exact replacements. Discovery retains the original task's source/test/documentation requirements, and focused recovery reads remain available after planning or rejected edits. Streamed chunks remain readable in the panel and OutputChannel.
+Fresh 0.1.13 installation, 112 Windows tests, TypeScript checking, extension compilation and VSIX packaging passed. Updated dependencies report zero known vulnerabilities in the recorded npm audit. Authenticated MCP requests are limited to 2 MiB and 512 input elements before schema expansion. Exact model edits preserve LF/CRLF line endings; agent tools require exact replacements. Discovery retains the original task's source/test/documentation requirements, and focused recovery reads remain available after planning or rejected edits. Streamed chunks remain readable in the panel and OutputChannel.
 
-Task A was exercised in the real Windows Extension Development Host on 0.1.13: two reviewed hunks were saved and `off`/`n` variants returned `False`. Guarded editor Undo followed by Save restored the clean pinned baseline. A real 0.1.13 backend check automatically switched from a genuinely unreachable primary to the configured free model, staged one scoped proposal without applying it, and left all 235 file hashes unchanged. A previous genuine four-file Task B candidate passed 59 CLI tests, help and masked JSON checks in a separate clone. The latest distinct three-file headless candidate failed its new test; the separate live editor B run remains under review. No official B or final C editor pass is claimed. See the [feature/evidence register](docs/FEATURES.txt) and current status for measured evidence.
+Task A produced two reviewed hunks in the real Windows editor; saved checks verified `off`/`n` variants, and guarded Undo followed by Save restored the pinned baseline. The exact Task B retake discovered implementation, test and documentation files without filenames in the prompt, using genuine deferred tool discovery. After review, apply and save, the new test needed an explicit built-in CLI group and the docs needed reference/example wording corrections. That initial reviewed result passed 59 CLI tests in 1.61 seconds, help and all four masking checks. The original candidate's failed test is retained in the evidence; this was an iterative review workflow.
+
+A separate genuine 493-byte model follow-up then added case-insensitive masking, lowercase/mixedcase test coverage and output-specific configuration documentation. Its three files were reviewed, applied and saved through the native editor; the existing CLI documentation brings the final Flask diff to **four files**. The actual saved result passed **59 CLI tests in 3.28 seconds**, help, valid JSON and all 12 uppercase/lowercase/mixedcase synthetic masking checks. All 235 tracked hashes stayed unchanged during verification.
+
+Task C visibly switched from an unreachable primary to the configured fallback and staged two scoped hunks. During review, the user rejected one hunk and accepted the other into an unsaved buffer; Stop/discard, guarded Undo and Save All restored the pre-C state. The final disk check was clean, with all 235 tracked hashes unchanged. A separate active cancellation reached server status `cancelled` over a 5.298-second session lifetime and preserved all 235 tracked hashes, including existing B edits. See the [feature/evidence register](docs/FEATURES.txt) and current status. Final video editing, public artifact links and portal submission remain pending.
 
 ## Requirements
 - Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
@@ -49,6 +53,8 @@ Then run **ForgeLens: Open Agent** from the command palette. Select text and pre
 
 Run `node scripts/groq-demo-gateway.mjs` in a separate terminal. In TrueForge, configure an OpenAI-compatible provider at `http://127.0.0.1:11435/openai/v1` with model ID `openai/gpt-oss-120b` and your Groq key. The gateway listens only on loopback, forwards to Groq over HTTPS, and retries a rejected tool generation once. Run `node scripts/groq-demo-gateway.mjs --self-check` to exercise its retry and forwarding behavior with a local stub.
 
+This optional helper is separate from the recorded extension bundle. Its live-provider compatibility is not established by the recorded editor checks.
+
 If your Windows setup requires the system certificate store, use `node --use-system-ca scripts/groq-demo-gateway.mjs` on a Node.js version that supports that flag.
 
 ## Agent definition
@@ -68,9 +74,9 @@ If your Windows setup requires the system certificate store, use `node --use-sys
 ## Historical verification (0.1.6, 2026-11-18)
 Fresh supporting validation: **67/67 tests**, TypeScript check, compilation and VSIX packaging passed. Genuine TrueForge headless Task C returned an error with zero proposals and a clean pinned Flask checkout; cancellation returned `cancelled` in 22 ms with the checkout unchanged. These are not on-screen UI demonstrations.
 
-Bounded Task B runs on Qwen3 8B and Qwen3.5 4B did **not** complete. The latest 0.1.6/16K run stopped at approximately 16 minutes with nine tool calls and zero proposals. Retrieval changes have not demonstrated an end-to-end Task B improvement. See [current verification status](docs/STATUS.md).
+Bounded Task B runs on Qwen3 8B and Qwen3.5 4B did **not** complete. The latest 0.1.6/16K run stopped at approximately 16 minutes with nine tool calls and zero proposals. That checkpoint had no completed Task B result; the newer reviewed editor result is recorded above and in [current verification status](docs/STATUS.md).
 
-An earlier isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absent from the local cache. A fresh online install in a new clone has now passed on 0.1.12. Full release editor UI verification remains pending.
+An earlier isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absent from the local cache. Fresh online installs subsequently passed on 0.1.12 and 0.1.13. The current editor checks and outstanding publication work are recorded separately in the status page.
 
 ## What I changed and why
 - **Ranked discovery:** One tool finds likely implementation, test and documentation files. Showing paths and reasons tells the reviewer what informed the edit.
@@ -105,7 +111,7 @@ Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect 
 Set `FORGELENS_PYTHON` to a Python executable to enable a syntax check before `.py` proposals are staged. The check parses the proposed source as bytes without executing it, so Windows console encoding does not change Unicode source text.
 
 ## Known limitations
-Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Task A passed again in the Windows Extension Development Host on 0.1.13, including saved verification and guarded Undo/Save. Final B/C editor outcomes and recording remain pending. No trust setting was changed. Official Task B has not passed. No completed submission video or submission-ready PDF exists.
+The 0.1.13 Windows editor checks now cover A acceptance/save/Undo, the reviewed four-file B result including its focused follow-up, C fallback/recovery, and active cancellation. B required human test and documentation corrections before its saved verification passed. No trust setting was changed. The final edited A/B/C video, public PDF, their accessible URLs and portal submission remain pending; these editor results do not establish a completed competition submission.
 
 0.1.4 reports empty provider output as failure; 0.1.5 handles supported operator questions; 0.1.6 bounds automatic retrieval to four windows and adds bounded neighboring search context. These repairs do not establish model task success. New file creation/deletion, ignore-file parsing and full token budgeting are not implemented. Unsaved accepted buffers must be saved before validation. Ephemeral connectors remain in TrueForge settings after runs. Fallback creates a separate session and is not guaranteed to reconstruct partial reasoning. Humans review/apply staged proposals only after a run ends.
 
@@ -120,4 +126,4 @@ Set `forgelens.preloadTools` to `true` for small local models that fail deferred
 
 Local CPU inference may require raising TrueForge's documented model HTTP header/body timeouts. A local provider also requires appropriate loopback access under TrueForge's network policy; do not disable the policy or TLS validation. A hostname exception may allow access to other services on that host and requires informed approval.
 
-Unit tests and model connectivity are not the required live editor demonstration. See the [verification status](docs/STATUS.md) for failures and incomplete rubric items.
+Unit tests and model connectivity support the separate live editor evidence. See the [verification status](docs/STATUS.md) for measured results, limitations and pending publication work.
