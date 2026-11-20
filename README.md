@@ -4,9 +4,9 @@ A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge own
 
 ## Windows checkpoint: 0.1.12
 
-108 Windows tests, TypeScript checking and extension compilation passed using the existing installed dependencies. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares the configured preview budget across that matching trio. Focused recovery reads remain available after planning or a rejected edit.
+108 Windows tests, TypeScript checking and extension compilation passed, including a fresh npm ci in a new clone. The VSIX installed successfully into a disposable VS Code profile. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares the configured preview budget across that matching trio. Focused recovery reads remain available after planning or a rejected edit.
 
-Task A was exercised in the real Windows Extension Development Host on 0.1.10: two reviewed hunks were saved, `off`, `n`, `OFF`, and `N` returned `False`, and only the selected helper changed. A separate Windows headless C check used an unreachable model endpoint with no fallback: zero proposals and all 235 file hashes unchanged. Task B has not passed review and post-save validation. Final-build editor retests and a usable demo recording remain open.
+Task A was exercised in the real Windows Extension Development Host on 0.1.10: two reviewed hunks were saved, `off`, `n`, `OFF`, and `N` returned `False`, and only the selected helper changed. A Windows headless C check on 0.1.12 used an unreachable model endpoint with no fallback: zero proposals and all 235 file hashes unchanged. Free Gemini 3.5 Flash Lite completed a genuine four-file Task B candidate; independent validation in a separate clone passed 59 CLI tests, help and masked JSON checks. Official editor review/apply/save, final-build UI retests and a usable demo recording remain open. The fresh-install audit also reported seven dependency advisories; see the status document.
 
 ## Requirements
 - Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
@@ -61,7 +61,7 @@ Fresh supporting validation: **67/67 tests**, TypeScript check, compilation and 
 
 Bounded Task B runs on Qwen3 8B and Qwen3.5 4B did **not** complete. The latest 0.1.6/16K run stopped at approximately 16 minutes with nine tool calls and zero proposals. Retrieval changes have not demonstrated an end-to-end Task B improvement. See [current verification status](docs/STATUS.md).
 
-An isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absent from the local cache. A fresh online clean install remains unverified; existing dependencies were used for passing validation. No public repository clone or release UI test is claimed.
+An earlier isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absent from the local cache. A fresh online install in a new clone has now passed on 0.1.12. Full release editor UI verification remains pending.
 
 ## What I changed and why
 - **Ranked discovery:** One tool finds likely implementation, test and documentation files. Showing paths and reasons tells the reviewer what informed the edit.
