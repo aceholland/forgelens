@@ -1,6 +1,8 @@
 # ForgeLens
 
-A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **The reviewed Windows editor checks are complete; the final video, public PDF and portal submission are pending.** See [verification status](docs/STATUS.md).
+A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **The reviewed Windows editor checks, final video and public PDF are complete. Portal submission remains pending.** See [verification status](docs/STATUS.md).
+
+[Watch the 239-second demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk) · [Technical write-up PDF](https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk) · [Installable VSIX](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix) · [Source ZIP](https://github.com/aceholland/forgelens/releases/download/v0.1.13/ForgeLens-0.1.13-source.zip)
 
 ## Windows checkpoint: 0.1.13
 
@@ -10,7 +12,7 @@ Task A produced two reviewed hunks in the real Windows editor; saved checks veri
 
 A separate genuine 493-byte model follow-up then added case-insensitive masking, lowercase/mixedcase test coverage and output-specific configuration documentation. Its three files were reviewed, applied and saved through the native editor; the existing CLI documentation brings the final Flask diff to **four files**. The actual saved result passed **59 CLI tests in 3.28 seconds**, help, valid JSON and all 12 uppercase/lowercase/mixedcase synthetic masking checks. All 235 tracked hashes stayed unchanged during verification.
 
-Task C visibly switched from an unreachable primary to the configured fallback and staged two scoped hunks. During review, the user rejected one hunk and accepted the other into an unsaved buffer; Stop/discard, guarded Undo and Save All restored the pre-C state. The final disk check was clean, with all 235 tracked hashes unchanged. A separate active cancellation reached server status `cancelled` over a 5.298-second session lifetime and preserved all 235 tracked hashes, including existing B edits. See the [feature/evidence register](docs/FEATURES.txt) and current status. Final video editing, public artifact links and portal submission remain pending.
+Task C visibly switched from an unreachable primary to the configured fallback and staged two scoped hunks. During review, the user rejected one hunk and accepted the other into an unsaved buffer; Stop/discard, guarded Undo and Save All restored the pre-C state. The final disk check was clean, with all 235 tracked hashes unchanged. A separate active cancellation reached server status `cancelled` over a 5.298-second session lifetime and preserved all 235 tracked hashes, including existing B edits. See the [feature/evidence register](docs/FEATURES.txt) and current status. The public video and technical PDF are linked above; portal submission remains pending.
 
 ## Requirements
 - Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
@@ -113,7 +115,7 @@ Set `FORGELENS_PYTHON` to a Python executable to enable a syntax check before `.
 The optional check runs again on the actual staged candidate before proposal or evidence state changes, covering edits whose approvals were batched against an earlier view. A regression preserves the prior valid overlay and evidence when a combined candidate is invalid. The updated source passed 113 offline tests and TypeScript checking; the recorded extension bundle remains unchanged.
 
 ## Known limitations
-The 0.1.13 Windows editor checks now cover A acceptance/save/Undo, the reviewed four-file B result including its focused follow-up, C fallback/recovery, and active cancellation. B required human test and documentation corrections before its saved verification passed. No trust setting was changed. The final edited A/B/C video, public PDF, their accessible URLs and portal submission remain pending; these editor results do not establish a completed competition submission.
+The 0.1.13 Windows editor checks now cover A acceptance/save/Undo, the reviewed four-file B result including its focused follow-up, C fallback/recovery, and active cancellation. B required human test and documentation corrections before its saved verification passed. No trust setting was changed. The final edited A/B/C video and technical PDF are publicly linked above. Portal submission remains pending; a completed competition submission is not claimed.
 
 0.1.4 reports empty provider output as failure; 0.1.5 handles supported operator questions; 0.1.6 bounds automatic retrieval to four windows and adds bounded neighboring search context. These repairs do not establish model task success. New file creation/deletion, ignore-file parsing and full token budgeting are not implemented. Unsaved accepted buffers must be saved before validation. Ephemeral connectors remain in TrueForge settings after runs. Fallback creates a separate session and is not guaranteed to reconstruct partial reasoning. Humans review/apply staged proposals only after a run ends.
 
@@ -128,4 +130,4 @@ Set `forgelens.preloadTools` to `true` for small local models that fail deferred
 
 Local CPU inference may require raising TrueForge's documented model HTTP header/body timeouts. A local provider also requires appropriate loopback access under TrueForge's network policy; do not disable the policy or TLS validation. A hostname exception may allow access to other services on that host and requires informed approval.
 
-Unit tests and model connectivity support the separate live editor evidence. See the [verification status](docs/STATUS.md) for measured results, limitations and pending publication work.
+Unit tests and model connectivity support the separate live editor evidence. See the [verification status](docs/STATUS.md) for measured results, limitations and the pending portal submission.

@@ -1,6 +1,6 @@
 # ForgeLens Windows handoff: diagnostic, then genuine editor demo
 
-The source checks and real A/B/C editor workflows were executed on Windows. The reviewed Task B result, including its focused case-insensitive masking follow-up, passed 59 CLI tests in 3.28 seconds after native review/apply/save. See [current verification status](docs/STATUS.md) for the disclosed human corrections, four-file result and pending public video/PDF links. The diagnostic never applies proposals and does not replace the required VS Code demonstration. Preserve the existing worktree and Python environment; align pytest to the pinned Flask lockfile's `9.0.2` if a newer pytest cannot collect its tests.
+The source checks and real A/B/C editor workflows were executed on Windows. The reviewed Task B result, including its focused case-insensitive masking follow-up, passed 59 CLI tests in 3.28 seconds after native review/apply/save. See [current verification status](docs/STATUS.md) for the disclosed human corrections, four-file result, published video/PDF and remaining portal submission step. The diagnostic never applies proposals and does not replace the required VS Code demonstration. Preserve the existing worktree and Python environment; align pytest to the pinned Flask lockfile's `9.0.2` if a newer pytest cannot collect its tests.
 
 If restarting TrueForge for this authenticated loopback bridge, retain the outbound guard and explicitly permit the bridge's exact IPv4 loopback host in that server process:
 

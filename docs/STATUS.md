@@ -1,6 +1,6 @@
 # ForgeLens 0.1.13 verification status - 20 November 2026
 
-The Windows editor checks are complete with the review and recovery steps below. The final edited video, public PDF, accessible artifact URLs and portal submission remain pending. No competition score is self-awarded.
+The Windows editor checks are complete with the review and recovery steps below. The final edited video and technical PDF are public with link-viewer access verified. Portal submission remains pending. No competition score is self-awarded.
 
 ## Reviewed editor results
 
@@ -25,11 +25,12 @@ The original B retake, human review corrections and focused model follow-up form
 - MCP tests cover authenticated loopback access, traversal and protected-path rejection, symlink escape, binary/oversized file exclusions, a 2 MiB request-body limit and 512 raw input elements before schema expansion. Commands retain separate approval and a narrow allowlist. Streamed chunks and status lines remain readable in the panel and OutputChannel.
 - Native five-retry TrueForge HTTP backoff handles explicit free-tier 429/503 responses. Ambiguous interrupted extension turns are not blindly replayed. The normal total-run deadline is configurable and defaults to five minutes; model-call deadlines default to two minutes.
 
-## Remaining submission work and limits
+## Public artifacts and remaining submission work
 
-- Finish and inspect the final A/B/C video, keeping the editor visible and verification legible, then publish an accessible video URL. Waiting time may be shortened; preserve the required instruction-to-diff sequence.
-- Finish and publish the required PDF with team/model/tool declarations, known limitations and verified video timestamps. Confirm its public URL.
-- Confirm public repository and artifact access, then submit the links through the competition portal. No final video/PDF URL or portal completion is claimed here.
+- [Final editor demo, 239 seconds](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk): published and inspected, with A/B/C verification and the disclosed review/follow-up sequence.
+- [Technical write-up PDF](https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk): published with team/model/tool declarations, known limitations and video timestamps.
+- Both Drive links were checked for link-viewer access and anonymous access. The public repository and release downloads provide source and installation files.
+- Portal submission remains pending. No portal submission or completed competition entry is claimed.
 - Existing-file edits only; no file creation/deletion, ignore-file parsing or exact token accounting. Filename filters cannot find every secret embedded in ordinary source. Accepted buffers require Save before disk validation. Ephemeral connector records remain in TrueForge after runs. Free-provider capacity and quotas affect repeatability. Fallback starts a separate session and may lose earlier reasoning.
 
 The unchanged Task B prompt has SHA-256 `adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1`. See the [feature register](FEATURES.txt) and [README](../README.md) for setup and architecture.

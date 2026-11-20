@@ -2,8 +2,8 @@ ForgeLens 0.1.13 - feature and evidence checkpoint
 20 November 2026
 
 Windows editor checks are complete with the review/recovery steps below.
-Final edited video, public PDF, accessible URLs and portal submission remain
-pending. No competition score is self-awarded.
+Final edited video and technical PDF are public with verified link-viewer
+access. Portal submission remains pending. No competition score is self-awarded.
 
 MANDATORY CAPABILITIES
 
@@ -123,11 +123,17 @@ recorded npm audit reported zero known vulnerabilities after dependency and
 input-limit updates; it is a point-in-time dependency result.
 
 Technical editor A/B/C, Undo and active cancellation checks are complete.
-Final edited video/public PDF, their accessible URLs and portal submission
-remain pending. Existing-file edits only; no creation/deletion, ignore-file
-parsing or exact token accounting. Filters cannot detect every embedded
+Final edited video and technical PDF are published with verified public
+links. Portal submission remains pending. Existing-file edits only; no
+creation/deletion, ignore-file parsing or exact token accounting. Filters cannot detect every embedded
 secret. Ephemeral connectors remain after runs. Provider quotas/capacity
 affect repeatability. Fallback may lose earlier reasoning.
 
 See README.md for setup, model configuration and architecture. See
 docs/STATUS.md for measured outcomes, review provenance and remaining work.
+
+PUBLIC ARTIFACTS
+Video (239 seconds): https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk
+Technical PDF: https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk
+Installable VSIX: https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix
+Source ZIP: https://github.com/aceholland/forgelens/releases/download/v0.1.13/ForgeLens-0.1.13-source.zip
