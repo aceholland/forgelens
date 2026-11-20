@@ -2,11 +2,11 @@
 
 A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **Development build, not yet a verified competition submission.** See [verification status](docs/STATUS.md).
 
-## Windows checkpoint: 0.1.12
+## Windows checkpoint: 0.1.13
 
-108 Windows tests, TypeScript checking and extension compilation passed, including a fresh npm ci in a new clone. The VSIX installed successfully into a disposable VS Code profile. Exact model edits preserve native LF/CRLF line endings; agent tools require exact replacements instead of accepting fragments as whole-file contents. Discovery retains the original task's source/test/documentation requirements and shares the configured preview budget across that matching trio. Focused recovery reads remain available after planning or a rejected edit.
+112 Windows tests, TypeScript checking and extension compilation passed. Updated dependencies report zero known vulnerabilities in npm audit. Authenticated MCP requests are limited to 2 MiB and 512 input elements before schema expansion. Exact model edits preserve LF/CRLF line endings; agent tools require exact replacements. Discovery retains the original task's source/test/documentation requirements, and focused recovery reads remain available after planning or rejected edits. Streamed chunks remain readable in the panel and OutputChannel.
 
-Task A was exercised in the real Windows Extension Development Host on 0.1.10: two reviewed hunks were saved, `off`, `n`, `OFF`, and `N` returned `False`, and only the selected helper changed. A Windows headless C check on 0.1.12 used an unreachable model endpoint with no fallback: zero proposals and all 235 file hashes unchanged. Free Gemini 3.5 Flash Lite completed a genuine four-file Task B candidate; independent validation in a separate clone passed 59 CLI tests, help and masked JSON checks. Official editor review/apply/save, final-build UI retests and a usable demo recording remain open. The fresh-install audit also reported seven dependency advisories; see the status document.
+Task A was exercised in the real Windows Extension Development Host on 0.1.13: two reviewed hunks were saved and `off`/`n` variants returned `False`. Guarded editor Undo followed by Save restored the clean pinned baseline. A real 0.1.13 backend check automatically switched from a genuinely unreachable primary to the configured free model, staged one scoped proposal without applying it, and left all 235 file hashes unchanged. A previous genuine four-file Task B candidate passed 59 CLI tests, help and masked JSON checks in a separate clone. The latest distinct three-file headless candidate failed its new test; the separate live editor B run remains under review. No official B or final C editor pass is claimed. See the [feature/evidence register](docs/FEATURES.txt) and current status for measured evidence.
 
 ## Requirements
 - Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
@@ -21,15 +21,18 @@ npm ci
 npm run check
 npm test
 npm run compile
-HOST=127.0.0.1 npx @truefoundry/trueforge@latest --port 8790
+HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' MODEL_HTTP_MAX_RETRIES=5 npx @truefoundry/trueforge@0.185.1 --port 8790
 ```
 On Windows PowerShell use:
 ```powershell
 $env:HOST = '127.0.0.1'
-npx.cmd @truefoundry/trueforge@latest --port 8790
+$env:NETWORK_POLICY_ENABLED = 'true'
+$env:OUTBOUND_URL_ALLOWED_HOSTS = '["127.0.0.1"]'
+$env:MODEL_HTTP_MAX_RETRIES = '5'
+npx.cmd @truefoundry/trueforge@0.185.1 --port 8790
 ```
 
-Rehearsal evidence was produced on TrueForge 0.185.1. Pin that version instead of `@latest` to reproduce the recorded setup.
+Rehearsal evidence uses TrueForge 0.185.1. The explicit loopback host exception lets this local server call the authenticated editor MCP bridge; the network guard remains enabled. Preserve any additional deliberate allow/block entries in an existing setup. Five native model-HTTP retries use TrueForge's bounded backoff for free-tier 429/503 responses; extension turn requests are not blindly replayed.
 
 Open http://127.0.0.1:8790, configure a catalog provider or OpenAI-compatible endpoint in Settings → Models, and note its model ID. Use your own authorized credentials; free/local models are supported by the harness. Keep TrueForge on loopback because standalone mode has no authentication.
 
@@ -38,7 +41,7 @@ Open this project in VS Code and press F5 using `Run ForgeLens`. In the extensio
 Alternatively:
 ```sh
 npm run package
-code --install-extension forgelens-0.1.12.vsix
+code --install-extension forgelens-0.1.13.vsix
 ```
 Then run **ForgeLens: Open Agent** from the command palette. Select text and press Ctrl+Alt+I (Cmd+Alt+I on Mac) for inline editing.
 
@@ -94,7 +97,7 @@ node --import tsx test-local-b.ts
 Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect and apply only genuine proposals in a disposable checkout before running tests. A fallback result is a local-model result, not a cloud pass.
 
 ## Known limitations
-Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Task A also passed in the Windows Extension Development Host on 0.1.10. Final-release UI retests and recording remain pending. No trust setting was changed. Task B has not passed. No completed submission video or submission-ready PDF exists.
+Historical live Task A passed iteratively; exact Task C passed in VS Code on 0.1.2. Task A passed again in the Windows Extension Development Host on 0.1.13, including saved verification and guarded Undo/Save. Final B/C editor outcomes and recording remain pending. No trust setting was changed. Official Task B has not passed. No completed submission video or submission-ready PDF exists.
 
 0.1.4 reports empty provider output as failure; 0.1.5 handles supported operator questions; 0.1.6 bounds automatic retrieval to four windows and adds bounded neighboring search context. These repairs do not establish model task success. New file creation/deletion, ignore-file parsing and full token budgeting are not implemented. Unsaved accepted buffers must be saved before validation. Ephemeral connectors remain in TrueForge settings after runs. Fallback creates a separate session and is not guaranteed to reconstruct partial reasoning. Humans review/apply staged proposals only after a run ends.
 

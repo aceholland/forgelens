@@ -7,6 +7,43 @@ import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {startMcp} from '../src/mcp';
 
+test('agent mode must discover budgeted context before workspace access, including after reset',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-required-discovery-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'code.py'),'target implementation\nreturn False\n');let staged=0,contexts=0;
+ const options={root,budget:24000,task:'Update target implementation',requireDiscovery:true,active:()=>true,propose:async()=>{staged++;return 'staged';},command:async()=>'',context:()=>{contexts++;}};
+ const bridge=await startMcp(options);t.after(()=>bridge.close());
+ const client=new Client({name:'discovery-test',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ const before=await client.callTool({name:'read_file',arguments:{path:'code.py'}});assert.equal(before.isError,true);assert.match(JSON.stringify(before),/find_relevant_files/);assert.ok(!JSON.stringify(before).includes('return False'));
+ assert.equal((await client.callTool({name:'propose_write',arguments:{path:'code.py',edits:[{oldText:'False',newText:'True'}]}})).isError,true);assert.equal(staged,0);
+ assert.ok(!(await client.callTool({name:'find_relevant_files',arguments:{query:'target'}})).isError);assert.equal(contexts,1);
+ assert.ok(!(await client.callTool({name:'read_file',arguments:{path:'code.py'}})).isError);
+ bridge.resetExploration();assert.equal((await client.callTool({name:'read_file',arguments:{path:'code.py'}})).isError,true);
+ assert.ok(!(await client.callTool({name:'find_relevant_files',arguments:{query:'target'}})).isError);
+ assert.ok(!(await client.callTool({name:'propose_write',arguments:{path:'code.py',edits:[{oldText:'False',newText:'True'}]}})).isError);assert.equal(staged,1);
+ assert.equal(await readFile(path.join(root,'code.py'),'utf8'),'target implementation\nreturn False\n');
+});
+
+test('authenticated MCP requests enforce a two MiB body limit before dispatch',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-body-limit-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const bridge=await startMcp({root,budget:100,active:()=>true,propose:async()=>'',command:async()=>'',context:()=>{}});t.after(()=>bridge.close());
+ const response=await fetch(bridge.url,{method:'POST',headers:{Authorization:`Bearer ${bridge.token}`,'Content-Type':'application/json',Accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'ping',params:{padding:'x'.repeat(2*1024*1024)}})});
+ assert.equal(response.status,413);await response.text();
+});
+
+test('MCP rejects excessive raw input elements while retaining normal reads and edits',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-input-elements-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'code.py'),'return False\n');const staged:string[]=[];
+ const bridge=await startMcp({root,budget:100,active:()=>true,propose:async(_,text)=>{staged.push(text);return 'staged';},command:async()=>'',context:()=>{}});t.after(()=>bridge.close());
+ const client=new Client({name:'limits-test',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ for(const padding of [Array(1024).fill(0),Object.fromEntries(Array.from({length:600},(_,i)=>[`key${i}`,0]))]){
+  const result=await client.callTool({name:'read_file',arguments:{path:'code.py',padding}});
+  assert.equal(result.isError,true,'large unknown collections must be rejected before schema expansion');
+ }
+ assert.ok(!(await client.callTool({name:'read_file',arguments:{path:'code.py'}})).isError);
+ assert.ok(!(await client.callTool({name:'propose_write',arguments:{path:'code.py',edits:[{oldText:'False',newText:'True'}]}})).isError);
+ assert.deepEqual(staged,['return True\n']);assert.equal(await readFile(path.join(root,'code.py'),'utf8'),'return False\n');
+});
+
 test('MCP authenticates, exposes tools, respects inactive runs and never writes proposals',async t=>{
  const root=await mkdtemp(path.join(tmpdir(),'forgelens-mcp-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await writeFile(path.join(root,'config.ts'),'const config = 1;');await writeFile(path.join(root,'.env'),'SECRET=hidden');

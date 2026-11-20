@@ -23,13 +23,14 @@ async function main() {
  let mcp:Awaited<ReturnType<typeof startMcp>>|undefined;
  const model=process.env.TRUEFORGE_MODEL;
  const budget=Number(process.env.CONTEXT_BUDGET??6000);
+ const preloadTools=process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
  const store=new ReviewStore(); let active=true,modelSwitching=false;
  try {
  const baseUrl=loopbackUrl(process.env.TRUEFORGE_URL??'http://127.0.0.1:8790');
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
- mcp=await startMcp({root,budget,task:prompt,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
+ mcp=await startMcp({root,budget,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
   propose:async(p,c)=>{const original=await readWorkspace(root,p); if(store.get(p))store.revise(p,original,c);else store.stage(p,original,c);await writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));return `Staged ${p}; not applied. Continue any remaining requested work. Validation sees disk only.`;},
   command:async()=> 'Not run: target files remain unchanged. Validate after human review.',context:r=>{const paths=metadata.paths('discovery',r.items.map(i=>i.path));const event={type:'retrieval.context',fileCount:r.items.length,paths};metadata.events.push(event);console.log(JSON.stringify(event));},
   onInitialized:()=>{metadata.initialized++;console.log(JSON.stringify({type:'mcp.initialized'}));},
@@ -39,7 +40,7 @@ async function main() {
   phase='mcp_registration';
   const mcpName='forgelens-retest-'+Date.now();await registerMcp(baseUrl,mcpName,mcp.url,mcp.token);
   phase='agent_run';
-  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,instructions:instructionsForTools(true),runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools:true,dynamicSubAgents:process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
+  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,instructions:instructionsForTools(preloadTools),runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
    modelCallTimeoutMs:Number(process.env.MODEL_CALL_TIMEOUT_MS??120000),onModelCallTimeout:()=>{metadata.modelTimeouts++;modelSwitching=true;},onFallback:()=>{metadata.fallback();mcp!.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>metadata.calls,
    onEvent:e=>{if(e.type==='client.status'&&e.message.startsWith('Run time limit reached.'))active=false;const safe=metadata.add(e);if(e.type!=='model.message.delta')console.log(JSON.stringify(safe));},
@@ -65,7 +66,7 @@ async function main() {
  finally {
   active=false;
   if(mcp)try{await mcp.close();}catch{failure??={category:'mcp_cleanup_failure'};status='error';}
-  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
+  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,preloadTools,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
   await writeFile(path.join(out,'events.json'),JSON.stringify(metadata.events,null,2));
   await writeFile(path.join(out,'result.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));
