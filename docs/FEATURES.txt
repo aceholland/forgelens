@@ -1,101 +1,122 @@
 ForgeLens 0.1.13 - feature and evidence checkpoint
 20 November 2026
 
-This is a development checkpoint, not a completed competition submission.
-Automated checks, headless runs and editor observations are distinguished
-below. No official Task B or final Task C editor pass is claimed.
+Windows editor checks are complete with the review/recovery steps below.
+Final edited video, public PDF, accessible URLs and portal submission remain
+pending. No competition score is self-awarded.
 
 MANDATORY CAPABILITIES
 
 Inline selection edits and editor diff
-  Implemented: selected-region scope checks and reviewed WorkspaceEdit flow.
-  Real Windows editor: final 0.1.13 Task A generated two reviewed hunks,
-  applied/saved them, and returned False for off, n and uppercase forms.
-  Guarded editor Undo followed by Save restored the clean pinned baseline.
-  Final edited video and its timestamp remain pending.
+  Implemented/tested: selected-region scope checks, exact edit preview and
+  reviewed WorkspaceEdit flow. Real Task A produced two reviewed hunks;
+  saved checks returned False for off, n and uppercase forms. Guarded Undo
+  followed by Save restored the exact clean pinned Flask baseline.
 
 Agent mode across multiple files
-  Implemented: real TrueForge sessions, required discovery, visible paths
-  and reasons, planning and in-memory proposals across source/tests/docs.
-  Headless evidence: actual three-file discovery and staging with deferred
-  tools. This latest candidate failed one new CLI test (58 passed): its
-  test used the application runner for a built-in FlaskGroup command.
-  An earlier distinct four-file candidate passed 59 CLI tests, help and
-  masking checks in a disposable clone. Neither is an official editor pass.
-  A distinct live editor B run is under review; final review/apply/save and
-  post-save tests remain pending at this publication checkpoint.
+  Real final editor retake used the exact 296-byte Task B prompt without
+  filenames. Deferred tool discovery preceded workspace retrieval. The agent
+  discovered source, test and CLI docs and staged all three files, including
+  an implementation revision against the staged view. The user reviewed,
+  applied and saved the hunks. The raw candidate's test failed (58 passed,
+  1 failed); human review corrected its built-in CLI group invocation and
+  documentation reference/example wording. Initial reviewed result: 59 CLI
+  tests passed in 1.61 seconds; help listed config; valid JSON masked all
+  four synthetic key categories while retaining an ordinary value. The
+  original CLI implementation remained unchanged by those corrections.
+
+  A separate genuine 493-byte model follow-up added case-insensitive masking,
+  lower/mixedcase assertions and output-specific configuration docs. Native
+  review/apply/save covered its three files; retained CLI docs make the final
+  Flask diff four files and 80 insertions. Actual saved final result: 59 CLI
+  tests passed in 3.28 seconds; help/JSON and all 12 uppercase/lowercase/
+  mixedcase synthetic secret values passed masking checks. An ordinary value
+  stayed visible. All 235 tracked hashes stayed unchanged during verification.
 
 Context selection and budget
-  Implemented/tested: @file and @symbol references, deterministic lexical,
-  path and symbol ranking, line ranges and reasons. Automatic discovery
-  prefers a coherent source/test/docs family. Agent-panel runs require a
-  successful discovery result before other workspace tools.
-  Default preview: 24,000 content characters, not exact tokens. Focused
-  read/search payloads are bounded, repeated results compacted, and recovery
-  reads remain available after planning or rejected edits. Metadata,
-  prompts and discovery overhead are extra; this is not a cumulative cap.
+  Implemented/tested: @file and @symbol references; deterministic lexical,
+  path and symbol ranking; exact line windows and reasons. Discovery keeps
+  the original task's source/test/docs requirements. Agent-panel workspace
+  access requires successful discovery. Actual list_tools/get_tool_info,
+  retrieval and a three-file plan were observed in the final editor retake.
+  Default preview: 24,000 content characters, not exact tokens. Individual
+  read/search payloads are bounded, repeated results compacted, and focused
+  recovery reads remain available after planning or rejected edits. Prompts,
+  metadata and discovery overhead are extra; this is not a cumulative cap.
 
-Safe diff review and no silent writes
-  Implemented/tested: exact unique anchors, overlap rejection, LF/CRLF
-  preservation, strict mixed-EOL matching, stale-state and selection guards,
-  separate proposal approval, per-hunk accept/reject, explicit apply and
-  guarded Undo. Proposals remain in memory. Apply changes an unsaved editor
-  buffer; Save is a separate action. Agent tools cannot replace an entire
-  file with a content-only fragment.
-  Real final A acceptance/save and Undo/save were observed. Explicit reject
-  footage and the final multi-file B review sequence remain pending.
+Safe diff review and no silent disk writes
+  Implemented/tested: unique anchors, overlap rejection, LF/CRLF adaptation,
+  strict mixed-EOL matching, stale-state and selection guards, separate
+  proposal approval, per-hunk accept/reject, explicit apply and guarded Undo.
+  Agent tools stage exact edits in memory; content-only fragments are
+  rejected. Applying accepted hunks changes an unsaved editor buffer; Save
+  is separate. Real A acceptance/save/Undo and three-file B review/save were
+  observed. C's user-applied unsaved buffer was recovered with Undo/Save All.
 
 Streaming and cancellation
-  Implemented/tested: streamed text concatenates correctly; status messages
-  begin on separate lines. Cancel aborts local work, requests server stop,
-  disables tools and discards unapplied proposals. Stale generations fail.
-  Final on-screen interruption and consistent-workspace footage are pending.
+  Implemented/tested: readable streamed chunks and separate status lines in
+  the panel and OutputChannel; Cancel aborts local work, requests server
+  stop, disables tools and discards unapplied proposals. Stale generations
+  cannot act. Real active editor cancellation reached terminal cancelled
+  over a 5.298-second session lifetime; this is not a UI reaction-time
+  benchmark. All 235 tracked hashes and existing B edits stayed unchanged.
 
 ADDITIONAL FEATURES
 
-TrueForge integration
-  Official SDK sessions and agent loop; versioned agent manifest, MCP tool
-  discovery and approval events. Deferred tools are the default; a genuine
-  final headless run with preloadTools=false reached actual MCP retrieval.
-  Optional preloading remains available for models with schema limitations.
+TrueForge integration and optional controls
+  Official SDK sessions and TrueForge's agent loop; versioned agent manifest,
+  MCP discovery and approval events. The final editor B retake used genuine
+  deferred discovery with preloadTools=false. Optional preloading supports
+  models with schema limitations and retains approvals. Optional reasoning
+  effort is passed through the TrueForge agent spec. Supported operator
+  questions resume with the real answer; dismissal cancels, and cancellation
+  prevents late answers. Empty output and no-edit runs report their outcome.
 
 Automatic configured-model fallback
-  Real 0.1.13 backend check: unreachable primary to configured free model,
-  34.8 seconds, one scoped proposal, zero applied files, all 235 target file
-  hashes unchanged. Fallback requires a confirmed stopped prior turn and no
-  staged edits. Final Task C editor demonstration remains pending.
+  Real Task C showed an unreachable primary connection, then automatically
+  started Gemini 3.1 Flash Lite and reached done with two scoped hunks.
+  During review the user rejected one hunk and accepted the other into an
+  unsaved buffer. Stop discarded pending work, then guarded Undo/Save All
+  restored the accepted buffer.
+  Post-recovery Git status was clean and all 235 tracked hashes matched the
+  pre-C state. Fallback requires a stopped prior turn and no staged edits.
 
 Bounded execution and commands
-  Five-minute default run deadline, separate model-call timeout and
-  TrueForge 40-iteration limit. No blind replay after ambiguous failures.
+  Configurable total-run deadline (five-minute default), separate model-call
+  timeout (two-minute default), and TrueForge's 40-iteration limit. Native
+  bounded HTTP backoff handles explicit transient provider responses; no
+  blind replay after ambiguous interruption. Concurrent runs are rejected.
   Validation commands require separate approval and a narrow allowlist.
-  Tests and imports execute trusted workspace code; no arbitrary shell tool.
+  Tests/imports execute trusted workspace code; no arbitrary shell tool.
 
 Workspace and transport protections
   Ephemeral authenticated loopback MCP; traversal, protected-path, symlink,
   binary and oversized-file exclusions. Requests are limited to 2 MiB and
-  512 raw tool-input elements before schema expansion. Normal and malicious
-  input cases are covered by regression tests.
+  512 raw tool-input elements before schema expansion. Normal requests,
+  oversized/chunked bodies and excessive/nested inputs have regression
+  coverage. Late or cancelled operations fail before changing editor state.
 
 Provider configuration and provenance
-  Model/provider credentials stay in TrueForge, not extension settings.
-  Primary and fallback model IDs are independently configurable. Built from
-  scratch with AI coding assistance; MIT license and runtime dependency
-  licenses are included in LICENSE and THIRD_PARTY_NOTICES.md.
+  Credentials remain in TrueForge. Primary and fallback model IDs are
+  independently configurable. Built from scratch with AI coding assistance;
+  MIT license and runtime dependency licenses are included in LICENSE and
+  THIRD_PARTY_NOTICES.md. The iterative B review corrections are disclosed;
+  the focused model follow-up is separate from the original exact prompt.
+  This checkpoint does not claim an unassisted one-shot model result.
 
 VERIFICATION AND LIMITS
 
-112/112 Windows extension tests passed, with no failures or skips.
-TypeScript checking and compilation passed. npm audit reported zero known
-vulnerabilities after dependency updates and input-limit fixes. This is a
-point-in-time dependency result, not exhaustive security assurance.
+Fresh 0.1.13 npm ci, 112/112 Windows extension tests, TypeScript checking,
+compilation and VSIX packaging passed. No failures or skipped tests. The
+recorded npm audit reported zero known vulnerabilities after dependency and
+input-limit updates; it is a point-in-time dependency result.
 
-The prior 0.1.12 clean install passed; final 0.1.13 reinstall/public-link
-checks, final A/B/C video, complete editor B/C outcomes and submission remain
-open. No competition score is self-awarded. Existing-file edits only; no
-creation/deletion, ignore-file parsing or exact token accounting. Filename
-filters cannot detect every embedded secret. Ephemeral connector records
-remain after runs. Free provider quotas and capacity affect repeatability.
+Technical editor A/B/C, Undo and active cancellation checks are complete.
+Final edited video/public PDF, their accessible URLs and portal submission
+remain pending. Existing-file edits only; no creation/deletion, ignore-file
+parsing or exact token accounting. Filters cannot detect every embedded
+secret. Ephemeral connectors remain after runs. Provider quotas/capacity
+affect repeatability. Fallback may lose earlier reasoning.
 
-See README.md for clean-clone setup, agent/model configuration, architecture
-and license details. See docs/STATUS.md for the measured checkpoint.
+See README.md for setup, model configuration and architecture. See
+docs/STATUS.md for measured outcomes, review provenance and remaining work.
