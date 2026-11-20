@@ -1,7 +1,8 @@
-# ForgeLens 0.1.11 Windows checkpoint — 20 November 2026
+# ForgeLens 0.1.12 Windows checkpoint - 20 November 2026
 
 - Verified source defects fixed: LF model anchors versus CRLF Windows files; fragment-as-whole-file agent proposals; discovery queries dropping the original task's test/docs requirements.
-- 106/106 Windows tests passed, with 0 failures and 0 skips. TypeScript checking and extension build passed. Existing installed dependencies were reused; a clean dependency installation was not re-tested.
+- 108/108 Windows tests passed, with 0 failures and 0 skips. TypeScript checking and extension build passed. Existing installed dependencies were reused; a clean dependency installation was not re-tested.
+- Removed the inherited six-exploration-call hard gate and two-focused-read instruction. Targeted recovery reads remain available after planning or rejected edits; per-response bounds, repeat compaction, stale-generation guards, the five-minute deadline and TrueForge's 40-iteration limit remain. The read/search allowance honors the configured context budget as a soft allowance, not a strict cumulative token cap.
 - Task A, real Windows Extension Development Host on 0.1.10, session `01m7vrvma7yy1hecevs6q6d8nq`: one file staged, two hunks reviewed/applied/saved. `off`, `n`, `OFF`, `N`, `0`, `false`, `no` returned False; `1` and `true` returned True. Saved diff: 3 insertions, 1 deletion in `src/flask/helpers.py`. The saved A edit remains in the isolated demo checkout until editor Undo is saved; do not start official B on that dirty checkout.
 - Windows headless C: an actual unreachable model provider, no fallback, MCP initialized, server error, zero tools/proposals, 235 file hashes unchanged. This is backend evidence; the C editor recording remains open.
 - Baseline Flask CLI tests: 58 passed using pytest 9.0.2 from the pinned checkout's lockfile. These are baseline tests, not validation of a Task B implementation.

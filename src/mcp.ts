@@ -28,14 +28,14 @@ export async function startMcp(bridge: EditorBridge) {
  const transports=new Set<StreamableHTTPServerTransport>();
  const output=(text:string)=>({content:[{type:'text' as const,text}]});
  // Scoped to this bridge/run, not to the individual stateless HTTP transport.
- // Limit fresh text before the first proposal, but always allow small windows.
+ // Compact repeated text and bound each response. Targeted recovery reads
+ // remain available; the TrueForge iteration limit and run deadline stop loops.
  const exploration = new Map<string,string>();
- const limit=6;
  const attempt=new AsyncLocalStorage<{used:number;generation:number}>();
  let generation=0;
  const explorationTools=new Set(['find_relevant_files','select_context','read_file','search_workspace']);
  let exposedChars=0, hasProposed=false, calls=0;
- const show=(text:string,used=calls)=>output(`${text}\nbudget: ${used}/${limit} exploration calls used`);
+ const show=(text:string,used=calls)=>output(`${text}\nexploration calls used: ${used}`);
  const safeLabel=(p:string)=>isSafeContextPath(p)&&/^[\w ./-]+$/.test(p)?p:'';
  const report=(tool:string,details='',flag='')=>bridge.onToolCall?.([tool,details.replace(/[\x00-\x1f\x7f]/g,'').slice(0,400),flag].filter(Boolean).join(' · '));
  const take=()=>attempt.getStore()?.used??0;
@@ -44,10 +44,10 @@ export async function startMcp(bridge: EditorBridge) {
   if(current && current.generation!==generation)throw new Error('This tool call belongs to a cancelled turn.');
  };
  const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;exploration.clear();};
- const exhausted=()=>({...show('Budget exhausted: call propose_write now.'),isError:true});
+ const missingContext=()=>({...show('Missing exploration request context.'),isError:true});
  const failed=(error:unknown,used:number)=>({...show(error instanceof Error?error.message:'Exploration failed.',used),isError:true});
  const digest=(...values:(string|number)[])=>createHash('sha256').update(JSON.stringify(values)).digest('hex');
- const remaining=(max:number)=>hasProposed?max:Math.min(max,Math.max(900,6000-exposedChars));
+ const remaining=(max:number)=>hasProposed?max:Math.min(max,Math.max(900,Math.max(6000,bridge.budget)-exposedChars));
  const shown=(key:string, text:string, repeat:string, used:number)=>{
   verifyGeneration();
   exposedChars+=text.length;
@@ -66,7 +66,7 @@ export async function startMcp(bridge: EditorBridge) {
   },async({path,startLine=1,lineCount=80,refresh=false})=>{
    guard();
    const details=`${safeLabel(path)}:${startLine}+${lineCount}`;
-   const usedCall=take();if(!usedCall)return exhausted();
+   const usedCall=take();if(!usedCall)return missingContext();
    try {
    const diskPath=await confinedPath(bridge.root,path);
    const info=await stat(diskPath,{bigint:true});
@@ -102,7 +102,7 @@ export async function startMcp(bridge: EditorBridge) {
   });
   mcp.registerTool('search_workspace',{description:'Search a literal substring (not regex) in source paths and lines. Prefer distinctive identifiers. Optional pathPrefix narrows to a discovered directory or file. Includes 2 neighboring lines by default (contextLines 0-3), with exact line references, so small matches need not be reread. Capped at 8 matches per file and 10 total; preview text is bounded. Unchanged repeated searches return a short note unless refresh=true. Narrow queries if limited.',inputSchema:{query:z.string().min(1).max(200),pathPrefix:z.string().optional(),contextLines:z.number().int().min(0).max(3).optional(),refresh:z.boolean().optional()}},async({query,pathPrefix,contextLines=2,refresh=false})=>{
    guard();
-   const usedCall=take();if(!usedCall)return exhausted();
+   const usedCall=take();if(!usedCall)return missingContext();
    try {
    const needle=query.toLowerCase();
    const files=await listWorkspace(bridge.root); const hits:string[]=[]; let limited=false, totalMatches=0;
@@ -142,7 +142,7 @@ export async function startMcp(bridge: EditorBridge) {
    } catch(error){report('search_workspace',safeLabel(pathPrefix??''),'failed');return failed(error,usedCall);}
   });
   const collectContext=async(query:string,discovery:boolean)=>{
-   const usedCall=take();if(!usedCall)return exhausted();
+   const usedCall=take();if(!usedCall)return missingContext();
    const name=discovery?'find_relevant_files':'select_context';
    report(name);
    try {
@@ -160,11 +160,11 @@ export async function startMcp(bridge: EditorBridge) {
    } catch(error){return failed(error,usedCall);}
   };
   mcp.registerTool('find_relevant_files',{
-   description:'Find up to five distinct relevant workspace files using the original task requirements plus this query, with reasons and at most 40 lines of evidence per file. Counts toward the shared six-call exploration budget. Use this first.',
+   description:'Find up to five distinct relevant workspace files using the original task requirements plus this query, with reasons and at most 40 lines of evidence per file. Use this first. Follow with focused reads to confirm exact insertion or replacement anchors.',
    inputSchema:{query:z.string().trim().min(1).max(4000)}
   },async({query})=>collectContext(query,true));
   mcp.registerTool('select_context',{
-   description:'Retrieve budgeted source snippets and reasons; supports @file and @symbol. Counts toward the shared six-call exploration budget.',
+   description:'Retrieve budgeted source snippets and reasons; supports @file and @symbol. Use focused queries when an edit needs additional evidence.',
    inputSchema:{query:z.string().trim().min(1).max(4000)}
   },async({query})=>collectContext(query,false));
   mcp.registerTool('report_plan',{
@@ -200,7 +200,7 @@ export async function startMcp(bridge: EditorBridge) {
      const entry=indices.get(message.id);indices.delete(message.id);
      if(entry && message.result.isError===true){
       const parts=message.result.content as {type:string;text?:string}[]|undefined;
-      if(!parts?.some(p=>p.text?.includes(' exploration calls used'))){
+      if(!parts?.some(p=>p.text?.includes('\nexploration calls used:'))){
        if(entry.generation===generation)report(entry.tool,'','invalid arguments');
        message={...message,result:failed(new Error('Invalid exploration tool arguments.'),entry.used)};
       }
@@ -213,11 +213,6 @@ export async function startMcp(bridge: EditorBridge) {
     const tool=message.params?.name;
     if(typeof tool!=='string')return dispatch(message,extra);
     bridge.onToolRequest?.(tool);
-    if(calls>=limit&&tool!=='propose_write'){
-     if(explorationTools.has(tool)||['propose_edit','report_plan','run_command'].includes(tool))report(tool,'','exhausted');
-     void transport.send({jsonrpc:'2.0',id:message.id,result:exhausted()}).catch(()=>{});
-     return;
-    }
     // Count at the validated JSON-RPC boundary, before MCP validates individual args.
     if(explorationTools.has(tool)){
      const used=++calls;
