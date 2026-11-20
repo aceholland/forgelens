@@ -47,7 +47,7 @@ async function main() {
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
  mcp=await startMcp({root,budget,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
-  propose:async(p,c)=>{const original=await readWorkspace(root,p); if(store.get(p))store.revise(p,original,c);else store.stage(p,original,c);await writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));return `Staged ${p}; not applied. Continue any remaining requested work. Validation sees disk only.`;},
+  propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const original=await readWorkspace(root,p); if(store.get(p))store.revise(p,original,c);else store.stage(p,original,c);await writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));return `Staged ${p}; not applied. Continue any remaining requested work. Validation sees disk only.`;},
   command:async()=> 'Not run: target files remain unchanged. Validate after human review.',context:r=>{const paths=metadata.paths('discovery',r.items.map(i=>i.path));const event={type:'retrieval.context',fileCount:r.items.length,paths};metadata.events.push(event);console.log(JSON.stringify(event));},
   onInitialized:()=>{metadata.initialized++;console.log(JSON.stringify({type:'mcp.initialized'}));},
   onToolRequest:name=>{const safe=toolName(name);metadata.calls.push(safe);console.log(JSON.stringify({type:'mcp.tool_request',name:safe,count:metadata.calls.length}));},

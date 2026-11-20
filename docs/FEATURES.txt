@@ -81,6 +81,17 @@ Automatic configured-model fallback
   Post-recovery Git status was clean and all 235 tracked hashes matched the
   pre-C state. Fallback requires a stopped prior turn and no staged edits.
 
+Optional local compatibility and diagnostic helpers
+  The Groq gateway has offline fake-upstream coverage for routing, auth,
+  size limits, incremental streaming, retry and redirect behavior. Live
+  provider compatibility remains unverified; its current request deadline
+  does not interrupt a slow incoming body upload. The optional Python AST
+  gate parses without execution and rechecks the actual materialized
+  candidate before staged-state/evidence mutation. Its batched-approval
+  regression preserves the prior overlay, evidence and target on failure.
+  Updated source: 113/113 offline tests and TypeScript checking passed.
+  These helpers do not change the recorded extension bundle.
+
 Bounded execution and commands
   Configurable total-run deadline (five-minute default), separate model-call
   timeout (two-minute default), and TrueForge's 40-iteration limit. Native
