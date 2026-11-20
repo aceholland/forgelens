@@ -2,7 +2,7 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "publisher": "forgelens-team",
   "repository": {
     "type": "git",
@@ -115,20 +115,25 @@
     "compile": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.js --sourcemap",
     "check": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
-    "package": "npm run check && npm run compile && vsce package --allow-missing-repository"
+    "notices": "node scripts/generate-notices.mjs",
+    "package": "npm run check && npm run compile && npm run notices && vsce package --allow-missing-repository"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.26.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@truefoundry/trueforge-sdk": "0.185.0",
-    "diff": "8.0.2",
+    "diff": "8.0.4",
     "undici": "7.30.2",
-    "zod": "^3.25.0"
+    "zod": "4.6.7"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.6",
+    "minimatch": "11.0.1"
   },
   "devDependencies": {
     "@types/diff": "^7.0.0",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.96.0",
-    "@vscode/vsce": "^3.7.0",
+    "@vscode/vsce": "4.1.1",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"

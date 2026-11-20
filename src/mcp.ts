@@ -11,7 +11,7 @@ import { isSafeContextPath, selectContext } from './context';
 import { resolveAgentProposal } from './patch';
 
 export interface EditorBridge {
- root:string; budget:number; task?:string; active():boolean;
+ root:string; budget:number; task?:string; requireDiscovery?:boolean; active():boolean;
  pending?(path:string):string|undefined;
  propose(path:string, content:string):Promise<string>;
  command(command:string,args:string[]):Promise<string>;
@@ -32,7 +32,7 @@ export async function startMcp(bridge: EditorBridge) {
  // remain available; the TrueForge iteration limit and run deadline stop loops.
  const exploration = new Map<string,string>();
  const attempt=new AsyncLocalStorage<{used:number;generation:number}>();
- let generation=0;
+ let generation=0,discoveryComplete=false;
  const explorationTools=new Set(['find_relevant_files','select_context','read_file','search_workspace']);
  let exposedChars=0, hasProposed=false, calls=0;
  const show=(text:string,used=calls)=>output(`${text}\nexploration calls used: ${used}`);
@@ -43,7 +43,7 @@ export async function startMcp(bridge: EditorBridge) {
   const current=attempt.getStore();
   if(current && current.generation!==generation)throw new Error('This tool call belongs to a cancelled turn.');
  };
- const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;exploration.clear();};
+ const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;discoveryComplete=false;exploration.clear();};
  const missingContext=()=>({...show('Missing exploration request context.'),isError:true});
  const failed=(error:unknown,used:number)=>({...show(error instanceof Error?error.message:'Exploration failed.',used),isError:true});
  const digest=(...values:(string|number)[])=>createHash('sha256').update(JSON.stringify(values)).digest('hex');
@@ -56,7 +56,7 @@ export async function startMcp(bridge: EditorBridge) {
   return show(text,used);
  };
  function build() {
-  const mcp=new McpServer({name:'forgelens-editor',version:'0.1.0'});
+  const mcp=new McpServer({name:'forgelens-editor',version:'0.1.0'},{maxToolInputElements:512});
   mcp.server.oninitialized=()=>bridge.onInitialized?.();
   const readView=async(path:string)=>{const disk=await readWorkspace(bridge.root,path);return bridge.pending?.(path)??disk;};
   const guard=()=>{verifyGeneration();if(!bridge.active()) throw new Error('Run cancelled or inactive');};
@@ -156,6 +156,7 @@ export async function startMcp(bridge: EditorBridge) {
     const result=selectContext(files,contextQuery,discovery?Math.min(4000,bridge.budget):bridge.budget,discovery?{maxFiles:5,maxLines:40}:undefined);
     guard();
     bridge.context(result);
+    guard();if(discovery)discoveryComplete=true;
     return show(JSON.stringify(result),usedCall);
    } catch(error){return failed(error,usedCall);}
   };
@@ -188,7 +189,7 @@ export async function startMcp(bridge: EditorBridge) {
   if(auth.length!==expected.length || !timingSafeEqual(auth,expected)){res.writeHead(401).end();return;}
   if(req.url!='/mcp'){res.writeHead(404).end();return;}
   if(req.method!=='POST'){res.writeHead(405).end();return;}
-  const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true}); transports.add(transport);
+  const transport=new StreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true,maxRequestBodySize:2*1024*1024}); transports.add(transport);
   const mcp=build();
   try {
    await mcp.connect(transport);
@@ -213,6 +214,9 @@ export async function startMcp(bridge: EditorBridge) {
     const tool=message.params?.name;
     if(typeof tool!=='string')return dispatch(message,extra);
     bridge.onToolRequest?.(tool);
+    if(bridge.requireDiscovery&&!discoveryComplete&&tool!=='find_relevant_files'){
+     return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('Discover context first: load and call find_relevant_files with the task before using workspace tools.'),isError:true}}).catch(()=>{});
+    }
     // Count at the validated JSON-RPC boundary, before MCP validates individual args.
     if(explorationTools.has(tool)){
      const used=++calls;

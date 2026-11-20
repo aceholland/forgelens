@@ -1,0 +1,101 @@
+ForgeLens 0.1.13 - feature and evidence checkpoint
+20 November 2026
+
+This is a development checkpoint, not a completed competition submission.
+Automated checks, headless runs and editor observations are distinguished
+below. No official Task B or final Task C editor pass is claimed.
+
+MANDATORY CAPABILITIES
+
+Inline selection edits and editor diff
+  Implemented: selected-region scope checks and reviewed WorkspaceEdit flow.
+  Real Windows editor: final 0.1.13 Task A generated two reviewed hunks,
+  applied/saved them, and returned False for off, n and uppercase forms.
+  Guarded editor Undo followed by Save restored the clean pinned baseline.
+  Final edited video and its timestamp remain pending.
+
+Agent mode across multiple files
+  Implemented: real TrueForge sessions, required discovery, visible paths
+  and reasons, planning and in-memory proposals across source/tests/docs.
+  Headless evidence: actual three-file discovery and staging with deferred
+  tools. This latest candidate failed one new CLI test (58 passed): its
+  test used the application runner for a built-in FlaskGroup command.
+  An earlier distinct four-file candidate passed 59 CLI tests, help and
+  masking checks in a disposable clone. Neither is an official editor pass.
+  A distinct live editor B run is under review; final review/apply/save and
+  post-save tests remain pending at this publication checkpoint.
+
+Context selection and budget
+  Implemented/tested: @file and @symbol references, deterministic lexical,
+  path and symbol ranking, line ranges and reasons. Automatic discovery
+  prefers a coherent source/test/docs family. Agent-panel runs require a
+  successful discovery result before other workspace tools.
+  Default preview: 24,000 content characters, not exact tokens. Focused
+  read/search payloads are bounded, repeated results compacted, and recovery
+  reads remain available after planning or rejected edits. Metadata,
+  prompts and discovery overhead are extra; this is not a cumulative cap.
+
+Safe diff review and no silent writes
+  Implemented/tested: exact unique anchors, overlap rejection, LF/CRLF
+  preservation, strict mixed-EOL matching, stale-state and selection guards,
+  separate proposal approval, per-hunk accept/reject, explicit apply and
+  guarded Undo. Proposals remain in memory. Apply changes an unsaved editor
+  buffer; Save is a separate action. Agent tools cannot replace an entire
+  file with a content-only fragment.
+  Real final A acceptance/save and Undo/save were observed. Explicit reject
+  footage and the final multi-file B review sequence remain pending.
+
+Streaming and cancellation
+  Implemented/tested: streamed text concatenates correctly; status messages
+  begin on separate lines. Cancel aborts local work, requests server stop,
+  disables tools and discards unapplied proposals. Stale generations fail.
+  Final on-screen interruption and consistent-workspace footage are pending.
+
+ADDITIONAL FEATURES
+
+TrueForge integration
+  Official SDK sessions and agent loop; versioned agent manifest, MCP tool
+  discovery and approval events. Deferred tools are the default; a genuine
+  final headless run with preloadTools=false reached actual MCP retrieval.
+  Optional preloading remains available for models with schema limitations.
+
+Automatic configured-model fallback
+  Real 0.1.13 backend check: unreachable primary to configured free model,
+  34.8 seconds, one scoped proposal, zero applied files, all 235 target file
+  hashes unchanged. Fallback requires a confirmed stopped prior turn and no
+  staged edits. Final Task C editor demonstration remains pending.
+
+Bounded execution and commands
+  Five-minute default run deadline, separate model-call timeout and
+  TrueForge 40-iteration limit. No blind replay after ambiguous failures.
+  Validation commands require separate approval and a narrow allowlist.
+  Tests and imports execute trusted workspace code; no arbitrary shell tool.
+
+Workspace and transport protections
+  Ephemeral authenticated loopback MCP; traversal, protected-path, symlink,
+  binary and oversized-file exclusions. Requests are limited to 2 MiB and
+  512 raw tool-input elements before schema expansion. Normal and malicious
+  input cases are covered by regression tests.
+
+Provider configuration and provenance
+  Model/provider credentials stay in TrueForge, not extension settings.
+  Primary and fallback model IDs are independently configurable. Built from
+  scratch with AI coding assistance; MIT license and runtime dependency
+  licenses are included in LICENSE and THIRD_PARTY_NOTICES.md.
+
+VERIFICATION AND LIMITS
+
+112/112 Windows extension tests passed, with no failures or skips.
+TypeScript checking and compilation passed. npm audit reported zero known
+vulnerabilities after dependency updates and input-limit fixes. This is a
+point-in-time dependency result, not exhaustive security assurance.
+
+The prior 0.1.12 clean install passed; final 0.1.13 reinstall/public-link
+checks, final A/B/C video, complete editor B/C outcomes and submission remain
+open. No competition score is self-awarded. Existing-file edits only; no
+creation/deletion, ignore-file parsing or exact token accounting. Filename
+filters cannot detect every embedded secret. Ephemeral connector records
+remain after runs. Free provider quotas and capacity affect repeatability.
+
+See README.md for clean-clone setup, agent/model configuration, architecture
+and license details. See docs/STATUS.md for the measured checkpoint.

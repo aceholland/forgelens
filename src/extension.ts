@@ -18,7 +18,9 @@ export async function activate(context:vscode.ExtensionContext) {
  let panel:vscode.WebviewPanel|undefined; let runner:ForgeRunner|undefined; let active=false; let cancellation=false; let runExpired=false; let reviewing=false;
  let inlineScope:{file:string;start:number;end:number}|undefined;
  let bridge:Awaited<ReturnType<typeof startMcp>>|undefined; let commandAbort:AbortController|undefined;
- const emit=(text:string)=>{output.appendLine(text); void panel?.webview.postMessage({type:'append',text});};
+ let outputStreaming=false;
+ const emit=(text:string)=>{if(outputStreaming)output.appendLine('');outputStreaming=false;output.appendLine(text);void panel?.webview.postMessage({type:'append',text});};
+ const emitDelta=(text:string)=>{if(!text)return;output.append(text);outputStreaming=true;void panel?.webview.postMessage({type:'delta',text});};
  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('forgelens',{provideTextDocumentContent:uri=>virtual.get(uri.toString())||''}));
  const root=()=>{const uri=vscode.workspace.workspaceFolders?.[0]?.uri;if(!uri||uri.scheme!=='file')throw new Error('Open a local workspace first.');return uri.fsPath;};
  const getDoc=async(file:string)=>vscode.workspace.openTextDocument(vscode.Uri.file(await confinedPath(root(),file)));
@@ -84,7 +86,7 @@ export async function activate(context:vscode.ExtensionContext) {
    const files=[];let total=0;for(const file of await listWorkspace(root())){if(cancellation)return;try{const content=await readWorkspace(root(),file);total+=content.length;if(total>8000000)break;files.push({path:file,content});}catch{}}
    const budget=config.get<number>('contextBudget',24000);const selected=selectContext(files,prompt,budget);
    const showContext=(result:ReturnType<typeof selectContext>,label:string)=>emit(`${label}: ${result.usedChars}/${result.budgetChars} characters:\n${result.items.map(f=>`${f.path}:${f.startLine}-${f.endLine}: ${f.reason}${f.truncated?' (snippet)':''}`).join('\n')}`);showContext(selected,'Initial retrieval preview');
-   bridge=await startMcp({root:root(),budget,task:prompt,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();},onPlan:files=>{
+   bridge=await startMcp({root:root(),budget,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();},onPlan:files=>{
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
    },pending:file=>store.get(file)?.proposed,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery'),propose:stage,command:async(command,args)=>{
@@ -97,7 +99,7 @@ export async function activate(context:vscode.ExtensionContext) {
    const mcpName=`forgelens-${randomBytes(4).toString('hex')}`;await registerMcp(baseUrl,mcpName,bridge.url,bridge.token);
    if(cancellation)return;
    const preloadTools=config.get<boolean>('preloadTools',false);
-   runner=new ForgeRunner({baseUrl,model,preloadTools,runTimeoutMs:config.get<number>('runTimeoutMinutes',5)*60000,modelCallTimeoutMs:Math.round(config.get<number>('modelCallTimeoutSeconds',120)*1000),onModelCallTimeout:()=>{modelSwitching=true;commandAbort?.abort();},onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>recentToolCalls,reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,mcpName,instructions:instructionsForTools(preloadTools),onEvent:event=>{if(cancellation)return;if(event.type==='model.message.delta')emit(String(event.content||''));else if(event.type==='client.status'){if(event.message.startsWith('Run time limit reached.')){runExpired=true;commandAbort?.abort();}emit(event.message);}else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);else emit(event.type);},onQuestion:async details=>{
+   runner=new ForgeRunner({baseUrl,model,preloadTools,runTimeoutMs:config.get<number>('runTimeoutMinutes',5)*60000,modelCallTimeoutMs:Math.round(config.get<number>('modelCallTimeoutSeconds',120)*1000),onModelCallTimeout:()=>{modelSwitching=true;commandAbort?.abort();},onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>recentToolCalls,reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,mcpName,instructions:instructionsForTools(preloadTools),onEvent:event=>{if(cancellation)return;if(event.type==='model.message.delta')emitDelta(String(event.content||''));else if(event.type==='client.status'){if(event.message.startsWith('Run time limit reached.')){runExpired=true;commandAbort?.abort();}emit(event.message);}else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);else emit(event.type);},onQuestion:async details=>{
     if(cancellation||runExpired||modelSwitching)return undefined;
     emit(`Agent question: ${details.question}`);
     const custom={label:'Type a response…',custom:true};
