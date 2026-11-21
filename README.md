@@ -8,6 +8,12 @@ ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local re
 
 ForgeLens 0.2.0 adds a local context preview. You can see which files an agent would receive, why they were selected and which lines are included before using any model quota. Open a path to inspect its excerpt, or exclude a private directory with `.forgelensignore`.
 
+![The ForgeLens panel in VS Code shows the Flask Task B request above three clickable results for the CLI implementation, its tests and its documentation.](docs/preview-context-flask.png)
+
+The Task B request names no files. On Linux, the panel found all three using **23,970 of 24,000 excerpt characters**.
+
+In a separate free local-model trial, Qwen3 1.7B called the ForgeLens tools five times and identified the same implementation, test and documentation files without hints. It reached its time limit before proposing an edit. The completed four-file Task B result and its 59 passing CLI tests are in the original Round 1 video.
+
 The preview also lets you decide hunks in any order, export the accepted changes as a Git patch, and run Git or Flask checks in the VS Code terminal. An optional read-only TrueForge scout can gather context before a multi-file edit. The recorded Round 1 demo above uses v0.1.13.
 
 All 137 extension tests passed on Windows. In four real desktop editor configurations, the context preview made zero model requests. Each editor ran the Git checks successfully and reported the expected failure for a deliberately introduced whitespace error. [Windows, macOS and Linux test results](https://github.com/aceholland/forgelens/actions/runs/44949168156)
