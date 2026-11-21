@@ -26,7 +26,8 @@ exports.run = async () => {
   const folder = process.env.FORGELENS_PREVIEW_FIXTURE;
   assert.ok(folder, 'The launcher must provide its disposable fixture');
   assert.equal(vscode.workspace.workspaceFolders?.[0].uri.scheme, 'file');
-  assert.equal(fs.realpathSync(vscode.workspace.workspaceFolders[0].uri.fsPath), fs.realpathSync(folder));
+  const editorFolder = fs.realpathSync(vscode.workspace.workspaceFolders[0].uri.fsPath);
+  assert.equal(path.relative(editorFolder, fs.realpathSync(folder)), '');
   assert.equal(vscode.workspace.isTrusted, true);
   const before = snapshot(folder);
   let requests = 0;
@@ -63,7 +64,8 @@ exports.run = async () => {
     const panelOpened = vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label === 'ForgeLens' && tab.input instanceof vscode.TabInputWebview));
     assert.ok(panelOpened, 'Preview must open the ForgeLens panel');
     assert.deepEqual(snapshot(folder), before, 'Context preview must not change any fixture file, including ignored files');
-    assert.ok(!vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file' && document.uri.fsPath.startsWith(folder + path.sep)));
+    assert.ok(!vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file'
+      && vscode.workspace.getWorkspaceFolder(document.uri) === vscode.workspace.workspaceFolders[0]));
     assert.equal(requests, 0, 'Local preview must not contact the TrueForge/model endpoint');
     console.log('FORGELENS_PREVIEW_DESKTOP_PASS ' + JSON.stringify({
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
