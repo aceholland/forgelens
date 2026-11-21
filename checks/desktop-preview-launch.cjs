@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const { execFileSync } = require('node:child_process');
 
 function createFixture(parent) {
@@ -46,18 +47,24 @@ async function main() {
   fs.mkdirSync(path.join(userData, 'User'), { recursive: true });
   fs.writeFileSync(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'telemetry.telemetryLevel': 'off', 'update.mode': 'none',
+    'chat.disableAIFeatures': true,
     'extensions.autoUpdate': false, 'extensions.autoCheckUpdates': false,
     'forgelens.model': '', 'forgelens.fallbackModel': '', 'forgelens.contextScout': false,
   }));
+  const socket = net.createServer();
+  await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
+  const port = socket.address().port;
+  await new Promise(resolve => socket.close(resolve));
   await runTests({
     version: process.env.EDITOR_BUILD || 'stable',
     cachePath: path.join(storage, 'editor-cache'),
     extensionDevelopmentPath: extension,
     extensionTestsPath: path.join(__dirname, 'desktop-preview.cjs'),
-    extensionTestsEnv: { FORGELENS_PREVIEW_FIXTURE: folder },
+    extensionTestsEnv: { FORGELENS_PREVIEW_FIXTURE: folder, FORGELENS_PICKER_PORT: String(port) },
     // Trust is disabled only in this disposable synthetic workspace/profile.
     launchArgs: [folder, '--disable-extensions', '--disable-gpu', '--skip-welcome', '--skip-release-notes',
-      '--disable-workspace-trust', '--user-data-dir', userData, '--extensions-dir', path.join(storage, 'extensions')],
+      '--disable-workspace-trust', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${port}`,
+      '--user-data-dir', userData, '--extensions-dir', path.join(storage, 'extensions')],
   });
 }
 

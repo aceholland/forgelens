@@ -45,7 +45,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run compile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm install --prefix "$env:RUNNER_TEMP/forge-preview-harness" --cache "$cache" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@3.1.0'
+          npm install --prefix "$env:RUNNER_TEMP/forge-preview-harness" --cache "$cache" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@3.1.0' 'playwright-core@1.58.2'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Activate 0.2.0 and preview a disposable Git workspace without a provider
         shell: bash

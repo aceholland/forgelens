@@ -22,9 +22,7 @@ async function bounded(promise, label = 'Context preview', milliseconds = 20000)
 }
 
 /** Drive the actual workbench QuickPick; never replace showQuickPick or tasks. */
-async function verifyCommand(vscode, folder, label, nextCount, expectedExitCode) {
-  const commands = await vscode.commands.getCommands(true);
-  for (const id of ['workbench.action.acceptSelectedQuickOpenItem', 'workbench.action.quickOpenSelectNext']) assert.ok(commands.includes(id), `Native QuickPick driver unavailable: ${id}`);
+async function verifyCommand(vscode, page, folder, label, expectedExitCode) {
   let listener;
   const completion = new Promise(resolve => {
     listener = vscode.tasks.onDidEndTaskProcess(event => {
@@ -37,11 +35,8 @@ async function verifyCommand(vscode, folder, label, nextCount, expectedExitCode)
   });
   try {
     const command = vscode.commands.executeCommand('forgelens.verify');
-    // The check list is populated asynchronously after the saved-file guard.
-    // Use the real built-in navigation/accept commands once it is displayed.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    for (let index = 0; index < nextCount; index++) await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext');
-    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+    // Wait for the visible workbench picker and click the specific command.
+    await page.locator('.quick-input-widget:visible').getByText(label, { exact: true }).click({ timeout: 15000 });
     await bounded(command, 'Verification picker selection', 30000);
     const result = await bounded(completion, 'Actual verification task process', 30000);
     assert.equal(result.name, label, 'Native chooser selected a different check');
@@ -104,16 +99,20 @@ exports.run = async () => {
     assert.ok(!vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file'
       && vscode.workspace.getWorkspaceFolder(document.uri) === vscode.workspace.workspaceFolders[0]));
     assert.equal(requests, 0, 'Local preview must not contact the TrueForge/model endpoint');
+    const { chromium } = require(path.join(process.env.RUNNER_TEMP, 'forge-preview-harness/node_modules/playwright-core'));
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${process.env.FORGELENS_PICKER_PORT}`);
+    const page = browser.contexts().flatMap(context => context.pages()).find(candidate => /workbench/i.test(candidate.url()));
+    assert.ok(page, 'Desktop renderer must be available for the native verification picker');
     const checks = [];
-    checks.push(await verifyCommand(vscode, folder, 'Git status', 0, 0));
-    checks.push(await verifyCommand(vscode, folder, 'Git diff check', 1, 0));
+    checks.push(await verifyCommand(vscode, page, folder, 'Git status', 0));
+    checks.push(await verifyCommand(vscode, page, folder, 'Git diff check', 0));
     // This file is tracked in the fixture, even though *.tmp is ignored for
     // untracked discovery. Git diff --check must observe its on-disk change.
     const target = path.join(folder, 'src', 'tracked.tmp');
     const original = fs.readFileSync(target);
     try {
       fs.appendFileSync(target, '// intentional hosted QA whitespace failure   \n');
-      checks.push(await verifyCommand(vscode, folder, 'Git diff check', 1, 2));
+      checks.push(await verifyCommand(vscode, page, folder, 'Git diff check', 2));
     } finally { fs.writeFileSync(target, original); }
     assert.deepEqual(snapshot(folder), before, 'Native verification fixture was not restored byte for byte');
     assert.equal(requests, 0, 'Native saved-file checks must not contact the model endpoint');
@@ -121,7 +120,7 @@ exports.run = async () => {
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
       version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: 8,
       selectedPaths, ignoredExplicitMentionsExcluded: true, fixtureUnchanged: true, trueforgeRequests: requests,
-      verification: { nativeQuickPick: true, driver: 'Built-in QuickPick navigation and accept commands', actualTaskProcessEvents: checks, fixtureRestored: true },
+      verification: { nativeQuickPick: true, driver: 'Clicked the visible native picker item', actualTaskProcessEvents: checks, fixtureRestored: true },
     }));
   } finally {
     trap.closeAllConnections();
