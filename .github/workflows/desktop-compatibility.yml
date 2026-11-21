@@ -37,7 +37,7 @@ jobs:
             throw 'Release VSIX checksum mismatch'
           }
           Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'forge-release')
-          npm install --prefix "$env:RUNNER_TEMP/forge-harness" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@2.5.2'
+          npm install --prefix "$env:RUNNER_TEMP/forge-harness" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@3.1.0'
       - name: Launch a real editor and open the agent panel
         shell: bash
         run: |
