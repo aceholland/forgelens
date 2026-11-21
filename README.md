@@ -2,11 +2,11 @@
 
 ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local repository. Select a function to request a focused edit, or ask the agent panel for a change that spans source code, tests and documentation. TrueForge runs the agent. You choose which hunks to apply and when to save them.
 
-[Install the v0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/forgelens-0.2.0.vsix) · [Watch the Round 1 demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the Round 1 write-up](docs/technical-writeup.pdf) · [Download the recorded v0.1.13 build](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
+[Install the v0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/forgelens-0.2.0.vsix) · [Watch the narrated 0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/ForgeLens-0.2.0-preview.mp4) · [Watch the original Round 1 demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the Round 1 write-up](docs/technical-writeup.pdf) · [Download the recorded v0.1.13 build](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
 
 ### What's new in the 22 November preview
 
-This build follows the Round 1 recording. To try the new workflow, open a trusted local folder in **desktop VS Code 1.101 or newer** and run **ForgeLens: Open Agent**.
+This preview was developed after the Round 1 recording. Its new video demonstrates local context preview; the original video remains the Windows A/B/C model-run evidence. To try the new workflow, open a trusted local folder in **desktop VS Code 1.101 or newer** and run **ForgeLens: Open Agent**.
 
 1. **Preview context before calling a model.** Type a task and choose **Preview context**. The panel shows each selected file, line range, selection reason and the excerpt budget used. Click a path to open those lines. This preview runs locally, including when no model is configured.
 2. **Choose what the agent can see.** In Git repositories automatic discovery follows Git's standard ignore rules and includes tracked files. Add a root-level `.forgelensignore` to exclude files or folders even when tracked or explicitly requested. Use one literal workspace-relative path per line, such as `fixtures/private/`. Blank lines and `#` comments are accepted. Glob patterns and negation produce a configuration error.
@@ -14,7 +14,7 @@ This build follows the Round 1 recording. To try the new workflow, open a truste
 4. **Verify saved changes in a real terminal.** Choose **Verify saved changes** for Git status, Git diff checks, or Flask CLI tests when `tests/test_cli.py` is present. The panel reports elapsed time and exit status. The VS Code task terminal shows the command and its actual output. Set `forgelens.pythonPath` in User Settings to use a particular Python environment. Save edits first.
 5. **Stop from the keyboard.** Press **Escape** in the agent panel during a run. The output reports the local time to block editing and discard proposals. TrueForge cancellation runs separately.
 
-For multi-file tasks, you can also enable `forgelens.contextScout` in Settings. The scout uses a separate, read-only TrueForge session to retrieve, read and search context. It passes bounded notes to the editing session, which must discover its own files and obtain edit approvals. The scout is off by default. Enabling it uses additional provider quota.
+For multi-file tasks, you can also enable `forgelens.contextScout` in Settings. This starts a **separate read-only TrueForge session**. Its endpoint permits discovery, reading and search; it cannot stage edits or run commands. The session is limited to eight iterations and sixty seconds, with at most 4,000 characters of notes. It closes before the editing session starts. The editing agent must still discover and verify files and obtain edit approvals. The scout is off by default and uses additional provider quota when enabled.
 
 ## Try it in VS Code
 
@@ -46,16 +46,26 @@ HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0
 ## How a request reaches the editor
 
 ```mermaid
-flowchart LR
-    User["Developer in VS Code"] -->|Selection or agent request| Editor["ForgeLens extension"]
-    Editor -->|Create session and send turn| Forge["Local TrueForge"]
-    Forge <-->|Inference| Model["Configured model"]
-    Forge -->|Discover and call tools| Tools["Authenticated local MCP tools"]
-    Tools -->|Read, search and stage proposals| Workspace["Local workspace and review queue"]
-    Forge -->|Stream events and request approval| Editor
+flowchart TD
+    User["Task in VS Code"] --> Preview["Preview context: local, no model call"]
+    Preview --> Retrieval["Local retrieval: exclusions, ranking and budget"]
+    Retrieval --> Evidence["Selected paths, lines and reasons"]
+    User --> Run["Run agent"]
+    Run -->|Optional| Scout["Separate read-only TrueForge scout"]
+    Scout <-->|Discovery and reads only| ReadTools["Isolated read-only MCP endpoint"]
+    Scout --> Notes["Close scout; pass bounded untrusted notes"]
+    Run -->|Default| Parent["TrueForge editing session"]
+    Notes --> Parent
+    Parent <-->|Inference| Model["Configured model"]
+    Parent <-->|Discovery and approved proposals| Tools["Editing MCP endpoint"]
+    Tools --> Retrieval
+    Tools --> Queue["Staged hunks for review"]
+    Parent --> Events["Stream progress to the editor"]
 ```
 
 TrueForge decides which tools to call. ForgeLens ranks paths and symbols, selects short excerpts, and displays the file, line range and reason for each choice. You can steer retrieval with `@file:src/example.py` or `@symbol:get_debug_flag`. The default excerpt budget is **24,000 characters**. Tool metadata, later reads and model output consume additional context.
+
+In a local preview of pinned Flask 3.1.3, the original Task B request supplied **no file paths**. Retrieval selected `src/flask/cli.py` (lines 496–692), `tests/test_cli.py` (lines 292–552) and `docs/cli.rst` (lines 166–470), using **23,960 of 24,000 excerpt characters**. This was local retrieval, with no provider call or edit; it is separate from the recorded agent run below.
 
 The extension uses the official TrueForge SDK. At session creation it fills in the selected model and temporary MCP connector, then sends the agent specification to TrueForge. Tools load on demand by default. Set `forgelens.preloadTools` for a model that needs their schemas up front. [Versioned agent definition](agent/forgelens.json)
 
@@ -67,13 +77,17 @@ flowchart TD
     Stage -->|No| Drop["Discard proposal"]
     Stage -->|Yes| Review{"Review each hunk"}
     Review -->|Reject| Skip["Skip hunk"]
-    Review -->|Accept| Apply["Apply accepted hunks"]
-    Apply --> Buffer["Unsaved editor buffer"]
+    Review -->|Accept| Accepted["Accepted hunks"]
+    Accepted -->|Export accepted patch| Patch["Git patch at a user-chosen path"]
+    Accepted -->|Confirm Apply| Buffer["Unsaved editor buffer"]
     Buffer -->|Save| Disk["File on disk"]
     Buffer -->|Guarded Undo| Restore["Restore prior text"]
+    Disk --> Verify["Verify saved changes: choose a check"]
+    Verify --> Terminal["Actual process in VS Code task terminal"]
+    Terminal --> Result["Command output, exit status and elapsed time"]
 ```
 
-ForgeLens checks that the expected text still matches before it applies or undoes a change. It preserves line endings and keeps inline edits within the selected scope. **Stop** cancels the active run and discards pending proposals. To reverse an applied edit, use **ForgeLens: Undo Last Accepted Change**, then save the restored text. Validation commands require a separate approval and read saved files.
+ForgeLens checks that the expected text still matches before it applies or undoes a change. It preserves line endings and keeps inline edits within the selected scope. Exporting an accepted patch does not apply it to the source files. **Stop** cancels the active run and discards pending proposals. To reverse an applied edit, use **ForgeLens: Undo Last Accepted Change**, then save the restored text. Agent-requested commands require separate approval. **Verify saved changes** runs the check you choose against saved files in the task terminal.
 
 ## The three Flask tasks
 
@@ -96,22 +110,26 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 | **Workspace protections** | The authenticated loopback bridge filters protected paths, symlinks, binary and oversized files. It limits requests to 2 MiB and 512 input elements. These checks cannot identify every secret embedded in ordinary source. |
 | **Command review** | The agent can request approved validation commands, including pytest, Git status or diff, and Flask help. Workspace code can run during a test, so use a trusted folder. |
 | **Optional diagnostics** | The Windows rehearsal can parse a proposed Python edit before staging. The optional Groq gateway passed offline forwarding, retry and streaming checks. Live Groq inference remains unverified. |
+| **Optional read-only scout** | A real local TrueForge 0.185.1 runtime and its SDK completed scout and parent discovery against a deterministic loopback provider fixture. The scout endpoint closed before the parent; no file changed and no approval or mutation callback ran. This verifies integration, not a real-model Task B or a recorded UI workflow. |
 
 ForgeLens edits existing files in the first local workspace folder. File creation and deletion are outside the current feature set. Model quality and provider quotas affect whether a request finishes.
 
 ## Which VS Code setups were checked?
 
-Use **current desktop VS Code with a local folder** to reproduce the demo. The 20 November Windows recording follows a model request through TrueForge to a reviewed edit. On 22 November 2026 we also checked the published v0.1.13 package in five real VS Code extension hosts. Each loaded the extension, registered all five commands and opened the ForgeLens panel. [Five desktop test results](https://github.com/aceholland/forgelens/actions/runs/44943796900)
+Use **current desktop VS Code with a local folder**. The 0.2.0 preview passed **137 Windows suite tests**, TypeScript checking and compilation. [Four real desktop checks](https://github.com/aceholland/forgelens/actions/runs/44948081092) also activated the extension, registered all eight commands and opened the panel:
 
-| Editor and platform | What we verified |
-| --- | --- |
-| Windows desktop | Recorded Tasks A, B and C with local TrueForge. Separately installed the release VSIX and checked the panel on Stable 1.147.0 (x64). |
-| macOS and Linux desktop | The packaged extension opened its panel on Stable 1.147.0, on Apple silicon and Linux x64. Full model runs were recorded on Windows only. |
-| Linux Insiders | The panel and commands worked on 1.148.0-insider. |
-| Older VS Code | The v0.1.13 panel opened on Linux 1.96.0. That editor embeds Node 20. The v0.2.0 preview raises the minimum to 1.101 because the TrueForge SDK specifies Node 22 or newer. |
-| Browser, remote workspaces and forks | Browser-only editors such as `vscode.dev` cannot host this Node extension. Remote SSH, WSL, Dev Containers, Codespaces, Cursor and VSCodium have no verified full run. |
+| Platform | Actual VS Code | Extension-host Node | Verified workflow |
+| --- | --- | --- | --- |
+| Windows x64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
+| macOS arm64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
+| Linux x64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
+| Linux x64 | Minimum 1.101.0 | 22.15.1 | Local context preview and exclusions |
 
-The recorded v0.1.13 release checkpoint passed **112 extension tests** on Windows. A subsequent 0.1.x check included a Python diagnostic and passed **113 tests**. The final Flask Task B checkout separately passed **59 CLI tests** again on 22 November. The 0.2.0 preview adds desktop checks for opening the panel, previewing context without a provider, and respecting project exclusions. [Round 1 feature evidence](docs/FEATURES.txt) · [Preview desktop test workflow](.github/workflows/desktop-preview.yml)
+All four selected allowed and tracked fixture files, excluded ignored and protected paths even when explicitly mentioned, and left the fixture unchanged. A trap endpoint recorded **zero TrueForge/provider requests**. These checks verify provider-free context preview; they do not establish a full model-driven edit on each platform.
+
+The original Windows v0.1.13 recording follows real model requests through the A/B/C workflow. That release passed **112 extension tests**; a later diagnostic check passed **113**. Its reviewed Flask Task B checkout also passed **59 CLI tests** again on 22 November. Separate [v0.1.13 desktop launch checks](https://github.com/aceholland/forgelens/actions/runs/44943796900) opened the panel on Windows, macOS, Linux, Linux Insiders and Linux 1.96.0. The older 1.96 editor embeds Node 20; the preview requires **VS Code 1.101+** because the TrueForge SDK specifies Node 22 or newer.
+
+Browser-only editors such as `vscode.dev` cannot host this Node extension. Remote SSH, WSL, Dev Containers, Codespaces, Cursor and VSCodium have no verified full run. [Round 1 feature evidence](docs/FEATURES.txt) · [Preview desktop test workflow](.github/workflows/desktop-preview.yml)
 
 ## Build from a clean clone
 

@@ -95,8 +95,11 @@ exports.run = async () => {
     assert.ok(excluded, 'Excluded-only preview must return an explicit empty selection');
     assert.deepEqual(excluded.items, [], 'An explicit mention must not bypass ignored/protected paths');
     assert.equal(excluded.usedChars, 0);
-    const panelOpened = vscode.window.tabGroups.all.some(group => group.tabs.some(tab => tab.label === 'ForgeLens' && tab.input instanceof vscode.TabInputWebview));
-    assert.ok(panelOpened, 'Preview must open the ForgeLens panel');
+    const panelIsOpen = () => vscode.window.tabGroups.all.some(group =>
+      group.tabs.some(tab => tab.label === 'ForgeLens' && tab.input instanceof vscode.TabInputWebview));
+    const tabDeadline = Date.now() + 5000;
+    while (!panelIsOpen() && Date.now() < tabDeadline) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.ok(panelIsOpen(), 'Preview must open the ForgeLens panel');
     assert.deepEqual(snapshot(folder), before, 'Context preview must not change any fixture file, including ignored files');
     assert.ok(!vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file'
       && vscode.workspace.getWorkspaceFolder(document.uri) === vscode.workspace.workspaceFolders[0]));
