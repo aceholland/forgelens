@@ -89,7 +89,7 @@ ForgeLens edits existing files in the first local workspace folder. File creatio
 
 ## Which VS Code setups were checked?
 
-Use **current desktop VS Code with a local folder** to reproduce the demo. The submitted Windows run exercised the full path from a model request through TrueForge to a reviewed edit. On 22 November 2026 we also checked the published v0.1.13 package in five real VS Code extension hosts. Each loaded the extension, registered all five commands and opened the ForgeLens panel. [Five desktop test results](https://github.com/aceholland/forgelens/actions/runs/44943796900)
+Use **current desktop VS Code with a local folder** to reproduce the demo. The 20 November Windows recording follows a model request through TrueForge to a reviewed edit. On 22 November 2026 we also checked the published v0.1.13 package in five real VS Code extension hosts. Each loaded the extension, registered all five commands and opened the ForgeLens panel. [Five desktop test results](https://github.com/aceholland/forgelens/actions/runs/44943796900)
 
 | Editor and platform | What we verified |
 | --- | --- |
