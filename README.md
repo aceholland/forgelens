@@ -4,9 +4,19 @@ ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local re
 
 [Watch the narrated demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the three-page write-up](docs/technical-writeup.pdf) · [Download the v0.1.13 extension](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
 
-## Try it in VS Code
+### Try the 22 November preview
 
-**1. Install the extension.** Download the VSIX above. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+ForgeLens 0.2.0 adds a local context preview. You can see which files an agent would receive, why they were selected and which lines are included before using any model quota. Open a path to inspect its excerpt, or exclude a private directory with `.forgelensignore`.
+
+The preview also lets you decide hunks in any order, export the accepted changes as a Git patch, and run Git or Flask checks in the VS Code terminal. An optional read-only TrueForge scout can gather context before a multi-file edit. The recorded Round 1 demo above uses v0.1.13.
+
+All 137 extension tests passed on Windows. In four real desktop editor configurations, the context preview made zero model requests. Each editor ran the Git checks successfully and reported the expected failure for a deliberately introduced whitespace error. [Windows, macOS and Linux test results](https://github.com/aceholland/forgelens/actions/runs/44949168156)
+
+[Install v0.2.0](https://github.com/aceholland/forgelens/releases/download/v0.2.0/forgelens-0.2.0.vsix) · [Watch the narrated preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/ForgeLens-0.2.0-preview.mp4) · [Preview source, setup and diagrams](https://github.com/aceholland/forgelens/tree/v0.2.0#readme) · [Download the plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/ForgeLens-0.2.0-overview.txt)
+
+## Reproduce the Round 1 build in VS Code
+
+**1. Install v0.1.13.** Download the recorded extension at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
