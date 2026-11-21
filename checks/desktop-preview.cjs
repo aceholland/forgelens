@@ -15,10 +15,44 @@ function snapshot(folder, relative = '') {
   }
   return result;
 }
-async function bounded(promise) {
+async function bounded(promise, label = 'Context preview', milliseconds = 20000) {
   let timer;
-  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Context preview exceeded 20 seconds')), 20000); })]); }
+  try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds); })]); }
   finally { clearTimeout(timer); }
+}
+
+/** Drive the actual workbench QuickPick; never replace showQuickPick or tasks. */
+async function verifyCommand(vscode, folder, label, nextCount, expectedExitCode) {
+  const commands = await vscode.commands.getCommands(true);
+  for (const id of ['workbench.action.acceptSelectedQuickOpenItem', 'workbench.action.quickOpenSelectNext']) assert.ok(commands.includes(id), `Native QuickPick driver unavailable: ${id}`);
+  let listener;
+  const completion = new Promise(resolve => {
+    listener = vscode.tasks.onDidEndTaskProcess(event => {
+      const task = event.execution.task;
+      if (task.definition.type !== 'forgelens-verify') return;
+      const execution = task.execution;
+      resolve({ name: task.name, exitCode: event.exitCode, processExecution: execution instanceof vscode.ProcessExecution,
+        executable: execution?.process, args: execution?.args, cwd: execution?.options?.cwd });
+    });
+  });
+  try {
+    const command = vscode.commands.executeCommand('forgelens.verify');
+    // The check list is populated asynchronously after the saved-file guard.
+    // Use the real built-in navigation/accept commands once it is displayed.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    for (let index = 0; index < nextCount; index++) await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext');
+    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem');
+    await bounded(command, 'Verification picker selection', 30000);
+    const result = await bounded(completion, 'Actual verification task process', 30000);
+    assert.equal(result.name, label, 'Native chooser selected a different check');
+    assert.equal(result.processExecution, true, 'Verification must start a real ProcessExecution');
+    assert.equal(result.exitCode, expectedExitCode, 'Observed task-process exit differs from the expected fixture result');
+    assert.equal(path.relative(fs.realpathSync(result.cwd), fs.realpathSync(folder)), '');
+    assert.equal(path.basename(result.executable).replace(/\.exe$/i, ''), 'git');
+    assert.deepEqual(result.args, label === 'Git status' ? ['status', '--short'] : ['diff', '--check']);
+    console.log('FORGELENS_NATIVE_VERIFICATION_PROCESS ' + JSON.stringify(result));
+    return result;
+  } finally { listener?.dispose(); }
 }
 
 exports.run = async () => {
@@ -67,10 +101,24 @@ exports.run = async () => {
     assert.ok(!vscode.workspace.textDocuments.some(document => document.isDirty && document.uri.scheme === 'file'
       && vscode.workspace.getWorkspaceFolder(document.uri) === vscode.workspace.workspaceFolders[0]));
     assert.equal(requests, 0, 'Local preview must not contact the TrueForge/model endpoint');
+    const checks = [];
+    checks.push(await verifyCommand(vscode, folder, 'Git status', 0, 0));
+    checks.push(await verifyCommand(vscode, folder, 'Git diff check', 1, 0));
+    // This file is tracked in the fixture, even though *.tmp is ignored for
+    // untracked discovery. Git diff --check must observe its on-disk change.
+    const target = path.join(folder, 'src', 'tracked.tmp');
+    const original = fs.readFileSync(target);
+    try {
+      fs.appendFileSync(target, '// intentional hosted QA whitespace failure   \n');
+      checks.push(await verifyCommand(vscode, folder, 'Git diff check', 1, 2));
+    } finally { fs.writeFileSync(target, original); }
+    assert.deepEqual(snapshot(folder), before, 'Native verification fixture was not restored byte for byte');
+    assert.equal(requests, 0, 'Native saved-file checks must not contact the model endpoint');
     console.log('FORGELENS_PREVIEW_DESKTOP_PASS ' + JSON.stringify({
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
       version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: 8,
       selectedPaths, ignoredExplicitMentionsExcluded: true, fixtureUnchanged: true, trueforgeRequests: requests,
+      verification: { nativeQuickPick: true, driver: 'Built-in QuickPick navigation and accept commands', actualTaskProcessEvents: checks, fixtureRestored: true },
     }));
   } finally {
     trap.closeAllConnections();
