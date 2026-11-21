@@ -1,37 +1,17 @@
 # ForgeLens
 
-A from-scratch VS Code extension for the TrueFoundry Forge-a-thon. TrueForge owns the agent loop; this extension handles context and safe editor review. **The reviewed Windows editor checks, final video and public PDF are complete. Portal submission remains pending.** See [verification status](docs/STATUS.md).
+ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local repository. Select a function to request a focused edit, or ask the agent panel for a change that spans source code, tests and documentation. TrueForge runs the agent. You choose which hunks to apply and when to save them.
 
-[Watch the narrated editor demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view?usp=drivesdk) · [Revised technical write-up PDF](https://drive.google.com/file/d/1De3b6FhiND-uefLelL5tyKMtoYWHgNnX/view?usp=drivesdk) · [Installable VSIX](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix) · [Source ZIP](https://github.com/aceholland/forgelens/releases/download/v0.1.13/ForgeLens-0.1.13-source.zip)
+[Watch the narrated demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the three-page write-up](docs/technical-writeup.pdf) · [Download the v0.1.13 extension](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
 
-Presentation update, 20 November 2026: use the Drive video and PDF links above for the current narrated demo and revised write-up. The [revised PDF is also in this repository](docs/technical-writeup.pdf). The v0.1.13 release preserves its originally published PDF, source archive, VSIX and checksums; its runtime bundle remains unchanged.
+## Try it in VS Code
 
-## Windows checkpoint: 0.1.13
+**1. Install the extension.** Download the VSIX above. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
-Fresh 0.1.13 installation, 112 Windows tests, TypeScript checking, extension compilation and VSIX packaging passed. Updated dependencies report zero known vulnerabilities in the recorded npm audit. Authenticated MCP requests are limited to 2 MiB and 512 input elements before schema expansion. Exact model edits preserve LF/CRLF line endings; agent tools require exact replacements. Discovery retains the original task's source/test/documentation requirements, and focused recovery reads remain available after planning or rejected edits. Streamed chunks remain readable in the panel and OutputChannel.
+**2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
-Task A produced two reviewed hunks in the real Windows editor; saved checks verified `off`/`n` variants, and guarded Undo followed by Save restored the pinned baseline. The exact Task B retake discovered implementation, test and documentation files without filenames in the prompt, using genuine deferred tool discovery. After review, apply and save, the new test needed an explicit built-in CLI group and the docs needed reference/example wording corrections. That initial reviewed result passed 59 CLI tests in 1.61 seconds, help and all four masking checks. The original candidate's failed test is retained in the evidence; this was an iterative review workflow.
+**Windows PowerShell**
 
-A separate genuine 493-byte model follow-up then added case-insensitive masking, lowercase/mixedcase test coverage and output-specific configuration documentation. Its three files were reviewed, applied and saved through the native editor; the existing CLI documentation brings the final Flask diff to **four files**. The actual saved result passed **59 CLI tests in 3.28 seconds**, help, valid JSON and all 12 uppercase/lowercase/mixedcase synthetic masking checks. All 235 tracked hashes stayed unchanged during verification.
-
-Task C visibly switched from an unreachable primary to the configured fallback and staged two scoped hunks. During review, the user rejected one hunk and accepted the other into an unsaved buffer; Stop/discard, guarded Undo and Save All restored the pre-C state. The final disk check was clean, with all 235 tracked hashes unchanged. A separate active cancellation reached server status `cancelled` over a 5.298-second session lifetime and preserved all 235 tracked hashes, including existing B edits. See the [feature/evidence register](docs/FEATURES.txt) and current status. The public video and technical PDF are linked above; portal submission remains pending.
-
-## Requirements
-- Node.js 22.14 or newer, npm, VS Code 1.96 or newer.
-- A local TrueForge instance and an authorized model configured there. No model key is stored by this extension.
-- Local trusted workspace. The first version proposes edits to existing files only.
-
-## Clean-clone setup
-```sh
-git clone https://github.com/aceholland/forgelens.git
-cd forgelens
-npm ci
-npm run check
-npm test
-npm run compile
-HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' MODEL_HTTP_MAX_RETRIES=5 npx @truefoundry/trueforge@0.185.1 --port 8790
-```
-On Windows PowerShell use:
 ```powershell
 $env:HOST = '127.0.0.1'
 $env:NETWORK_POLICY_ENABLED = 'true'
@@ -40,96 +20,109 @@ $env:MODEL_HTTP_MAX_RETRIES = '5'
 npx.cmd @truefoundry/trueforge@0.185.1 --port 8790
 ```
 
-Rehearsal evidence uses TrueForge 0.185.1. The explicit loopback host exception lets this local server call the authenticated editor MCP bridge; the network guard remains enabled. Preserve any additional deliberate allow/block entries in an existing setup. Five native model-HTTP retries use TrueForge's bounded backoff for free-tier 429/503 responses; extension turn requests are not blindly replayed.
+**macOS or Linux shell**
 
-Open http://127.0.0.1:8790, configure a catalog provider or OpenAI-compatible endpoint in Settings → Models, and note its model ID. Use your own authorized credentials; free/local models are supported by the harness. Keep TrueForge on loopback because standalone mode has no authentication.
-
-Open this project in VS Code and press F5 using `Run ForgeLens`. In the extension development window open your target repository. Set `forgelens.model` to the TrueForge model ID. Optionally set `forgelens.fallbackModel` to a second configured model. [The model example](agent/model.example.json) shows a cloud primary, a loopback Ollama fallback, and their VS Code settings. Fill real keys only in TrueForge. To switch models, set `forgelens.model` to the new configured TrueForge model ID; set or clear `forgelens.fallbackModel` separately.
-
-Alternatively:
 ```sh
-npm run package
-code --install-extension forgelens-0.1.13.vsix
-```
-Then run **ForgeLens: Open Agent** from the command palette. Select text and press Ctrl+Alt+I (Cmd+Alt+I on Mac) for inline editing.
-
-## Groq GPT-OSS in a local TrueForge setup
-
-Run `node scripts/groq-demo-gateway.mjs` in a separate terminal. In TrueForge, configure an OpenAI-compatible provider at `http://127.0.0.1:11435/openai/v1` with model ID `openai/gpt-oss-120b` and your Groq key. The gateway listens only on loopback, forwards to Groq over HTTPS, and retries a rejected tool generation once. Run `node scripts/groq-demo-gateway.mjs --self-check` to exercise its retry and forwarding behavior with a local stub.
-
-This optional helper is separate from the recorded extension bundle. Its route, forwarding, streaming and retry behavior passed offline stub checks; live-provider compatibility remains unverified. Its current request deadline does not interrupt a slow incoming body upload.
-
-If your Windows setup requires the system certificate store, use `node --use-system-ca scripts/groq-demo-gateway.mjs` on a Node.js version that supports that flag.
-
-## Agent definition
-`agent/forgelens.json` is the versioned agent manifest template. At runtime the extension supplies the selected model and an authenticated ephemeral loopback MCP connector name, then sends the inline manifest to `sessions.create({agent:{spec}})`. This loads the agent through the official SDK; no separate import is required. The shared runtime instructions in `src/instructions.ts` match this template; a regression test checks equality.
-
-## Architecture and safety
-- Official `@truefoundry/trueforge-sdk@0.185.0` creates sessions and streams turns. No provider API requests originate from the extension.
-- Local authenticated Streamable HTTP MCP tools: `read_file`, `search_workspace`, `select_context`, `report_plan`, `propose_write` (legacy alias `propose_edit`), `run_command`.
-- Deferred tool loading (`preload:false`) keeps unused tools out of initial context. Show actual discovery calls in the session before claiming this judging criterion.
-- TrueForge approval prompts preview proposed edits. Allowing a proposal only stages it. Review each hunk, then explicitly apply accepted hunks through VS Code WorkspaceEdit. Changes enter the unsaved buffer, not disk; Save when ready. Reject leaves the original untouched. Guarded Undo Last restores an accepted edit only if it has not since changed.
-- The per-client HTTP transport allows up to 15 minutes between streamed data chunks, while a separate 5-minute total-run deadline (`forgelens.runTimeoutMinutes`, configurable) aborts the run. Neither setting retries an ambiguous interrupted turn or changes process-wide network/TLS settings.
-- Cancel aborts local work, requests server cancellation and discards pending proposals. No tools are available when inactive/cancelled.
-- Commands require separate user approval and a narrow allowlist; no arbitrary shell. Workspace imports/tests may execute code, so use trusted repos only. Run custom commands manually.
-- Retrieval uses deterministic lexical/path scoring, explicit `@file:path` / `@symbol:name` mentions and a content-character budget (default 24,000). Paths, line ranges and reasons appear in the panel. Automatic retrieval returns at most four snippets. Literal search includes up to three neighboring lines (two by default), with bounded output and exact line references. Snippets select high-relevance local line clusters rather than the first keyword occurrence, with explicit symbols acting as anchors. This is not an exact tokenizer budget. Metadata and prompt overhead are extra.
-- Secret filenames, binary/oversized files, symlinks and paths outside the workspace are excluded. These filters do not detect every secret embedded in ordinary source files: inspect repositories before providing them to a model.
-
-## Historical verification (0.1.6, 2026-11-18)
-Fresh supporting validation: **67/67 tests**, TypeScript check, compilation and VSIX packaging passed. Genuine TrueForge headless Task C returned an error with zero proposals and a clean pinned Flask checkout; cancellation returned `cancelled` in 22 ms with the checkout unchanged. These are not on-screen UI demonstrations.
-
-Bounded Task B runs on Qwen3 8B and Qwen3.5 4B did **not** complete. The latest 0.1.6/16K run stopped at approximately 16 minutes with nine tool calls and zero proposals. That checkpoint had no completed Task B result; the newer reviewed editor result is recorded above and in [current verification status](docs/STATUS.md).
-
-An earlier isolated source copy's offline `npm ci` failed because `yazl@2.5.1` was absent from the local cache. Fresh online installs subsequently passed on 0.1.12 and 0.1.13. The current editor checks and outstanding publication work are recorded separately in the status page.
-
-## What I changed and why
-- **Ranked discovery:** One tool finds likely implementation, test and documentation files. Showing paths and reasons tells the reviewer what informed the edit.
-- **Bounded recovery:** Repeated unchanged reads return short locators. Individual tool responses are bounded, while targeted recovery reads remain available until the run deadline or TrueForge's 40-iteration limit.
-- **Timeout and fallback:** A per-model timer stops a stalled generation. TrueForge can start the configured fallback only when the first turn has stopped and no edit has been staged.
-- **Review before apply:** Proposals stay out of the working tree until the user applies accepted hunks and saves. Interrupted or empty runs report their outcome instead of claiming completion.
-
-## Discovery, recovery and optional model fallback
-The first agent step is `find_relevant_files`, which ranks up to five distinct files using keywords and matching code/documentation symbols. It returns line-ranged previews and reasons within the configured character budget. The agent can make focused reads, report its plan, and stage exact edits. Targeted reads remain available after planning or a rejected edit; there is no six-call hard gate. Fresh read/search responses use a soft allowance of at least 6,000 characters or the configured context budget, whichever is larger, with a 900-character recovery floor; discovery, metadata and prompt overhead are additional. This is not a cumulative token ceiling. Staging still requires approval and never writes disk. The editor shows live discovery separately from planned changes.
-
-Configure both model entries in **TrueForge**, not inside the extension. See [the single model example](agent/model.example.json) for the loopback Ollama endpoint and cloud-provider placeholders. Choose an authorized fast model in TrueForge and copy its actual ID into VS Code User Settings. The fallback is configured by its TrueForge model ID as well. Don't put credentials in VS Code or commit them. The model deadline defaults to 120 seconds per model generation (`forgelens.modelCallTimeoutSeconds`); the separate total-run deadline defaults to five minutes. On a model timeout, automatic fallback requires confirmation that the prior TrueForge turn stopped and no edits were staged. An ambiguous network interruption does not trigger replay.
-
-## Live Task B rehearsal from a Windows terminal
-
-Run on the same machine as TrueForge and the allowed pinned Flask checkout. Select an authorized cloud provider already configured in TrueForge. Using a cloud model sends retrieved workspace code to that provider and may incur usage charges. The headless harness sends the official Task B text as exactly one user message. It stages validated proposals for evidence and never applies them to the Flask workspace.
-
-```powershell
-$env:TRUEFORGE_URL = 'http://127.0.0.1:8790'
-$env:TRUEFORGE_MODEL = 'COPY_AUTHORIZED_CLOUD_MODEL_ID_FROM_TRUEFORGE'
-$env:TRUEFORGE_FALLBACK_MODEL = 'COPY_OLLAMA_MODEL_ID_FROM_TRUEFORGE'
-$env:FLASK_ROOT = 'C:\path\to\clean\flask-3.1.3'
-$env:EVIDENCE_DIR = Join-Path $HOME 'forgelens-task-b-evidence'
-$env:CONTEXT_BUDGET = '24000'
-$env:DYNAMIC_SUB_AGENTS = 'false'
-$env:MODEL_CALL_TIMEOUT_MS = '120000'
-$env:RUN_TIMEOUT_MS = '300000'
-node --import tsx test-local-b.ts
+HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]' \
+  MODEL_HTTP_MAX_RETRIES=5 npx @truefoundry/trueforge@0.185.1 --port 8790
 ```
 
-Verify the target commit is `22d924701a6ae2e4cd01e9a15bbaf3946094af65`; inspect and apply only genuine proposals in a disposable checkout before running tests. A fallback result is a local-model result, not a cloud pass.
+**3. Choose a model.** Open [local TrueForge](http://127.0.0.1:8790), add your provider in **Settings → Models**, and copy its model ID. Set `forgelens.model` to that ID in VS Code User Settings. Provider keys belong in TrueForge. If you have a second model, set `forgelens.fallbackModel` to its ID. An existing TrueForge server listening on IPv6 loopback needs `forgelens.baseUrl` set to `http://[::1]:8790`. [Example model configuration](agent/model.example.json)
 
-Set `FORGELENS_PYTHON` to a Python executable to enable a syntax check before `.py` proposals are staged. The check parses the proposed source as bytes without executing it, so Windows console encoding does not change Unicode source text.
+**4. Make a first edit.** Select a function and press **Ctrl+Alt+I** (**Cmd+Alt+I** on macOS), or run **ForgeLens: Edit Selection**. For a multi-file task, run **ForgeLens: Open Agent**, describe the outcome and choose **Run agent**. The panel shows the files it chose and streams progress. After the run, choose **Review hunks**. Apply the hunks you accept, save, then run your tests.
 
-The optional check runs again on the actual staged candidate before proposal or evidence state changes, covering edits whose approvals were batched against an earlier view. A regression preserves the prior valid overlay and evidence when a combined candidate is invalid. The updated source passed 113 offline tests and TypeScript checking; the recorded extension bundle remains unchanged.
+## How a request reaches the editor
 
-## Known limitations
-The 0.1.13 Windows editor checks now cover A acceptance/save/Undo, the reviewed four-file B result including its focused follow-up, C fallback/recovery, and active cancellation. B required human test and documentation corrections before its saved verification passed. No trust setting was changed. The final edited A/B/C video and technical PDF are publicly linked above. Portal submission remains pending; a completed competition submission is not claimed.
+```mermaid
+flowchart LR
+    User["Developer in VS Code"] -->|Selection or agent request| Editor["ForgeLens extension"]
+    Editor -->|Create session and send turn| Forge["Local TrueForge"]
+    Forge <-->|Inference| Model["Configured model"]
+    Forge -->|Discover and call tools| Tools["Authenticated local MCP tools"]
+    Tools -->|Read, search and stage proposals| Workspace["Local workspace and review queue"]
+    Forge -->|Stream events and request approval| Editor
+```
 
-0.1.4 reports empty provider output as failure; 0.1.5 handles supported operator questions; 0.1.6 bounds automatic retrieval to four windows and adds bounded neighboring search context. These repairs do not establish model task success. New file creation/deletion, ignore-file parsing and full token budgeting are not implemented. Unsaved accepted buffers must be saved before validation. Ephemeral connectors remain in TrueForge settings after runs. Fallback creates a separate session and is not guaranteed to reconstruct partial reasoning. Humans review/apply staged proposals only after a run ends.
+TrueForge decides which tools to call. ForgeLens ranks paths and symbols, selects short excerpts, and displays the file, line range and reason for each choice. You can steer retrieval with `@file:src/example.py` or `@symbol:get_debug_flag`. The default excerpt budget is **24,000 characters**. Tool metadata, later reads and model output consume additional context.
 
-## License and provenance
-From scratch, no upstream editor fork. MIT license. Ordinary dependencies retain their licenses. TrueForge API researched against official commit `18b571810ffd2fef29fd79e3731b8fb4295f92cf`. Built with OpenAI coding assistance, disclose this in the submission. The source does not publish the extension to a marketplace, make a paid call by itself, or submit the contest entry.
+The extension uses the official TrueForge SDK. At session creation it fills in the selected model and temporary MCP connector, then sends the agent specification to TrueForge. Tools load on demand by default. Set `forgelens.preloadTools` for a model that needs their schemas up front. [Versioned agent definition](agent/forgelens.json)
 
-## Local-model compatibility (recovery update)
+## What Accept, Apply and Save do
 
-Agent tools `propose_write` and its legacy alias `propose_edit` require an `edits` array of `{oldText,newText}`. Full-file `content` arguments are rejected. Exact edits must match once and may not overlap. They are expanded in memory and enter the same proposal preview, inline-scope check, per-hunk review, apply confirmation, and undo flow. They never write files by themselves.
+```mermaid
+flowchart TD
+    Request["Model proposes an exact edit"] --> Stage{"Allow staging?"}
+    Stage -->|No| Drop["Discard proposal"]
+    Stage -->|Yes| Review{"Review each hunk"}
+    Review -->|Reject| Skip["Skip hunk"]
+    Review -->|Accept| Apply["Apply accepted hunks"]
+    Apply --> Buffer["Unsaved editor buffer"]
+    Buffer -->|Save| Disk["File on disk"]
+    Buffer -->|Guarded Undo| Restore["Restore prior text"]
+```
 
-Set `forgelens.preloadTools` to `true` for small local models that fail deferred-call schemas. The default remains `false` (TrueForge deferred discovery). Both modes retain tool approval requirements. Configure the model only in TrueForge; the extension never calls Ollama or a model provider directly.
+ForgeLens checks that the expected text still matches before it applies or undoes a change. It preserves line endings and keeps inline edits within the selected scope. **Stop** cancels the active run and discards pending proposals. To reverse an applied edit, use **ForgeLens: Undo Last Accepted Change**, then save the restored text. Validation commands require a separate approval and read saved files.
 
-Local CPU inference may require raising TrueForge's documented model HTTP header/body timeouts. A local provider also requires appropriate loopback access under TrueForge's network policy; do not disable the policy or TLS validation. A hostname exception may allow access to other services on that host and requires informed approval.
+## The three Flask tasks
 
-Unit tests and model connectivity support the separate live editor evidence. See the [verification status](docs/STATUS.md) for measured results, limitations and the pending portal submission.
+The demo uses [Flask 3.1.3 at the required commit](https://github.com/pallets/flask/tree/22d924701a6ae2e4cd01e9a15bbaf3946094af65). The times below point to the evidence in the narrated recording.
+
+| Task | What happened | Where to look |
+| --- | --- | --- |
+| **A · Inline edit** | Two reviewed hunks changed how Flask interprets its debug flag. The saved function returned `False` for `off` and `n`, including uppercase variants. Undo and Save restored the baseline. | Diff **0:17** · result **0:36** · Undo **0:40** |
+| **B · Multi-file command** | The request named no files. The agent found the CLI, its tests and its documentation. Human review corrected the initial test and docs. A follow-up expanded case-insensitive masking. The final four-file change passed **59 CLI tests**, appeared in help and masked **12** test secrets while leaving an ordinary value visible. | Discovery **0:52** · diff **2:28** · final checks **3:07** · TrueForge session **3:15** |
+| **C · Model failure** | An unreachable primary triggered the configured fallback. We rejected one hunk and applied the other to an unsaved buffer, then used Undo and Save. Git was clean and all **235** tracked-file hashes matched the starting state. | Failure and fallback **3:36** · review **3:40** · clean workspace **3:55** |
+
+A separate cancellation at **2:39** preserved the earlier reviewed edits. The recording shows captured command output for verification. [Detailed run evidence](docs/STATUS.md) · [Feature and test register](docs/FEATURES.txt)
+
+## Additional features and limits
+
+| Feature | Behavior and verification |
+| --- | --- |
+| **Model fallback and deadlines** | A second configured model can take over after a confirmed failure with no staged edits. Task C shows the switch. Tests cover model timeouts, ambiguous interruptions and late events. |
+| **Focused retrieval and recovery** | Ranked source, test and documentation snippets guide multi-file work. Tests cover explicit mentions, repeat reads and recovery when an edit’s anchor fails. |
+| **Workspace protections** | The authenticated loopback bridge filters protected paths, symlinks, binary and oversized files. It limits requests to 2 MiB and 512 input elements. These checks cannot identify every secret embedded in ordinary source. |
+| **Command review** | The agent can request approved validation commands, including pytest, Git status or diff, and Flask help. Workspace code can run during a test, so use a trusted folder. |
+| **Optional diagnostics** | The Windows rehearsal can parse a proposed Python edit before staging. The optional Groq gateway passed offline forwarding, retry and streaming checks. Live Groq inference remains unverified. |
+
+ForgeLens edits existing files in the first local workspace folder. File creation, deletion and parsing of ignore files are outside the current feature set. Model quality and provider quotas affect whether a request finishes.
+
+## Which VS Code setups were checked?
+
+Use **current desktop VS Code with a local folder** to reproduce the demo. The submitted Windows run exercised the full path from a model request through TrueForge to a reviewed edit. On 22 November 2026 we also checked the published v0.1.13 package in five real VS Code extension hosts. Each loaded the extension, registered all five commands and opened the ForgeLens panel. [Five desktop test results](https://github.com/aceholland/forgelens/actions/runs/44943796900)
+
+| Editor and platform | What we verified |
+| --- | --- |
+| Windows desktop | Recorded Tasks A, B and C with local TrueForge. Separately installed the release VSIX and checked the panel on Stable 1.147.0 (x64). |
+| macOS and Linux desktop | The packaged extension opened its panel on Stable 1.147.0, on Apple silicon and Linux x64. Full model runs were recorded on Windows only. |
+| Linux Insiders | The panel and commands worked on 1.148.0-insider. |
+| Older VS Code | The panel opened on Linux 1.96.0, the minimum in the manifest. That editor embeds Node 20, while the bundled TrueForge SDK specifies Node 22 or newer. Model execution on 1.96 is unverified. |
+| Browser, remote workspaces and forks | Browser-only editors such as `vscode.dev` cannot host this Node extension. Remote SSH, WSL, Dev Containers, Codespaces, Cursor and VSCodium have no verified full run. |
+
+The release checkpoint passed **112 extension tests** on Windows. The current source, which includes an extra Python diagnostic check, passed **113 tests**, TypeScript checking and compilation. The final Flask Task B checkout separately passed **59 CLI tests** again on 22 November. [Feature-by-feature evidence](docs/FEATURES.txt)
+
+## Build from a clean clone
+
+```sh
+git clone https://github.com/aceholland/forgelens.git
+cd forgelens
+npm ci
+npm run check
+npm test
+npm run compile
+```
+
+Open the cloned folder in desktop VS Code, select **Run ForgeLens** in Run and Debug, and press **F5**. In the Extension Development Host window, open the target project and configure the model as above. To build your own installable VSIX, run `npm run package`. The source test suite includes the optional diagnostic checks. [Windows reproduction guide](WINDOWS_RUNBOOK.md) · [v0.1.13 release and downloads](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
+
+<details>
+<summary>Optional local model helpers</summary>
+
+For a loopback Ollama provider, start with the [model example](agent/model.example.json) and substitute an ID that exists in your TrueForge configuration. To try the optional Groq helper, run `node scripts/groq-demo-gateway.mjs --self-check` for its offline test. Start it without that flag to listen on `http://127.0.0.1:11435/openai/v1`. Point an OpenAI-compatible provider in TrueForge at that address with model ID `openai/gpt-oss-120b` and your own Groq key. A slow incoming upload can exceed the helper’s internal request timer.
+
+For the headless Flask rehearsal, follow the [Windows runbook](WINDOWS_RUNBOOK.md). Set `FORGELENS_PYTHON` to the Python executable if you want syntax validation of proposed Python changes. The rehearsal stages edits for inspection. The desktop recording shows the actual review and save workflow.
+
+</details>
+
+## License and starting point
+
+Team AceSentry built ForgeLens from scratch for the TrueFoundry Forge-a-thon. There is no upstream editor fork. The extension uses [TrueForge](https://github.com/truefoundry/trueforge) for its agent loop and the VS Code API for editor review. See the [MIT license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
