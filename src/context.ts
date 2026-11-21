@@ -7,6 +7,7 @@ export function isSafeContextPath(path: string): boolean {
   const parts = path.toLowerCase().split('/');
   if (parts.some(p => ['..', '.', '.git', '.pytest_cache', '__pycache__', '.mypy_cache', '.ruff_cache', '.ssh', '.aws', '.azure', '.config', 'node_modules', '.venv', 'venv', 'dist', 'build'].includes(p))) return false;
   const name = parts.at(-1)!.toLowerCase();
+  if (name === '.forgelensignore') return false;
   return !(/^(?:\.env(?:\..*)?|secrets?(?:[.-].*)?|credentials?(?:[.-].*)?|\.npmrc|\.netrc|\.pypirc|id_rsa|id_ed25519)$/.test(name)
     || /\.(?:pem|key|p12|pfx|keystore)$/.test(name));
 }

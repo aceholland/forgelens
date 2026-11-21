@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TrueForge } from '@truefoundry/trueforge-sdk';
+import { CreateSessionRequest } from '@truefoundry/trueforge-sdk/serialization';
 import { ForgeRunner, DEFAULT_MODEL_CALL_TIMEOUT_MS, type ForgeOptions } from '../src/client';
 
 async function* stream(events: unknown[]) { for (const event of events) yield event; }
@@ -28,6 +29,89 @@ const approvalEvents = [created,
   {id:'m1',type:'model.message',toolCalls:[{id:'c1',function:{arguments:JSON.stringify({mcp_server:'editor',tool_name:'propose_edit',input:{path:'a.ts',content:'new'}})},toolInfo:{type:'truefoundry-system',name:'call_tool'}}]},
   {id:'a1',type:'tool.approval_required',threadId:'th1',toolCalls:[{id:'c1',sourceEventId:'m1'}]},
   {id:'p1',type:'turn.update',state:{status:'paused'}}];
+
+test('optional separate scout has an SDK-valid read-only spec, bounded notes and unchanged parent turn',async()=>{
+ const f=fixture();let n=0,finished=0;const scoutEvents:unknown[]=[];
+ Object.assign(f.options,{contextScout:{mcpName:'read-only-scout'},onScoutFinished:async()=>{finished++;},onScoutEvent:(e:unknown)=>scoutEvents.push(e)});
+ const createSession=f.sessions.create;
+ f.sessions.create=async(...args:any[])=>{if(f.calls.some(c=>c.method==='create'))assert.equal(finished,1,'cleanup must finish before the parent session is created');return createSession(...args);};
+ f.sessions.createTurnStream=async(...args:any[])=>{f.calls.push({method:'stream',args});if(n++===0)return stream([created,{...answer,content:'scout report'}, {...done,state:{status:'done',output:{...answer,content:'evidence '.repeat(1000)}}}]) as any;assert.equal(finished,1);return stream([created,answer,done]) as any;};
+ const original='Discover the implementation, tests and docs without filenames.';
+ assert.equal((await new ForgeRunner(f.options).run(original)).status,'done');
+ const specs=f.calls.filter(c=>c.method==='create').map(c=>c.args[0]);assert.equal(specs.length,2);
+ for(const request of specs)await CreateSessionRequest.jsonOrThrow(request,{unrecognizedObjectKeys:'fail'});
+ const scout=specs[0].agent.spec,parent=specs[1].agent.spec;
+ assert.equal(scout.mcpServers[0].name,'read-only-scout');
+ assert.deepEqual(scout.mcpServers[0].enableTools,['find_relevant_files','select_context','read_file','search_workspace']);
+ assert.deepEqual(scout.mcpServers[0].requireApprovalForTools,[]);
+ for(const capability of ['dynamicSubAgents','sandbox','askUserQuestions','webSearch','generativeUi','memory'])assert.equal(scout.config[capability].enabled,false,capability);
+ assert.equal(scout.config.iterationLimit,8);
+ assert.equal(parent.mcpServers[0].name,'editor');assert.ok(parent.mcpServers[0].requireApprovalForTools.includes('propose_write'));
+ assert.equal(parent.messages.length,1);assert.match(parent.messages[0].content,/untrusted/i);assert.ok(parent.messages[0].content.length<4300);
+ for(const call of f.calls.filter(c=>c.method==='stream'))assert.deepEqual(call.args[1].input,[{type:'user.message',content:original}]);
+ assert.ok(scoutEvents.some((e:any)=>e.content==='scout report'));
+ assert.ok(!f.events.some((e:any)=>e.content==='scout report'));
+ assert.equal(finished,1);
+});
+
+test('scout never forwards approvals and its cleanup finishes before parent creation',async()=>{
+ const f=fixture();let n=0,approvals=0,cleaned=false;
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{await new Promise(r=>setImmediate(r));cleaned=true;}});
+ f.options.onApproval=async()=>{approvals++;return true;};
+ (f.sessions as any).getTurn=async()=>({data:{state:{status:'cancelled'}}});
+ f.sessions.createTurnStream=async(...args:any[])=>{f.calls.push({method:'stream',args});if(n++===0)return stream(approvalEvents) as any;assert.ok(cleaned);return stream([created,answer,done]) as any;};
+ assert.equal((await new ForgeRunner(f.options).run('task')).status,'done');
+ assert.equal(approvals,0);assert.equal(f.calls.filter(c=>c.method==='events').length,0);assert.ok(cleaned);
+});
+
+test('scout timeout confirms termination and cleans up before exact parent task resumes',async()=>{
+ const f=stalledModelFixture();let cleaned=0;delete f.options.fallbackModel;delete f.options.getStagedProposalCount;
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{cleaned++;}});
+ assert.equal((await new ForgeRunner(f.options).run('unchanged task')).status,'done');
+ assert.equal(cleaned,1);assert.equal(f.calls.filter(c=>c.method==='create').length,2);
+ const methods=f.calls.map(c=>c.method);assert.ok(methods.indexOf('getTurn')<methods.lastIndexOf('create'));
+});
+
+test('unconfirmed scout cancellation never overlaps a parent session',async()=>{
+ const f=stalledModelFixture();let cleaned=0;
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{cleaned++;}});
+ (f.sessions as any).getTurn=async()=>({data:{state:{status:'running'}}});
+ assert.equal((await new ForgeRunner(f.options).run('task')).status,'error');
+ assert.equal(f.calls.filter(c=>c.method==='create').length,1);assert.equal(cleaned,1);
+});
+
+test('scout has a sixty-second total deadline even without a model lifecycle event',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const f=fixture();let n=0,ready!:()=>void,cleaned=0;const reached=new Promise<void>(r=>ready=r);
+ f.options.runTimeoutMs=300000;f.options.modelCallTimeoutMs=200000;
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{cleaned++;},onScoutEvent:(e:any)=>{if(e.type==='turn.created')ready();}});
+ (f.sessions as any).getTurn=async(...args:any[])=>{f.calls.push({method:'getTurn',args});return {data:{state:{status:'cancelled'}}};};
+ f.sessions.createTurnStream=async(...args:any[])=>{f.calls.push({method:'stream',args});return n++===0?(async function*(){yield created;await new Promise(()=>{});})() as any:stream([created,answer,done]) as any;};
+ const task=new ForgeRunner(f.options).run('original task');await reached;t.mock.timers.tick(60001);
+ assert.equal((await task).status,'done');assert.equal(cleaned,1);
+ assert.equal(f.calls.filter(c=>c.method==='create').length,2);assert.ok(f.calls.some(c=>c.method==='getTurn'));
+});
+
+test('user cancellation during scout stays cancelled and cleans up without starting parent',async()=>{
+ const f=fixture();let ready!:()=>void,cleaned=0;const reached=new Promise<void>(r=>ready=r);
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{cleaned++;},onScoutEvent:(e:any)=>{if(e.type==='model.message')ready();}});
+ f.sessions.createTurnStream=async()=>(async function*(){yield created;yield {...answer,threadId:'main'};await new Promise(()=>{});})() as any;
+ const runner=new ForgeRunner(f.options);const task=runner.run('task');await reached;await runner.cancel();
+ assert.equal((await task).status,'cancelled');assert.equal(cleaned,1);assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+});
+
+test('terminal remote scout cancellation remains cancelled instead of starting parent',async()=>{
+ const f=fixture([created,{...done,state:{status:'cancelled'}}]);let cleaned=0;
+ Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{cleaned++;}});
+ assert.equal((await new ForgeRunner(f.options).run('task')).status,'cancelled');
+ assert.equal(cleaned,1);assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+});
+
+test('scout requires a separate connector and cleanup errors fail closed',async()=>{
+ for(const mcpName of ['','editor']){const f=fixture();Object.assign(f.options,{contextScout:{mcpName}});await assert.rejects(new ForgeRunner(f.options).run('task'),/separate.*connector/i);assert.equal(f.calls.length,0);}
+ const f=fixture();Object.assign(f.options,{contextScout:{mcpName:'scout'},onScoutFinished:async()=>{throw new Error('scout endpoint cleanup failed');}});
+ await assert.rejects(new ForgeRunner(f.options).run('task'),/cleanup failed/);assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+});
 
 test('streams real SDK-shaped events and passes only a TrueForge agent spec',async()=>{
  const f=fixture([created,{id:'m1',type:'model.message.delta',content:'hello'},done]);

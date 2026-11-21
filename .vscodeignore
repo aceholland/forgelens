@@ -1,6 +1,8 @@
 node_modules/**
 src/**
 test/**
+checks/**
+.github/**
 evidence/**
 .git/**
 .vscode/**

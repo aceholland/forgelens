@@ -2,7 +2,7 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.1.13",
+  "version": "0.2.0",
   "publisher": "forgelens-team",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.101.0"
   },
   "categories": [
     "Machine Learning",
@@ -22,6 +22,18 @@
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "forgelens.exportPatch",
+        "title": "ForgeLens: Export Accepted Patch"
+      },
+      {
+        "command": "forgelens.previewContext",
+        "title": "ForgeLens: Preview Task Context"
+      },
+      {
+        "command": "forgelens.verify",
+        "title": "ForgeLens: Verify Saved Changes"
+      },
       {
         "command": "forgelens.start",
         "title": "ForgeLens: Open Agent"
@@ -45,6 +57,11 @@
     ],
     "keybindings": [
       {
+        "command": "forgelens.cancel",
+        "key": "escape",
+        "when": "forgelens.running && activeWebviewPanelId == forgelens && !inQuickOpen"
+      },
+      {
         "command": "forgelens.inline",
         "key": "ctrl+alt+i",
         "mac": "cmd+alt+i",
@@ -54,6 +71,17 @@
     "configuration": {
       "title": "ForgeLens",
       "properties": {
+        "forgelens.contextScout": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run a separate read-only TrueForge session to gather context before a multi-file task. This uses the configured model for an additional session."
+        },
+        "forgelens.pythonPath": {
+          "type": "string",
+          "scope": "machine",
+          "default": "python",
+          "description": "Python executable used by Verify Saved Changes for the Flask CLI test suite."
+        },
         "forgelens.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8790",

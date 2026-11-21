@@ -7,6 +7,47 @@ import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {startMcp} from '../src/mcp';
 
+test('read-only scout bridge exposes only saved-source tools and rejects every mutation callback',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-readonly-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'code.py'),'saved target implementation\n');await writeFile(path.join(root,'.env'),'hidden secret');
+ let mutations=0;
+ const bridge=await startMcp({root,budget:4000,readOnly:true,active:()=>true,pending:()=> 'private staged overlay',propose:async()=>{mutations++;return 'bad';},command:async()=>{mutations++;return 'bad';},onPlan:()=>{mutations++;},context:()=>{}} as any);t.after(()=>bridge.close());
+ const client=new Client({name:'scout-readonly',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ assert.deepEqual((await client.listTools()).tools.map(t=>t.name).sort(),['find_relevant_files','read_file','search_workspace','select_context']);
+ const read=JSON.stringify(await client.callTool({name:'read_file',arguments:{path:'code.py'}}));assert.match(read,/saved target/);assert.doesNotMatch(read,/private staged overlay|STAGED/);
+ for(const name of ['propose_write','propose_edit','run_command','report_plan'])assert.equal((await client.callTool({name,arguments:{path:'code.py',edits:[{oldText:'saved',newText:'changed'}],command:'pytest',args:[],files:[{path:'code.py',reason:'plan'}]}})).isError,true,name);
+ assert.equal(mutations,0);assert.equal(await readFile(path.join(root,'code.py'),'utf8'),'saved target implementation\n');
+ assert.equal((await client.callTool({name:'read_file',arguments:{path:'.env'}})).isError,true);
+ const search=JSON.stringify(await client.callTool({name:'search_workspace',arguments:{query:'target'}}));assert.match(search,/saved target/);assert.doesNotMatch(search,/private staged overlay/);
+});
+
+test('scout discovery never satisfies the separate parent bridge discovery gate',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-independent-'));t.after(()=>rm(root,{recursive:true,force:true}));await writeFile(path.join(root,'a.py'),'target function\n');
+ const options={root,budget:4000,requireDiscovery:true,active:()=>true,propose:async()=>'',command:async()=>'',context:()=>{}};
+ const scout=await startMcp({...options,readOnly:true} as any),parent=await startMcp(options);t.after(()=>scout.close());t.after(()=>parent.close());
+ const connect=async(bridge:typeof scout)=>{const client=new Client({name:'scout-independent',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));return client;};
+ const s=await connect(scout),p=await connect(parent);
+ assert.ok(!(await s.callTool({name:'find_relevant_files',arguments:{query:'target'}})).isError);
+ assert.ok(!(await s.callTool({name:'read_file',arguments:{path:'a.py'}})).isError);
+ assert.equal((await p.callTool({name:'read_file',arguments:{path:'a.py'}})).isError,true);
+ assert.ok(!(await p.callTool({name:'find_relevant_files',arguments:{query:'target'}})).isError);
+ assert.ok(!(await p.callTool({name:'read_file',arguments:{path:'a.py'}})).isError);
+});
+
+test('closing a scout endpoint invalidates in-flight reads before any late context callback',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-close-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ for(let i=0;i<12;i++)await writeFile(path.join(root,`file${i}.py`),'target evidence\n');
+ let contexts=0,started!:()=>void;const ready=new Promise<void>(r=>started=r);
+ const bridge=await startMcp({root,budget:4000,readOnly:true,active:()=>{started();return true;},propose:async()=>'',command:async()=>'',context:()=>{contexts++;}});t.after(()=>bridge.close());
+ const client=new Client({name:'scout-close',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
+ const pending=client.callTool({name:'find_relevant_files',arguments:{query:'target'}}).catch(()=>undefined);
+ await ready;const closing=bridge.close();
+ const closedBeforeClient=await Promise.race([closing.then(()=>true),new Promise<boolean>(r=>setTimeout(()=>r(false),200))]);
+ await client.close();await closing;await pending;await new Promise(r=>setTimeout(r,30));
+ assert.equal(closedBeforeClient,true,'endpoint cleanup must close an in-flight HTTP request without waiting for its client');
+ assert.equal(contexts,0,'closed scout must not publish context while its parent is running');
+});
+
 test('agent mode must discover budgeted context before workspace access, including after reset',async t=>{
  const root=await mkdtemp(path.join(tmpdir(),'forgelens-required-discovery-'));t.after(()=>rm(root,{recursive:true,force:true}));
  await writeFile(path.join(root,'code.py'),'target implementation\nreturn False\n');let staged=0,contexts=0;

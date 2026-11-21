@@ -2,7 +2,19 @@
 
 ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local repository. Select a function to request a focused edit, or ask the agent panel for a change that spans source code, tests and documentation. TrueForge runs the agent. You choose which hunks to apply and when to save them.
 
-[Watch the narrated demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the three-page write-up](docs/technical-writeup.pdf) · [Download the v0.1.13 extension](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
+[Install the v0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/forgelens-0.2.0.vsix) · [Watch the Round 1 demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the Round 1 write-up](docs/technical-writeup.pdf) · [Download the recorded v0.1.13 build](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
+
+### What's new in the 22 November preview
+
+This build follows the Round 1 recording. To try the new workflow, open a trusted local folder in **desktop VS Code 1.101 or newer** and run **ForgeLens: Open Agent**.
+
+1. **Preview context before calling a model.** Type a task and choose **Preview context**. The panel shows each selected file, line range, selection reason and the excerpt budget used. Click a path to open those lines. This preview runs locally, including when no model is configured.
+2. **Choose what the agent can see.** In Git repositories automatic discovery follows Git's standard ignore rules and includes tracked files. Add a root-level `.forgelensignore` to exclude files or folders even when tracked or explicitly requested. Use one literal workspace-relative path per line, such as `fixtures/private/`. Blank lines and `#` comments are accepted. Glob patterns and negation produce a configuration error.
+3. **Choose hunks in any order.** When the run ends, open each diff from **Staged changes**, then accept or reject it. **Export accepted patch** saves exactly those hunks as a Git-compatible patch at the location you choose. You can share it or run `git apply --check` before applying any changes. **Review hunks** takes you through any outstanding decisions and asks before applying to the editor buffer.
+4. **Verify saved changes in a real terminal.** Choose **Verify saved changes** for Git status, Git diff checks, or Flask CLI tests when `tests/test_cli.py` is present. The panel reports elapsed time and exit status. The VS Code task terminal shows the command and its actual output. Set `forgelens.pythonPath` in User Settings to use a particular Python environment. Save edits first.
+5. **Stop from the keyboard.** Press **Escape** in the agent panel during a run. The output reports the local time to block editing and discard proposals. TrueForge cancellation runs separately.
+
+For multi-file tasks, you can also enable `forgelens.contextScout` in Settings. The scout uses a separate, read-only TrueForge session to retrieve, read and search context. It passes bounded notes to the editing session, which must discover its own files and obtain edit approvals. The scout is off by default. Enabling it uses additional provider quota.
 
 ## Try it in VS Code
 
@@ -85,7 +97,7 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 | **Command review** | The agent can request approved validation commands, including pytest, Git status or diff, and Flask help. Workspace code can run during a test, so use a trusted folder. |
 | **Optional diagnostics** | The Windows rehearsal can parse a proposed Python edit before staging. The optional Groq gateway passed offline forwarding, retry and streaming checks. Live Groq inference remains unverified. |
 
-ForgeLens edits existing files in the first local workspace folder. File creation, deletion and parsing of ignore files are outside the current feature set. Model quality and provider quotas affect whether a request finishes.
+ForgeLens edits existing files in the first local workspace folder. File creation and deletion are outside the current feature set. Model quality and provider quotas affect whether a request finishes.
 
 ## Which VS Code setups were checked?
 
@@ -96,15 +108,15 @@ Use **current desktop VS Code with a local folder** to reproduce the demo. The 2
 | Windows desktop | Recorded Tasks A, B and C with local TrueForge. Separately installed the release VSIX and checked the panel on Stable 1.147.0 (x64). |
 | macOS and Linux desktop | The packaged extension opened its panel on Stable 1.147.0, on Apple silicon and Linux x64. Full model runs were recorded on Windows only. |
 | Linux Insiders | The panel and commands worked on 1.148.0-insider. |
-| Older VS Code | The panel opened on Linux 1.96.0, the minimum in the manifest. That editor embeds Node 20, while the bundled TrueForge SDK specifies Node 22 or newer. Model execution on 1.96 is unverified. |
+| Older VS Code | The v0.1.13 panel opened on Linux 1.96.0. That editor embeds Node 20. The v0.2.0 preview raises the minimum to 1.101 because the TrueForge SDK specifies Node 22 or newer. |
 | Browser, remote workspaces and forks | Browser-only editors such as `vscode.dev` cannot host this Node extension. Remote SSH, WSL, Dev Containers, Codespaces, Cursor and VSCodium have no verified full run. |
 
-The release checkpoint passed **112 extension tests** on Windows. The current source, which includes an extra Python diagnostic check, passed **113 tests**, TypeScript checking and compilation. The final Flask Task B checkout separately passed **59 CLI tests** again on 22 November. [Feature-by-feature evidence](docs/FEATURES.txt)
+The recorded v0.1.13 release checkpoint passed **112 extension tests** on Windows. A subsequent 0.1.x check included a Python diagnostic and passed **113 tests**. The final Flask Task B checkout separately passed **59 CLI tests** again on 22 November. The 0.2.0 preview adds desktop checks for opening the panel, previewing context without a provider, and respecting project exclusions. [Round 1 feature evidence](docs/FEATURES.txt) · [Preview desktop test workflow](.github/workflows/desktop-preview.yml)
 
 ## Build from a clean clone
 
 ```sh
-git clone https://github.com/aceholland/forgelens.git
+git clone --branch codex/postdeadline-20261122 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 npm run check

@@ -12,6 +12,8 @@ import { resolveAgentProposal } from './patch';
 
 export interface EditorBridge {
  root:string; budget:number; task?:string; requireDiscovery?:boolean; active():boolean;
+ /** Separate scout endpoint: saved-source reads only; never plans, proposals or commands. */
+ readOnly?:boolean;
  pending?(path:string):string|undefined;
  propose(path:string, content:string):Promise<string>;
  command(command:string,args:string[]):Promise<string>;
@@ -24,6 +26,8 @@ export interface EditorBridge {
  context(result:ReturnType<typeof selectContext>):void;
 }
 export async function startMcp(bridge: EditorBridge) {
+ const readOnly=bridge.readOnly===true;
+ let closed=false,closing:Promise<void>|undefined;
  const token=randomBytes(32).toString('hex');
  const transports=new Set<StreamableHTTPServerTransport>();
  const output=(text:string)=>({content:[{type:'text' as const,text}]});
@@ -58,8 +62,8 @@ export async function startMcp(bridge: EditorBridge) {
  function build() {
   const mcp=new McpServer({name:'forgelens-editor',version:'0.1.0'},{maxToolInputElements:512});
   mcp.server.oninitialized=()=>bridge.onInitialized?.();
-  const readView=async(path:string)=>{const disk=await readWorkspace(bridge.root,path);return bridge.pending?.(path)??disk;};
-  const guard=()=>{verifyGeneration();if(!bridge.active()) throw new Error('Run cancelled or inactive');};
+  const readView=async(path:string)=>{const disk=await readWorkspace(bridge.root,path);return readOnly?disk:bridge.pending?.(path)??disk;};
+  const guard=()=>{verifyGeneration();if(closed||!bridge.active()) throw new Error('Run cancelled or inactive');};
   mcp.registerTool('read_file',{
    description:'Read staged or saved source in exact line ranges. Defaults to 80 lines. Broad exploration is compacted; follow startLine to paginate. Unchanged repeated reads return a locator unless refresh=true. Use search_workspace or select_context first to find relevant ranges. Staged text is not applied; protected files are excluded.',
    inputSchema:{path:z.string(),startLine:z.number().int().min(1).optional(),lineCount:z.number().int().min(1).max(300).optional(),refresh:z.boolean().optional()}
@@ -72,7 +76,7 @@ export async function startMcp(bridge: EditorBridge) {
    const info=await stat(diskPath,{bigint:true});
    if(info.size>1000000n)throw new Error('Oversized file excluded');
    guard();
-   const pending=bridge.pending?.(path);
+   const pending=readOnly?undefined:bridge.pending?.(path);
    const staged=pending!==undefined?'[STAGED PROPOSAL, not applied or saved] ':'';
    const key=digest('read',path,diskPath,startLine,lineCount,
     pending===undefined?`${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`:digest('staged',pending));
@@ -97,7 +101,7 @@ export async function startMcp(bridge: EditorBridge) {
    const range=`${staged}${path}: lines ${startLine}-${end} of ${lines.length}`;
    report('read_file',details);
    return shown(key,`${range}\n\n${visible.join('\n')}${clipNotice}${more}`,
-    `${range} [Already shown. You already did this; proceed to write.]${more}`,usedCall);
+    `${range} [Already shown. ${readOnly?'Return the relevant evidence in your report.':'You already did this; proceed to write.'}]${more}`,usedCall);
    } catch(error){report('read_file',details,'failed');return failed(error,usedCall);}
   });
   mcp.registerTool('search_workspace',{description:'Search a literal substring (not regex) in source paths and lines. Prefer distinctive identifiers. Optional pathPrefix narrows to a discovered directory or file. Includes 2 neighboring lines by default (contextLines 0-3), with exact line references, so small matches need not be reread. Capped at 8 matches per file and 10 total; preview text is bounded. Unchanged repeated searches return a short note unless refresh=true. Narrow queries if limited.',inputSchema:{query:z.string().min(1).max(200),pathPrefix:z.string().optional(),contextLines:z.number().int().min(0).max(3).optional(),refresh:z.boolean().optional()}},async({query,pathPrefix,contextLines=2,refresh=false})=>{
@@ -134,9 +138,10 @@ export async function startMcp(bridge: EditorBridge) {
     visible.push(hit);used+=cost;
    }
    const result=visible.join('\n')+(limited?'\n[Results limited. Narrow the literal query or pathPrefix.]':hits.length?'':'No literal matches. Try a shorter distinctive identifier.');
+   const next=readOnly?'Return the relevant evidence in your report.':'You already did this; proceed to write.';
    const repeat=hits.length
-    ? `[Unchanged search results already shown; ${totalMatches} matches${limited?' (limited)':''}. You already did this; proceed to write.]`
-    : '[No literal matches; unchanged result already shown. You already did this; proceed to write.]';
+    ? `[Unchanged search results already shown; ${totalMatches} matches${limited?' (limited)':''}. ${next}]`
+    : `[No literal matches; unchanged result already shown. ${next}]`;
    report('search_workspace',safeLabel(pathPrefix??''));
    return shown(key,result,repeat,usedCall);
    } catch(error){report('search_workspace',safeLabel(pathPrefix??''),'failed');return failed(error,usedCall);}
@@ -168,6 +173,7 @@ export async function startMcp(bridge: EditorBridge) {
    description:'Retrieve budgeted source snippets and reasons; supports @file and @symbol. Use focused queries when an edit needs additional evidence.',
    inputSchema:{query:z.string().trim().min(1).max(4000)}
   },async({query})=>collectContext(query,false));
+  if(!readOnly){
   mcp.registerTool('report_plan',{
    description:'Record planned workspace-relative files and the reason for each before staging edits. Does not consume exploration calls or write disk.',
    inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400)})).min(1).max(12)}
@@ -182,6 +188,7 @@ export async function startMcp(bridge: EditorBridge) {
   });
   for(const name of ['propose_write','propose_edit'] as const)mcp.registerTool(name,{description:'Stage or revise exact replacements in an existing file for human per-hunk review; never writes disk. Supply edits:[{oldText,newText}], not file content. Each oldText must match exactly once. Include unchanged surrounding lines only to make an anchor unique. Unchanged file contents are preserved automatically. read_file/search show the staged view, so base revisions on that view.',inputSchema:{path:z.string(),edits:z.array(z.object({oldText:z.string().min(1).max(250000).describe('Exact unique text already present in the current file or staged view.'),newText:z.string().max(250000).describe('Replacement for oldText only; do not reproduce the whole file.')})).min(1).max(20)}},async({path,edits})=>{guard();report(name,safeLabel(path));const original=await readView(path);const proposed=resolveAgentProposal(original,{edits});guard();const result=await bridge.propose(path,proposed);guard();if(bridge.pending?.(path)===proposed)hasProposed=true;return show(result);});
   mcp.registerTool('run_command',{description:'Request an explicitly approved validation command. Restricted to pytest, git status/diff, and flask --help; no shell.',inputSchema:{command:z.string(),args:z.array(z.string()).max(20)}},async({command,args})=>{guard();report('run_command');return show('Validation executes saved disk files, NOT staged proposals.\n'+await bridge.command(command,args));});
+  }
   return mcp;
  }
  const server=http.createServer(async(req,res)=>{
@@ -214,6 +221,9 @@ export async function startMcp(bridge: EditorBridge) {
     const tool=message.params?.name;
     if(typeof tool!=='string')return dispatch(message,extra);
     bridge.onToolRequest?.(tool);
+    if(readOnly&&!explorationTools.has(tool)){
+     return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('This read-only context endpoint permits discovery, search and saved-source reads only.'),isError:true}}).catch(()=>{});
+    }
     if(bridge.requireDiscovery&&!discoveryComplete&&tool!=='find_relevant_files'){
      return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('Discover context first: load and call find_relevant_files with the task before using workspace tools.'),isError:true}}).catch(()=>{});
     }
@@ -229,5 +239,11 @@ export async function startMcp(bridge: EditorBridge) {
  });
  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
  const address=server.address();if(!address||typeof address==='string')throw new Error('MCP startup failed');
- return {url:`http://127.0.0.1:${address.port}/mcp`,token,resetExploration,close:async()=>{for(const t of transports)await t.close();await new Promise<void>(r=>server.close(()=>r()));}};
+ return {url:`http://127.0.0.1:${address.port}/mcp`,token,resetExploration,close:()=>closing??=(async()=>{
+  closed=true;resetExploration();
+  const stopped=new Promise<void>(resolve=>server.close(()=>resolve()));
+  server.closeAllConnections();
+  for(const transport of [...transports])await transport.close();
+  await stopped;
+ })()};
 }
