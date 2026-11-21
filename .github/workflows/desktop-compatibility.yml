@@ -1,0 +1,48 @@
+name: Released VSIX in desktop VS Code
+on:
+  push:
+    branches: [codex/desktop-check-20261122]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  open-agent:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, editor: stable}
+          - {os: windows-latest, editor: stable}
+          - {os: macos-latest, editor: stable}
+          - {os: ubuntu-latest, editor: '1.96.0'}
+          - {os: ubuntu-latest, editor: insiders}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    env:
+      EDITOR_BUILD: ${{ matrix.editor }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fetch the published extension and test harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'release.zip'
+          Invoke-WebRequest 'https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix' -OutFile $zip
+          if ((Get-FileHash $zip).Hash -ne '24fec3deaf247e7c50057d4215693b156e63b5baebb19c0758304c45c378326b') {
+            throw 'Release VSIX checksum mismatch'
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'forge-release')
+          npm install --prefix "$env:RUNNER_TEMP/forge-harness" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@2.5.2'
+      - name: Launch a real editor and open the agent panel
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a node checks/desktop-launch.cjs
+          else
+            node checks/desktop-launch.cjs
+          fi
