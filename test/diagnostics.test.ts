@@ -15,6 +15,8 @@ test('diagnostic metadata drops arbitrary content and deduplicates usage snapsho
  m.add(raw);m.add({...raw,type:'model.message.delta'});
  m.add({type:'client.status',message:'sensitive-fixture'});
  assert.equal(JSON.stringify(m.events).includes('sensitive-fixture'),false);
+ assert.deepEqual(m.summary().streamDeltas,{total:1,text:1,reasoning:1,toolCalls:1});
+ assert.equal(JSON.stringify(m.summary()).includes('sensitive-fixture'),false);
  assert.deepEqual(m.summary().tokenUsage,{inputTokens:12,outputTokens:3,reportedModelMessages:1});
  m.fallback();m.add(raw);assert.equal(m.summary().tokenUsage?.inputTokens,24);
  assert.equal(m.summary().fallbackTransitions,1);

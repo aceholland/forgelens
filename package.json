@@ -158,7 +158,7 @@
           "type": "number",
           "default": 120,
           "minimum": 1,
-          "maximum": 900,
+          "maximum": 1800,
           "description": "Maximum seconds to wait for a single model generation through TrueForge. Confirmed timeout may use the configured fallback before any edit is staged."
         }
       }

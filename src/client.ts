@@ -12,6 +12,8 @@ export type ForgeEvent = TrueForgeApi.TurnStreamingEvent | { type: 'client.statu
 export interface ForgeOptions {
   /** Locally selected, untrusted source data sent as initial user-role context. */
   sourceEvidence?: string;
+  /** Draft from the supplied context with one preloaded, review-required editor tool. */
+  draftFromContext?: boolean;
   baseUrl: string; model: string; fallbackModel?: string; preloadTools?: boolean; reasoningEffort?: string; dynamicSubAgents?: boolean; mcpName: string; instructions: string;
   onEvent(event: ForgeEvent): void;
   onApproval(details: ApprovalDetails): Promise<ApprovalDecision>;
@@ -117,9 +119,14 @@ export class ForgeRunner {
   private usedTools = false;
   private producedOutput = false;
   private transport: ReturnType<typeof createForgeTransport>;
+  private get contextScout() {
+    return this.options.draftFromContext ? undefined : this.options.contextScout;
+  }
   constructor(private readonly options: ForgeOptions) {
-    this.transport = createForgeTransport(options.streamIdleTimeoutMs ?? 900000);
-    this.sdk = options.sdk ?? new TrueForge({ baseUrl: options.baseUrl, timeoutInSeconds: 900, maxRetries: 0, fetch: this.transport.fetch });
+    const modelWindow = Math.max(900000, options.modelCallTimeoutMs || 0);
+    this.transport = createForgeTransport(options.streamIdleTimeoutMs ?? modelWindow);
+    const timeoutInSeconds = Math.ceil(Math.max(modelWindow, options.runTimeoutMs || 0) / 1000);
+    this.sdk = options.sdk ?? new TrueForge({ baseUrl: options.baseUrl, timeoutInSeconds, maxRetries: 0, fetch: this.transport.fetch });
   }
 
   async cancel(): Promise<void> {
@@ -164,7 +171,7 @@ export class ForgeRunner {
       }
       try {
         await this.cancellationRequest;
-        if(this.options.contextScout?.mode==='native')await this.options.onScoutFinished?.();
+        if(this.contextScout?.mode==='native')await this.options.onScoutFinished?.();
       } finally {
         try { await this.transport.close(); }
         finally { this.running = false; }
@@ -173,7 +180,7 @@ export class ForgeRunner {
   }
 
   private async runModels(prompt:string):Promise<RunResult> {
-      const scout=this.options.contextScout;
+      const scout=this.contextScout;
       if(scout && (!scout.mcpName.trim() || scout.mcpName.trim()===this.options.mcpName.trim())) {
         if(scout.mode!=='native')await this.options.onScoutFinished?.();
         throw new Error('Context scout requires a separate read-only MCP connector.');
@@ -299,10 +306,13 @@ export class ForgeRunner {
 
   private async runModel(prompt: string, model: string, observe:(event:TrueForgeApi.TurnStreamingEvent)=>void, attemptSignal:AbortSignal,scout=false): Promise<RunResult> {
     this.sessionId = '';this.turnId='';this.terminalModelTimeout=false;this.retryWaitMs=undefined;this.usedTools=false;this.producedOutput=false;
-    const native=this.options.contextScout?.mode==='native';
-    const readConnector:TrueForgeApi.McpServer={name:this.options.contextScout?.mcpName??'',preload:scout,
+    const draft = this.options.draftFromContext === true;
+    const native=this.contextScout?.mode==='native';
+    const readConnector:TrueForgeApi.McpServer={name:this.contextScout?.mcpName??'',preload:scout,
       enableTools:READ_TOOLS,requireApprovalForTools:[]};
-    const parentConnector:TrueForgeApi.McpServer={name:this.options.mcpName,preload:this.options.preloadTools??false,
+    const parentConnector:TrueForgeApi.McpServer=draft?{
+      name:this.options.mcpName,preload:true,enableTools:['propose_changes'],requireApprovalForTools:['propose_changes'],
+    }:{name:this.options.mcpName,preload:this.options.preloadTools??false,
       ...(this.options.sourceEvidence?{enableTools:['propose_changes','propose_edit','create_file','read_file','search_workspace','validate_candidate']}:{}),
       requireApprovalForTools:native?['@all']:APPROVAL_TOOLS};
     const promptInstructions=scout?contextScoutInstructions:native?this.options.instructions+'\n'+nativeScoutInstructions(readConnector.name,parentConnector.name):this.options.instructions;
@@ -314,7 +324,7 @@ export class ForgeRunner {
       ...(contextMessages.length?{messages:contextMessages}:{}),
       mcpServers: scout?[readConnector]:native?[parentConnector,readConnector]:[parentConnector],
       config: {iterationLimit:scout?8:40,dynamicSubAgents:{enabled:!!native},sandbox:{enabled:false},
-        askUserQuestions:{enabled:!scout && !!this.options.onQuestion},webSearch:{enabled:false},generativeUi:{enabled:false},memory:{enabled:false}},
+        askUserQuestions:{enabled:!scout && !draft && !!this.options.onQuestion},webSearch:{enabled:false},generativeUi:{enabled:false},memory:{enabled:false}},
     } } }, { abortSignal: attemptSignal, maxRetries: 0 });
     let session: Awaited<ReturnType<typeof create>> | undefined;
     for (let attempt = 0; !session; attempt++) {
@@ -403,6 +413,11 @@ export class ForgeRunner {
       if (!paused) throw new Error('TrueForge stream ended without a terminal event. Check the session before retrying.');
       if(scout)throw new Error('Read-only scout requested approval or interaction. No response was sent.');
       if (!turnId || (!pending.size && !questions.size)) throw new Error('TrueForge paused for an unsupported input. Open its session to continue.');
+      if (draft && questions.size) {
+        await this.cancel();
+        this.options.onEvent({type:'client.status', message:'Draft from context stopped because the provider requested a clarification.'});
+        return {sessionId,status:'cancelled'};
+      }
       const approvals: (TrueForgeApi.UserToolApprovalInputEvent | TrueForgeApi.UserToolResponseInputEvent)[] = [];
       for (const question of questions.values()) for (const ref of question.toolCalls) {
         const source=events.get(ref.sourceEventId);
@@ -434,7 +449,10 @@ export class ForgeRunner {
           arguments: deferred ? ((args.input ?? args.arguments ?? {}) as Record<string, unknown>) : args,
         };
         let decision:ApprovalDecision;
-        if(native && (approval.threadId!=='main' || source?.type!=='model.message' || source.threadId!=='main' || details.serverName!==this.options.mcpName)){
+        const rootEditorCall = approval.threadId==='main' && source?.type==='model.message' && source.threadId==='main' && details.serverName===this.options.mcpName;
+        if(draft && (!rootEditorCall || call.toolInfo.type!=='mcp' || details.name!=='propose_changes')){
+          decision={allowed:false,reason:'Draft from context permits only a directly reviewed proposal from the main editor thread.'};
+        }else if(native && !rootEditorCall){
           decision={allowed:false,reason:'Scout threads can use only the read-only context connector. This editor operation was denied.'};
         }else if(native && (READ_TOOLS.includes(details.name) || details.name==='report_plan')){
           decision=true;

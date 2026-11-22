@@ -24,10 +24,15 @@ export function resolveProposal(original:string,input:{content?:unknown;edits?:u
   if(typeof oldText!=='string'||!oldText.length||typeof newText!=='string')throw new Error('Exact edit requires nonempty oldText and string newText.');
   const anchor=normalize(oldText);
   const start=original.indexOf(anchor);
-  if(start<0||original.indexOf(anchor,start+1)>=0)throw new Error('oldText must match exactly once. Read current file and include more surrounding context.');
+  if(start<0||original.indexOf(anchor,start+1)>=0)throw new AnchorMismatch(anchor);
   return {start,end:start+anchor.length,newText:normalize(newText)};
  }).sort((a,b)=>a.start-b.start);
  for(let i=1;i<ranges.length;i++)if(ranges[i]!.start<ranges[i-1]!.end)throw new Error('Exact edits overlap.');
  let result=original;for(const r of ranges.reverse())result=result.slice(0,r.start)+r.newText+result.slice(r.end);
  if(result.length>250000)throw new Error('Proposed file exceeds limit.');return result;
+}
+export class AnchorMismatch extends Error {
+ constructor(readonly anchor:string) {
+  super('oldText must match exactly once. Read current file and include more surrounding context.');
+ }
 }

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isJSONRPCRequest, isJSONRPCResultResponse } from '@modelcontextprotocol/sdk/types.js';
-import { lstat, stat } from 'node:fs/promises';
+import { lstat, realpath, stat } from 'node:fs/promises';
+import path from 'node:path';
 import http from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -8,7 +9,8 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import { confinedPath, listWorkspace, readWorkspace } from './workspace';
 import { isSafeContextPath, selectContext, type ContextSelection } from './context';
-import { resolveAgentProposal } from './patch';
+import { AnchorMismatch, resolveAgentProposal } from './patch';
+import { anchorExcerpt } from './compactContext';
 
 export interface EditorBridge {
  root:string; budget:number; tokenBudget?:number; task?:string; requireDiscovery?:boolean; active():boolean;
@@ -16,6 +18,7 @@ export interface EditorBridge {
  readOnly?:boolean;
  /** Actual local discovery supplied to the model as structured source excerpts. */
  compactContext?:ContextSelection;
+ draftFromContext?:boolean;
  pending?(path:string):string|undefined;
  propose(path:string, content:string, expectedBase?:string, signal?:AbortSignal):Promise<string>;
  create?(path:string,content:string,signal?:AbortSignal):Promise<string>;
@@ -41,6 +44,9 @@ export async function startMcp(bridge: EditorBridge) {
  const exploration = new Map<string,string>();
  const attempt=new AsyncLocalStorage<{used:number;generation:number}>();
  const preselected=!readOnly && Boolean(bridge.compactContext?.items.length);
+ if(bridge.draftFromContext&&!preselected)throw new Error('Draft from context requires a nonempty editable source selection. Try Run agent.');
+ const draftPaths=bridge.draftFromContext?new Set(bridge.compactContext!.items.map(item=>item.path)):undefined;
+ const draftRoot=draftPaths?await realpath(bridge.root):undefined;
  let generation=0,discoveryComplete=preselected;
  const explorationTools=new Set(['find_relevant_files','select_context','read_file','search_workspace']);
  let exposedChars=0, hasProposed=false, calls=0;
@@ -76,6 +82,7 @@ export async function startMcp(bridge: EditorBridge) {
    return pending??await readWorkspace(bridge.root,path);
   };
   const guard=()=>{verifyGeneration();if(closed||!bridge.active()) throw new Error('Run cancelled or inactive');};
+  if(!draftPaths){
   mcp.registerTool('read_file',{
    description:'Read staged or saved source in exact line ranges. Defaults to 80 lines. Broad exploration is compacted; follow startLine to paginate. Unchanged repeated reads return a locator unless refresh=true. Use search_workspace or select_context first to find relevant ranges. Staged text is not applied; protected files are excluded.',
    inputSchema:{path:z.string(),startLine:z.number().int().min(1).optional(),lineCount:z.number().int().min(1).max(300).optional(),refresh:z.boolean().optional()}
@@ -185,25 +192,36 @@ export async function startMcp(bridge: EditorBridge) {
    description:'Retrieve budgeted source snippets and reasons; supports @file and @symbol. Use focused queries when an edit needs additional evidence.',
    inputSchema:{query:z.string().trim().min(1).max(4000)}
   },async({query})=>collectContext(query,false));
+  }
   if(!readOnly){
   if(preselected)mcp.registerTool('propose_changes',{
    description:'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
-   inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
+   inputSchema:{files:z.array(z.object({path:draftPaths?z.enum([...draftPaths],{error:'Drafts can edit only retrieved files. Use Run agent for additional paths.'}):z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
     edits:z.array(z.object({oldText:z.string().min(1).max(250000),newText:z.string().max(250000)})).min(1).max(20)})).min(1).max(12),
     tests:z.array(z.string().min(1).max(400)).max(20).optional()}
   },async({files,tests},extra)=>{
    guard();
    if(tests && !bridge.validate)throw new Error('Candidate testing is unavailable in this workspace.');
+   if(draftPaths&&tests?.some(test=>!draftPaths.has(test.split('::')[0]!)))throw new Error('Choose a retrieved test path, request the full suite with [], or use Run agent.');
    const targets=new Set<string>();
    const prepared=[];
    for(const file of files){
+    if(draftPaths&&!draftPaths.has(file.path))throw new Error('Use Run agent to edit additional paths.');
     const target=await confinedPath(bridge.root,file.path);
+    if(draftRoot&&path.relative(path.join(draftRoot,file.path),target)!=='')throw new Error('A retrieved path now resolves to a different file. Refresh the draft.');
     const key=process.platform==='win32'?target.toLowerCase():target;
     if(targets.has(key))throw new Error('Combine all edits for each file into one entry.');
     targets.add(key);
     const base=await readView(file.path);
     try{prepared.push({path:file.path,base,content:resolveAgentProposal(base,file)});}
-    catch(error){throw new Error(file.path+': '+(error instanceof Error?error.message:'Invalid edit anchor'));}
+    catch(error){
+     if(draftPaths&&error instanceof AnchorMismatch){
+      const first=bridge.compactContext!.items.find(item=>item.path===file.path);
+      const excerpt=anchorExcerpt(base,error.anchor,first?.startLine??1);
+      throw new Error(`${file.path}: oldText must match exactly once. Retry with a unique anchor from the current view. Untrusted source excerpt: ${JSON.stringify(excerpt)}`);
+     }
+     throw new Error(file.path+': '+(error instanceof Error?error.message:'Invalid edit anchor'));
+    }
    }
    guard();extra.signal.throwIfAborted();
    bridge.onPlan?.(files.map(({path,reason})=>({path,reason})));
@@ -228,6 +246,7 @@ export async function startMcp(bridge: EditorBridge) {
    }
    guard();return show(results.join('\n'));
   });
+  if(draftPaths)return mcp;
   mcp.registerTool('report_plan',{
    description:'Record planned workspace-relative files and the reason for each before staging edits. Does not consume exploration calls or write disk.',
    inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400)})).min(1).max(12)}
@@ -289,6 +308,9 @@ export async function startMcp(bridge: EditorBridge) {
     const tool=message.params?.name;
     if(typeof tool!=='string')return dispatch(message,extra);
     bridge.onToolRequest?.(tool);
+    if(draftPaths&&tool!=='propose_changes'){
+     return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('Draft from context offers propose_changes only. Use Run agent for other workspace tools.'),isError:true}}).catch(()=>{});
+    }
     if(readOnly&&!explorationTools.has(tool)){
      return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('This read-only context endpoint permits discovery, search and saved-source reads only.'),isError:true}}).catch(()=>{});
     }

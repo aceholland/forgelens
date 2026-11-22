@@ -19,6 +19,8 @@ Version 0.3.0 is a post-deadline release. Read the [two-page evidence supplement
 
 ## What you can do
 
+[See how these controls map to the reference demo](docs/video-comparison.md).
+
 | In the editor | What happens |
 | --- | --- |
 | **Preview context** | See which paths, line ranges and selection reasons would reach the agent. Local ranking combines text relevance (BM25), file roles, symbols and static imports. Two limits bound the excerpts, initially 24,000 characters and 10,000 reference tokens. Preview works offline. |
@@ -83,7 +85,7 @@ Enable **ForgeLens › Context Scout** to let TrueForge create a child during mu
 
 For a provider with a small request quota, enable **ForgeLens › Compact Requests**. ForgeLens places the locally selected excerpts in the first model request. The model can propose a plan, exact edits across several files and a pytest check in one tool call. ForgeLens verifies all anchors before the first review. The editor still shows each file and asks before executing tests.
 
-For a CPU-hosted model that takes several minutes to generate an edit, set **Run Timeout Minutes** and **Model Call Timeout Seconds** in VS Code User Settings. The defaults are 5 minutes per run and 120 seconds per model call. For slower hardware you can raise the limits to 90 minutes and 900 seconds. Escape still stops a run.
+For a CPU-hosted model that takes several minutes to generate an edit, set **Run Timeout Minutes** and **Model Call Timeout Seconds** in VS Code User Settings. The defaults are 5 minutes per run and 120 seconds per model call. For slower hardware you can raise the limits to 90 minutes per run and 30 minutes per generation. TrueForge's own provider header and body timeouts must also allow that time. Escape still stops a run. [Reproducible CPU integration setup](checks/run-task-b-runner.sh)
 
 ## What happens to proposed changes
 

@@ -14,7 +14,7 @@ summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(
 </style></head><body>
 <header><h1>ForgeLens</h1><span id="phase" role="status">Ready</span></header>
 <label for="task">What would you like to change?</label><textarea id="task" placeholder="Describe the change, or include @file:path or @symbol:name."></textarea>
-<div class="bar"><button id="run">Run agent</button><button id="inspect">Preview context</button><button id="stop">Stop</button></div>
+<div class="bar"><button id="run">Run agent</button><button id="draft" title="Propose edits to the retrieved files in this task">Draft from context</button><button id="inspect">Preview context</button><button id="stop">Stop</button></div>
 <section><h2>Review &amp; verify</h2><div class="bar"><button id="review">Review hunks</button><button id="undo">Undo last</button><button id="verify">Verify saved changes</button></div></section>
 <section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2><div class="bar"><button id="accept-all">Accept all pending hunks</button><button id="reject-all">Reject all pending hunks</button></div><div id="hunks"></div><button id="export">Export accepted patch</button></section>
 <section id="context" hidden><div class="context-head"><h2 id="context-title">Context preview</h2><span id="budget"></span></div><progress id="meter" aria-label="Source excerpt budget"></progress><ul class="files" id="files"></ul></section>
@@ -25,7 +25,7 @@ const api = acquireVsCodeApi();
 const el = id => document.getElementById(id);
 let streaming = false;
 let running = false;
-for (const type of ['run','inspect','stop','review','undo','verify','export']) {
+for (const type of ['run','draft','inspect','stop','review','undo','verify','export']) {
   el(type).onclick = () => api.postMessage({type, prompt: el('task').value});
 }
 window.addEventListener('keydown', event => {
@@ -39,6 +39,7 @@ window.addEventListener('message', ({data}) => {
     running = data.active;
     el('phase').textContent = data.phase;
     el('run').disabled = running;
+    el('draft').disabled = running;
     el('inspect').disabled = running;
     el('stop').disabled = !running && !data.pending;
     el('review').disabled = running || !data.pending;

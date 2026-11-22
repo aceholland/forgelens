@@ -6,8 +6,9 @@ import { ReviewStore } from './src/review';
 import { resolveAgentProposal } from './src/patch';
 import { readWorkspace } from './src/workspace';
 import { validateCandidate } from './src/candidateValidation';
+import { userFixturePins, type FixturePins } from './src/candidateFixtures';
 import { instructionsForTools } from './src/instructions';
-import { compactContext,compactEvidence,compactInstructions } from './src/compactContext';
+import { compactContext,compactEvidence,compactInstructions,draftInstructions } from './src/compactContext';
 import { writeFile, mkdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { Metadata,TASK_B_PROMPT,loopbackUrl,toolName,failureMetadata,modelId } from './diagnostics/metadata';
@@ -41,25 +42,36 @@ async function main() {
  const model=process.env.TRUEFORGE_MODEL;
  const python=process.env.FORGELENS_PYTHON;
  const budget=Number(process.env.CONTEXT_BUDGET??6000);
- const compact=process.env.FORGELENS_COMPACT_REQUESTS==='true';
- const operatorQuestions=process.env.GITHUB_ACTIONS!=='true'&&process.env.FORGELENS_UNATTENDED!=='true';
+ const draftFromContext=process.env.FORGELENS_DRAFT_FROM_CONTEXT==='true';
+ const compact=draftFromContext||process.env.FORGELENS_COMPACT_REQUESTS==='true';
+ const operatorQuestions=!draftFromContext&&process.env.GITHUB_ACTIONS!=='true'&&process.env.FORGELENS_UNATTENDED!=='true';
  const preloadTools=compact||process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
  const store=new ReviewStore(); let active=true,modelSwitching=false;
  const validateStaged=process.env.FORGELENS_VALIDATE_STAGED==='true';
  if(validateStaged&&!python)throw new Error('Set FORGELENS_PYTHON for staged pytest validation.');
+ let fixturePins:FixturePins={};
+ if(validateStaged&&process.env.FORGELENS_TEST_FIXTURE_PINS){
+  const trustedFile=await realpath(process.env.FORGELENS_TEST_FIXTURE_PINS);
+  const fromTarget=path.relative(realRoot,trustedFile);
+  if(!path.isAbsolute(fromTarget)&&fromTarget!=='..'&&!fromTarget.startsWith('..'+path.sep)){
+   throw new Error('Choose the diagnostic fixture pin map outside the model workspace.');
+  }
+  fixturePins=userFixturePins({globalValue:JSON.parse(await readFile(trustedFile,'utf8'))});
+ }
  const persistProposals=()=>writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));
  try {
  const baseUrl=loopbackUrl(process.env.TRUEFORGE_URL??'http://127.0.0.1:8790');
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
  const selected=compact?await compactContext(root,prompt,budget,3200,()=>!active):undefined;
+ if(draftFromContext&&!selected?.items.length)throw new Error('Drafting requires retrieved workspace evidence.');
  if(selected)metadata.paths('discovery',selected.items.map(item=>item.path));
- mcp=await startMcp({root,budget,compactContext:selected,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
+ mcp=await startMcp({root,budget,draftFromContext,compactContext:selected,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
   propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const current=store.get(p);const original=current?.original??await readWorkspace(root,p); if(current)store.revise(p,original,c);else store.stage(p,original,c);await persistProposals();return `Staged ${p}; not applied. Continue any remaining requested work.`;},
   create:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);store.stage(p,'',c,'create');await persistProposals();return `Staged new file ${p}; not applied.`;},
-  validate:validateStaged?async tests=>{
-   const result=await validateCandidate(root,store.list().map(p=>({path:p.path,original:p.original,content:p.proposed,isNew:p.kind==='create'})),tests,python!);
+  validate:validateStaged?async (tests,signal)=>{
+   const result=await validateCandidate(root,store.list().map(p=>({path:p.path,original:p.original,content:p.proposed,isNew:p.kind==='create'})),tests,python!,signal,fixturePins);
    metadata.events.push({type:'candidate.validation',tests,exitCode:Number(result.match(/pytest exited (\d+)/)?.[1]??-1)});
    return result;
   }:undefined,
@@ -71,7 +83,9 @@ async function main() {
   phase='mcp_registration';
   const mcpName='forgelens-retest-'+Date.now();await registerMcp(baseUrl,mcpName,mcp.url,mcp.token);
   phase='agent_run';
-  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,sourceEvidence:selected?.items.length?compactEvidence(selected):undefined,instructions:selected?.items.length?compactInstructions:instructionsForTools(preloadTools),runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
+  let instructions=instructionsForTools(preloadTools);
+  if(selected?.items.length)instructions=draftFromContext?draftInstructions:compactInstructions;
+  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,draftFromContext,sourceEvidence:selected?.items.length?compactEvidence(selected):undefined,instructions,runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:draftFromContext||process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
    modelCallTimeoutMs:Number(process.env.MODEL_CALL_TIMEOUT_MS??120000),onModelCallTimeout:()=>{metadata.modelTimeouts++;modelSwitching=true;},onFallback:()=>{metadata.fallback();mcp!.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>metadata.calls,
    onEvent:e=>{if(e.type==='client.status'&&e.message.startsWith('Run time limit reached.'))active=false;const safe=metadata.add(e);if(e.type!=='model.message.delta')console.log(JSON.stringify(safe));},
@@ -92,7 +106,7 @@ async function main() {
     return undefined;
    }:undefined,
    onApproval:async d=>{
-    if(d.name==='propose_changes')return process.env.FORGELENS_COMPACT_REQUESTS==='true'&&Array.isArray(d.arguments.files);
+    if(d.name==='propose_changes')return compact&&Array.isArray(d.arguments.files);
     const file=d.arguments.path;
     if(d.name==='validate_candidate'&&validateStaged)return true;
     if(d.name==='create_file'&&typeof file==='string'&&typeof d.arguments.content==='string'){
@@ -115,7 +129,7 @@ async function main() {
  finally {
   active=false;
   if(mcp)try{await mcp.close();}catch{failure??={category:'mcp_cleanup_failure'};status='error';}
-  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,preloadTools,operatorQuestions,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
+  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,preloadTools,draftFromContext,operatorQuestions,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
   await writeFile(path.join(out,'events.json'),JSON.stringify(metadata.events,null,2));
   await writeFile(path.join(out,'result.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));

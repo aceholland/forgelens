@@ -31,6 +31,7 @@ export class Metadata {
  readonly statuses:string[]=[];
  paths(kind:'discovery'|'plan',values:unknown[]){const paths=[...new Set(values.filter(safeRelativePath))];for(const p of paths)(kind==='discovery'?this.discoveredPaths:this.plannedPaths).add(p);return paths;}
  readonly usage=new Map<string,{inputTokens:number;outputTokens:number}>();
+ readonly streamDeltas={total:0,text:0,reasoning:0,toolCalls:0};
  initialized=0; fallbackTransitions=0; modelTimeouts=0; sessionId:string|undefined;
  private attempt=0;
  add(event:Record<string,any>) {
@@ -40,6 +41,15 @@ export class Metadata {
   for(const key of ['id','threadId','turnId']){const value=id(event[key]);if(value)safe[key]=value;}
   if(event.state&&['running','paused','done','cancelled','error'].includes(event.state.status)){safe.status=event.state.status;if(event.state.status==='error'){safe.category=typeof event.state.message==='string'&&/time[ -]?out|timed out/i.test(event.state.message)?'server_timeout':'server_error';this.statuses.push(String(safe.category));}}
   if(type==='model.message'||type==='model.message.delta') {
+   if(type==='model.message.delta'){
+    this.streamDeltas.total++;
+    const content=event.content;
+    const hasText=typeof content==='string' ? content.length>0 :
+      Array.isArray(content) && content.some(part=>part?.type==='text'&&typeof part.text==='string'&&part.text.length>0);
+    if(hasText)this.streamDeltas.text++;
+    if(typeof event.reasoningContent==='string'&&event.reasoningContent.length>0)this.streamDeltas.reasoning++;
+    if(Array.isArray(event.toolCalls)&&event.toolCalls.length)this.streamDeltas.toolCalls++;
+   }
    const name=modelId(event.model?.name);if(name){this.models.add(name);safe.model=name;}
    const u=event.usage;
    if(id(event.id)&&u&&Number.isSafeInteger(u.inputTokens)&&u.inputTokens>=0&&Number.isSafeInteger(u.outputTokens)&&u.outputTokens>=0){
@@ -50,7 +60,7 @@ export class Metadata {
   this.events.push(safe);return safe;
  }
  fallback(){this.attempt++;this.fallbackTransitions++;}
- summary(){return {discoveredPaths:[...this.discoveredPaths],plannedPaths:[...this.plannedPaths],statusCategories:this.statuses,mcpInitialized:this.initialized>0,mcpInitializationCount:this.initialized,toolCalls:this.calls.length,lastToolCalls:this.calls.slice(-8),observedModels:[...this.models],fallbackTransitions:this.fallbackTransitions,modelTimeouts:this.modelTimeouts,tokenUsage:this.usage.size?{inputTokens:[...this.usage.values()].reduce((s,u)=>s+u.inputTokens,0),outputTokens:[...this.usage.values()].reduce((s,u)=>s+u.outputTokens,0),reportedModelMessages:this.usage.size}:null};}
+ summary(){return {discoveredPaths:[...this.discoveredPaths],plannedPaths:[...this.plannedPaths],statusCategories:this.statuses,mcpInitialized:this.initialized>0,mcpInitializationCount:this.initialized,toolCalls:this.calls.length,lastToolCalls:this.calls.slice(-8),observedModels:[...this.models],fallbackTransitions:this.fallbackTransitions,modelTimeouts:this.modelTimeouts,streamDeltas:{...this.streamDeltas},tokenUsage:this.usage.size?{inputTokens:[...this.usage.values()].reduce((s,u)=>s+u.inputTokens,0),outputTokens:[...this.usage.values()].reduce((s,u)=>s+u.outputTokens,0),reportedModelMessages:this.usage.size}:null};}
 }
 export function failureMetadata(error:unknown){
  const e=error as {statusCode?:unknown;cause?:{code?:unknown};code?:unknown};

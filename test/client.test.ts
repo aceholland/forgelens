@@ -40,6 +40,72 @@ const approvalEvents = [created,
   {id:'a1',type:'tool.approval_required',threadId:'th1',toolCalls:[{id:'c1',sourceEventId:'m1'}]},
   {id:'p1',type:'turn.update',state:{status:'paused'}}];
 
+test('draft from context preloads only the reviewed editor proposal and skips either configured scout', async () => {
+  for (const mode of ['native', 'separate'] as const) {
+    const f = fixture();
+    Object.assign(f.options, {
+      draftFromContext: true, sourceEvidence: 'Locally selected code', preloadTools: false, dynamicSubAgents: true,
+      contextScout: { mode, mcpName: 'editor' },
+      onScoutFinished: async () => assert.fail('No scout was started'),
+      onQuestion: async () => assert.fail('Draft cannot ask questions'),
+    });
+    assert.equal((await new ForgeRunner(f.options).run('Change the code')).status, 'done');
+    const requests = f.calls.filter(c => c.method === 'create');
+    assert.equal(requests.length, 1);
+    const request = requests[0]!.args[0];
+    await CreateSessionRequest.jsonOrThrow(request, { unrecognizedObjectKeys: 'fail' });
+    const spec = request.agent.spec;
+    assert.equal(spec.instructions, f.options.instructions);
+    assert.deepEqual(spec.messages, [{type:'user.message',content:f.options.sourceEvidence}]);
+    assert.deepEqual(spec.mcpServers, [{
+      name:'editor', preload:true, enableTools:['propose_changes'], requireApprovalForTools:['propose_changes'],
+    }]);
+    for (const capability of ['dynamicSubAgents','sandbox','askUserQuestions','webSearch','generativeUi','memory']) {
+      assert.equal(spec.config[capability].enabled, false, capability);
+    }
+  }
+});
+
+test('draft approval checks the originating tool, connector and both thread IDs before requesting review', async () => {
+  const events: unknown[] = [created];
+  const cases = [
+    { source:'main', approval:'main', name:'propose_changes', server:'editor' },
+    { source:'child', approval:'main', name:'propose_changes', server:'editor' },
+    { source:'main', approval:'child', name:'propose_changes', server:'editor' },
+    { source:'main', approval:'main', name:'propose_changes', server:'other' },
+    { source:'main', approval:'main', name:'run_command', server:'editor' },
+    { source:'main', approval:'main', name:'call_tool', server:undefined },
+  ];
+  cases.forEach(({source,approval,name,server}, i) => {
+    const toolInfo = server ? {type:'mcp',name,serverName:server} : {type:'truefoundry-system',name};
+    const args = server ? '{}' : JSON.stringify({tool_name:'propose_changes', mcp_server:'editor', input:{}});
+    events.push({id:'m'+i,type:'model.message',threadId:source,toolCalls:[{id:'c'+i,toolInfo,function:{arguments:args}}]},
+      {id:'a'+i,type:'tool.approval_required',threadId:approval,toolCalls:[{id:'c'+i,sourceEventId:'m'+i}]});
+  });
+  events.push({id:'pause',type:'turn.update',state:{status:'paused'}});
+  const f = fixture(events);
+  f.options.draftFromContext = true;
+  const reviewed: string[] = [];
+  f.options.onApproval = async details => { reviewed.push(details.toolCallId); return true; };
+  assert.equal((await new ForgeRunner(f.options).run('Draft')).status, 'done');
+  assert.deepEqual(reviewed, ['c0']);
+  const replies = f.calls.find(c => c.method === 'events')!.args[2].events;
+  assert.deepEqual(replies.map((e:any) => e.approval.status), ['allow','deny','deny','deny','deny','deny']);
+});
+
+test('draft cancels an unexpected clarification without invoking the editor question callback', async () => {
+  const f = fixture([created,
+    { id:'m',type:'model.message',threadId:'main',toolCalls:[{id:'q',toolInfo:{type:'truefoundry-system',name:'ask_user_question'},function:{arguments:'{"question":"Continue?","options":[]}'}}] },
+    { id:'q-event',type:'tool.response_required',threadId:'main',toolCalls:[{id:'q',sourceEventId:'m'}] },
+    { id:'pause',type:'turn.update',state:{status:'paused'} },
+  ]);
+  f.options.draftFromContext = true;
+  f.options.onQuestion = async () => assert.fail('A draft cannot delegate a clarification');
+  assert.equal((await new ForgeRunner(f.options).run('Draft')).status, 'cancelled');
+  assert.equal(f.calls.filter(c => c.method === 'cancel').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'events').length, 0);
+});
+
 test('optional separate scout has an SDK-valid read-only spec, bounded notes and unchanged parent turn',async()=>{
  const f=fixture();let n=0,finished=0;const scoutEvents:unknown[]=[];
  Object.assign(f.options,{contextScout:{mcpName:'read-only-scout'},onScoutFinished:async()=>{finished++;},onScoutEvent:(e:unknown)=>scoutEvents.push(e)});

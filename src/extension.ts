@@ -10,7 +10,7 @@ import { confinedPath } from './workspace';
 import { ReviewStore, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
 import type { ContextSelection } from './context';
 import { describeContext, previewWorkspace } from './contextPreview';
-import { compactContext, compactEvidence, compactInstructions } from './compactContext';
+import { compactContext, compactEvidence, compactInstructions, draftInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
@@ -36,7 +36,7 @@ export async function activate(context:vscode.ExtensionContext) {
  let previewGeneration=0;
  let lastContext:{type:'context'; id:number; label:string; preview:ReturnType<typeof describeContext>; root:string}|undefined;
  let contextId=0;
- let phase='Ready';
+ let phase='Ready',runningPhase='Running';
  let reviewVersion=0;
  let reviewEpoch=0;
  const reviewFiles=()=>[...store.list().filter(file=>!live.get(file.path)),...live.list()];
@@ -227,7 +227,7 @@ export async function activate(context:vscode.ExtensionContext) {
    const accepted=reviewed.hunks.filter(h=>h.status==='accepted').length;
    emit(`${file}: ${accepted} accepted, ${reviewed.hunks.length-accepted} rejected. Sent decisions to TrueForge.`);
    return reviewFeedback(reviewed);
-  }finally{signal?.removeEventListener('abort',abort);live.end(request);if(active&&!cancellation&&!runExpired)phase=live.list().length?'Review requested':'Running';updateState();}
+  }finally{signal?.removeEventListener('abort',abort);live.end(request);if(active&&!cancellation&&!runExpired)phase=live.list().length?'Review requested':runningPhase;updateState();}
  }
  async function fileIdentity(file:string){
   const stat=await lstat(file,{bigint:true});
@@ -286,7 +286,7 @@ export async function activate(context:vscode.ExtensionContext) {
    try {
     switch(message?.type) {
      case 'ready': updateState(); if(lastContext&&lastContext.root===vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)void panel?.webview.postMessage(lastContext); break;
-     case 'run': if(typeof message.prompt==='string')await run(message.prompt); break;
+     case 'run': case 'draft': if(typeof message.prompt==='string')await run(message.prompt,undefined,message.type==='draft'); break;
      case 'inspect': if(typeof message.prompt==='string')await inspectContext(message.prompt); break;
      case 'openContext': await openExcerpt(message.id,message.index); break;
      case 'hunk': case 'hunks': case 'reviewSource':{
@@ -333,7 +333,7 @@ export async function activate(context:vscode.ExtensionContext) {
   if(root()===folder&&undo.at(-1)===previous&&await vscode.workspace.applyEdit(change)){if(undo.at(-1)===previous)undo.pop();emit(`Undid ${previous.path}.`);updateState();}
   }finally{undoing=false;}
  }
- async function run(prompt:string,scope?:{file:string;start:number;end:number}){
+ async function run(prompt:string,scope?:{file:string;start:number;end:number},draftFromContext=false){
   if(reviewing||undoing)throw new Error('Finish the active edit operation first.');
   if(active)throw new Error('A run is active. Stop it first.');if(!prompt.trim())return;
   if(!vscode.workspace.isTrusted)throw new Error('Trust this workspace before enabling agent tools.');
@@ -342,18 +342,21 @@ export async function activate(context:vscode.ExtensionContext) {
   const baseUrl=config.get<string>('baseUrl','http://127.0.0.1:8790');const parsed=new URL(baseUrl);if(!['127.0.0.1','localhost','[::1]'].includes(parsed.hostname))throw new Error('This build supports local TrueForge only.');
   const recentToolCalls:string[]=[];let modelSwitching=false;runExpired=false;
   const folder=root();
-  ++previewGeneration;++reviewEpoch;active=true;cancellation=false;liveMode=config.get<boolean>('liveReview',true);inlineScope=scope;phase='Running';openPanel();updateState();
+  runningPhase=draftFromContext?'Drafting from context':'Running';
+  ++previewGeneration;++reviewEpoch;active=true;cancellation=false;liveMode=config.get<boolean>('liveReview',true);inlineScope=scope;phase=runningPhase;openPanel();updateState();
   void vscode.commands.executeCommand('setContext','forgelens.running',true);
   void panel?.webview.postMessage({type:'plan',files:[]});
   emit('Assembling budgeted context…');
   try{
    const budget=config.get<number>('contextBudget',24000);
    const tokenBudget=config.get<number>('tokenBudget',10000);
-   const compact=!scope && config.get<boolean>('compactRequests',false);
+   const compact=draftFromContext||(!scope && config.get<boolean>('compactRequests',false));
    const selected=compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
    if(!selected||cancellation)return;
-   showContext(selected,'Initial retrieval preview',folder);
-   bridge=await startMcp({root:folder,budget,tokenBudget,compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
+   showContext(selected,draftFromContext?'Draft source context':'Initial retrieval preview',folder);
+   if(draftFromContext&&!selected.items.length)throw new Error('No files matched this draft. Refine the task, mention a file, or choose Run agent.');
+   if(draftFromContext)emit('Draft from context · proposals are limited to the retrieved files.');
+   bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
    },pending:currentOverlay,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
@@ -402,7 +405,7 @@ export async function activate(context:vscode.ExtensionContext) {
    emit('Connected to TrueForge · '+model);
    const preloadTools=compact || config.get<boolean>('preloadTools',false);
    let contextScout:ForgeOptions['contextScout'];
-   if(!scope&&config.get<boolean>('contextScout',false)){
+   if(!scope&&!draftFromContext&&config.get<boolean>('contextScout',false)){
     const deny=async()=>{throw new Error('The context scout is read-only.');};
     scoutBridge=await startMcp({root:folder,budget,tokenBudget,task:prompt,readOnly:true,requireDiscovery:true,active:()=>active&&!cancellation&&!runExpired,
      propose:deny,command:deny,onToolCall:summary=>emit('Read-only scout · '+summary),context:result=>showContext(result,'Scout discovery',folder)});
@@ -413,7 +416,7 @@ export async function activate(context:vscode.ExtensionContext) {
     emit('Read-only child scout enabled for this turn.');
    }
    if(cancellation)return;
-   runner=new ForgeRunner({baseUrl,model,preloadTools,contextScout,onScoutFinished:async()=>{
+   runner=new ForgeRunner({baseUrl,model,preloadTools,draftFromContext,contextScout,onScoutFinished:async()=>{
     const completed=scoutBridge;scoutBridge=undefined;await completed?.close();
    },runTimeoutMs:config.get<number>('runTimeoutMinutes',5)*60000,
    modelCallTimeoutMs:Math.round(config.get<number>('modelCallTimeoutSeconds',120)*1000),
@@ -421,7 +424,7 @@ export async function activate(context:vscode.ExtensionContext) {
    onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
-   mcpName,instructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
+   mcpName,instructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
    sourceEvidence:compact&&selected.items.length?compactEvidence(selected):undefined,onEvent:event=>{
     if(cancellation)return;
     if(event.type==='model.message.delta')emitDelta(String(event.content||''));
@@ -430,7 +433,7 @@ export async function activate(context:vscode.ExtensionContext) {
      emit(event.message);
     }else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);
     else emit(event.type);
-   },onQuestion:async details=>{
+   },onQuestion:draftFromContext?undefined:async details=>{
     if(cancellation||runExpired||modelSwitching)return undefined;
     emit(`Agent question: ${details.question}`);
     const custom={label:'Type a response…',custom:true};
@@ -449,6 +452,7 @@ export async function activate(context:vscode.ExtensionContext) {
      try{
       for(const file of files){
        if(typeof file?.path!=='string')throw new Error('Expected a workspace-relative path for every file.');
+       if(draftFromContext&&!selected.items.some(item=>item.path===file.path))throw new Error('Use Run agent to edit a file outside the retrieved context.');
        await confinedPath(folder,file.path);
        names.push(file.path);
       }
