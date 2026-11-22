@@ -4,7 +4,7 @@ ForgeLens is a desktop VS Code extension for making reviewed changes across sour
 
 [Install ForgeLens 0.4.2](https://github.com/aceholland/forgelens/releases/download/v0.4.2/forgelens-0.4.2.vsix) · [Narrated v0.4.2 Task A run](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-task-a.mp4) · [Task A results](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-task-a.json) · [Narrated v0.4.0 A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.0-ABC-and-0.4.1-review.mp4) · [Original Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-Version 0.4.2 changes how inline edits reach review. TrueForge asks the model to prepare the selected replacement in memory, check the proposed code and its documentation against the original instruction, then offer the first editable diff. You decide which hunks to accept. The release also adds five tools for inspecting context and reviewing patches. [v0.4.2 release evidence](https://github.com/aceholland/forgelens/releases/tag/v0.4.2)
+Version 0.4.2 changes how inline edits reach review. TrueForge asks the model to draft the selected replacement in memory. If a requested documentation update is missing, ForgeLens can send a diagnostic back to the model in the same turn. You see the resulting diff and decide which hunks to accept. The release also adds five tools for inspecting context and reviewing patches. [Task A recording, exact patch and test results](https://github.com/aceholland/forgelens/releases/tag/v0.4.2)
 
 The earlier A/B/C video uses v0.4.0 for the Flask tasks and v0.4.1 for the review navigation and summary export. These releases follow the competition deadline. [Video chapters and results](docs/evidence/v040-abc/README.md) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
 
@@ -38,6 +38,17 @@ The v0.3.1 Windows run took **4 minutes 18 seconds**. The provider reported **$0
 | **Find Related Tests** | With a source file active, run this Command Palette command. Choose a test to open. The picker explains whether it imports the source or has a matching filename. Static import matching covers Python and JavaScript/TypeScript. |
 
 Both context commands run locally and respect ForgeLens’s file exclusions.
+
+<details>
+<summary>See the five tools in Windows VS Code</summary>
+
+| Review a change | Explore a workspace |
+| --- | --- |
+| [Filter by file and decision](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-filtered-hunks.png) | [Compare excerpt ranges at two budgets](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-context-budgets.png) |
+| [Inspect a conflict with an unsaved buffer](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-workspace-conflict.png) | [Open a related test from the native picker](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-related-tests.png) |
+| [Inspect a single file’s exported patch](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-one-file-patch.png) | |
+
+</details>
 
 ### Agent and review controls
 
@@ -104,13 +115,17 @@ To use your own provider, open local TrueForge, add it in **Settings → Models*
 
 ```mermaid
 flowchart LR
-    Task["Task or selected code"] --> Parent["TrueForge editing agent"]
+    Task["Multi-file task"] --> Parent["TrueForge editing agent"]
     Parent --> Search["Local discovery and focused reads"]
     Parent -->|Optional| Scout["Native read-only child"]
     Scout --> Search
     Search --> Clips["Ranked excerpts with paths, lines and reasons"]
     Clips --> Plan["File plan"]
     Plan --> Review["Proposed changes in VS Code"]
+    Selection["Selected code and inline instruction"] --> Draft["Model drafts the replacement"]
+    Draft --> Check["Check requested documentation against the draft"]
+    Check -->|Missing coverage| Draft
+    Check -->|Ready for review| Review
 ```
 
 Use `@file:src/example.py` or `@symbol:get_debug_flag` to steer discovery. The token meter counts source excerpts using `o200k_base`. The provider may use a different tokenizer and also receives instructions, tool definitions and responses. Git ignore rules apply to automatic discovery. Put one literal file or folder path per line in a root `.forgelensignore` to exclude it even from explicit tool requests.

@@ -247,12 +247,12 @@ export async function startMcp(bridge: EditorBridge) {
     inputSchema:{replacement:z.string().max(250000).describe('Complete replacement for just the selected range, preserving indentation and unchanged selected lines.')}},async({replacement})=>{
     const base=await selectedView();
     report('prepare_selection',safeLabel(inline.file));
-    return output(JSON.stringify(inline.prepare(base,replacement)));
+    return output(JSON.stringify(inline.prepare(base,replacement,bridge.task)));
    });
    mcp.registerTool('propose_selection',{description:'Submit the checked draft to human hunk review. Supply replacement to correct the draft, or omit it to use the prepared text.',
     inputSchema:{draftId:z.string(),replacement:z.string().max(250000).optional()}},async({draftId,replacement},extra)=>{
     const base=await selectedView();
-    const content=inline.proposal(draftId,replacement,base);
+    const content=inline.proposal(draftId,replacement,base,bridge.task);
     extra.signal.throwIfAborted();
     inline.reset();
     report('propose_selection',safeLabel(inline.file));

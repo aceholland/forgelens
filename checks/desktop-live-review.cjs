@@ -116,7 +116,8 @@ exports.run = async () => {
     const saveInput=page.locator('.quick-input-widget:visible input:visible').first();
     await saveInput.fill(patchPath);
     await saveInput.press('Enter');
-    const patch=await until(()=>fs.existsSync(patchPath)&&fs.readFileSync(patchPath,'utf8'),'patch for one file');
+    await until(async()=>(await panel.locator('#events').innerText()).includes('Exported accepted hunks to one-file.patch.'),'file patch written');
+    const patch=fs.readFileSync(patchPath,'utf8');
     assert.match(patch,/^\+    return n \* 2$/m);
     assert.doesNotMatch(patch,/experimental|tests\/test_doubles/);
     execFileSync('git',['apply','--check',patchPath],{cwd:folder});
@@ -152,7 +153,8 @@ exports.run = async () => {
     await panel.getByRole('button',{name:'Export review summary…',exact:true}).click();
     await saveInput.fill(destination);
     await saveInput.press('Enter');
-    const report=await until(()=>fs.existsSync(destination) && JSON.parse(fs.readFileSync(destination,'utf8')), 'exported JSON review summary');
+    await until(async()=>(await panel.locator('#events').innerText()).includes('Exported review summary to forgelens-review.json.'),'review summary written');
+    const report=JSON.parse(fs.readFileSync(destination,'utf8'));
     assert.deepEqual(report.files,[
       {path:files[0],accepted:1,rejected:1,pending:0},
       {path:files[1],accepted:1,rejected:0,pending:0},

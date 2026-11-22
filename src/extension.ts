@@ -555,7 +555,7 @@ export async function activate(context:vscode.ExtensionContext) {
       const base=await originalText(file,creating||store.get(file)?.kind==='create');
       const current=currentOverlay(file)??base;
       if(selection && base!==selection.original)throw new Error('Document changed after selection. Start a new inline edit.');
-      const content=selection?selection.proposal(details.arguments.draftId,details.arguments.replacement,current):
+      const content=selection?selection.proposal(details.arguments.draftId,details.arguments.replacement,current,prompt):
        creating?details.arguments.content:resolveAgentProposal(current,details.arguments);
       if(typeof content!=='string'||content.includes('\0')||content.length>250000||(creating&&!content))throw new Error('Expected a bounded text proposal.');
       if(scope&&(creating||file!==scope.file||!isWithinSelection(base,content,scope.start,scope.end)))throw new Error('Change escapes the selected text.');
