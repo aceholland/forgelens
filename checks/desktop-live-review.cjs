@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const {execFileSync} = require('node:child_process');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 const { snapshot } = require('./desktop-preview.cjs');
@@ -98,9 +99,53 @@ exports.run = async () => {
     assert.match(output, /Candidate pytest exited 0/);
     assert.match(output, /2 passed/);
     assert.deepEqual(snapshot(folder), original);
+    await panel.getByLabel('Filter files').fill('SRC/');
+    await panel.getByLabel('Decision',{exact:true}).selectOption('rejected');
+    const hunks=panel.locator('#hunks');
+    assert.equal(await hunks.getByRole('heading').count(),1);
+    assert.ok((await hunks.innerText()).includes('hunk-2 · rejected'));
+    assert.ok(!(await hunks.innerText()).includes('hunk-1 · accepted'));
+    await capture('filtered-hunks');
+    await panel.getByLabel('Decision',{exact:true}).selectOption('accepted');
+    const patchPath=path.join(path.dirname(folder),'one-file.patch');
+    await hunks.getByRole('button',{name:'Export accepted file patch…',exact:true}).click();
+    const saveInput=page.locator('.quick-input-widget:visible input:visible').first();
+    await saveInput.fill(patchPath);
+    await saveInput.press('Enter');
+    const patch=await until(()=>fs.existsSync(patchPath)&&fs.readFileSync(patchPath,'utf8'),'patch for one file');
+    assert.match(patch,/^\+    return n \* 2$/m);
+    assert.doesNotMatch(patch,/experimental|tests\/test_doubles/);
+    execFileSync('git',['apply','--check',patchPath],{cwd:folder});
+    if(captureDir){
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(patchPath),{viewColumn:vscode.ViewColumn.One});
+      await capture('one-file-patch');
+    }
+    await panel.getByLabel('Filter files').fill('');
+    await panel.getByLabel('Decision',{exact:true}).selectOption('all');
+    const check=panel.getByRole('button',{name:'Check workspace conflicts',exact:true});
+    const reportText=panel.locator('#conflictResult');
+    await check.click();
+    await until(async()=>(await reportText.innerText()).includes('Checked 2 accepted files. No conflicts found.'),'clean preflight');
+    const editedDoc=await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(folder,files[1])));
+    const originalText=editedDoc.getText();
+    const editor=await vscode.window.showTextDocument(editedDoc,{viewColumn:vscode.ViewColumn.One});
+    assert.ok(await editor.edit(edit=>edit.insert(new vscode.Position(0,0),'# unsaved change\n')));
+    await check.click();
+    await until(async()=>(await reportText.innerText()).includes(files[1]+' · Contents changed since review began.'),'unsaved conflict');
+    await capture('workspace-conflict');
+    await panel.getByRole('button',{name:'Review hunks',exact:true}).click();
+    await until(async()=>(await panel.locator('#events').innerText()).includes('Resolve workspace conflicts before applying: '+files[1]),'conflict prevented batch apply');
+    const otherDoc=await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(folder,files[0])));
+    assert.equal(otherDoc.isDirty,false);
+    assert.deepEqual(snapshot(folder),original);
+    await vscode.window.showTextDocument(editedDoc,{viewColumn:vscode.ViewColumn.One});
+    await vscode.commands.executeCommand('undo');
+    await until(()=>!editedDoc.isDirty && editedDoc.getText()===originalText,'original buffer restored');
+    await check.click();
+    await until(async()=>(await reportText.innerText()).includes('No conflicts found.'),'conflict cleared after undo');
+    assert.deepEqual(snapshot(folder),original);
     const destination=path.join(path.dirname(folder),'forgelens-review.json');
     await panel.getByRole('button',{name:'Export review summary…',exact:true}).click();
-    const saveInput=page.locator('.quick-input-widget:visible input:visible').first();
     await saveInput.fill(destination);
     await saveInput.press('Enter');
     const report=await until(()=>fs.existsSync(destination) && JSON.parse(fs.readFileSync(destination,'utf8')), 'exported JSON review summary');
@@ -120,7 +165,9 @@ exports.run = async () => {
     assert.ok(!vscode.workspace.textDocuments.some(d=>d.uri.scheme==='file' && d.isDirty));
     return {editor:vscode.version, os:process.platform,
       arch:process.arch, vsix:process.env.FORGELENS_VSIX_SHA256, provider:'deterministic loopback',
-      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true, pendingHunkVisits:visits, exportedReview:report};
+      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true, pendingHunkVisits:visits, exportedReview:report,
+      reviewFilters:{file:'SRC/',decision:'rejected',visibleHunk:'hunk-2'},filePatch:{path:files[0],gitApplyCheck:true},
+      conflictCheck:{checked:2,unsavedConflict:files[1],batchApplyBlocked:true,cleanAfterUndo:true}};
   } catch (error) {
     const diagnostic = await panel.locator('body').innerText({timeout:5000}).catch(()=>'(unavailable)');
     throw Error(String(error)+'\nFixture panel:\n'+diagnostic.slice(-3000));

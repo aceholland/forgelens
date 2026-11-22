@@ -11,6 +11,8 @@ function load() {
     value = ''; textContent = ''; hidden = false; disabled = false;
     children: Element[] = [];
     onclick?: () => void;
+    oninput?: () => void;
+    onchange?: () => void;
     appendChild(child: Element) { this.children.push(child); }
     append(...children: Element[]) { this.children.push(...children); }
     replaceChildren() { this.children = []; this.textContent = ''; }
@@ -119,4 +121,50 @@ test('live queue exposes new files, file and group controls, and the token meter
   ui.receive({type:'context',preview:{items:[],usedChars:40,budgetChars:100,usedTokens:9,budgetTokens:21,encoding:'o200k_base'}});
   assert.match(ui.nodes.budget!.textContent,/9 \/ 21 excerpt tokens \(o200k_base\).*40 \/ 100 characters/);
   assert.equal((ui.nodes.meter as any).value,9); assert.equal((ui.nodes.meter as any).max,21);
+});
+
+test('file and status filters combine, retain the latest queue and scope bulk actions',()=>{
+  const ui=load();
+  const files=[
+    {path:'src/math.ts',hunks:[{id:'h1',status:'pending'},{id:'h2',status:'accepted'}]},
+    {path:'test/math.ts',hunks:[{id:'h1',status:'pending'}]},
+  ];
+  ui.receive({type:'queue',version:2,editable:true,canCheck:true,files});
+  ui.nodes.fileFilter!.value='SRC/';
+  ui.nodes.fileFilter!.oninput!();
+  assert.deepEqual(ui.nodes.hunks!.children.map(c=>c.textContent).filter(Boolean),['src/math.ts']);
+  ui.nodes['accept-all']!.onclick!();
+  assert.deepEqual(Array.from(ui.sent.at(-1).paths),['src/math.ts']);
+  ui.nodes.nextHunk!.onclick!();
+  assert.deepEqual(Array.from(ui.sent.at(-1).paths),['src/math.ts']);
+  ui.nodes.decisionFilter!.value='rejected';
+  ui.nodes.decisionFilter!.onchange!();
+  assert.equal(ui.nodes.hunks!.textContent,'No hunks match these filters.');
+  assert.ok(ui.nodes['accept-all']!.disabled);
+  files[0]!.hunks[0]!.status='rejected';
+  ui.receive({type:'queue',version:3,editable:true,canCheck:true,files});
+  const visible=ui.nodes.hunks!.children;
+  assert.equal(visible.length,3);
+  assert.equal(visible[1]!.children[0]!.textContent,'h1 · rejected');
+  const exportButton=visible[2]!.children.at(-1)!;
+  assert.equal(exportButton.disabled,false);
+  exportButton.onclick!();
+  assert.deepEqual({...ui.sent.at(-1)},{type:'exportFile',path:'src/math.ts',version:3});
+});
+
+test('workspace conflict reports display all paths as text and discard outdated check results',()=>{
+  const ui=load();
+  const receiveQueue=(version:number)=>ui.receive({type:'queue',version,editable:true,canCheck:true,
+    files:[{path:'x.py',hunks:[{id:'h1',status:'accepted'}]}]});
+  receiveQueue(1);
+  assert.equal(ui.nodes.checkConflicts!.disabled,false);
+  ui.nodes.checkConflicts!.onclick!();
+  assert.deepEqual({...ui.sent.at(-1)},{type:'checkConflicts',version:1});
+  ui.receive({type:'conflicts',version:1,checked:1,conflicts:[{path:'<x>.py',reason:'Changed.'}]});
+  assert.equal(ui.nodes.conflictResult!.children[0]!.children[0]!.textContent,'<x>.py · Changed.');
+  receiveQueue(2);
+  ui.receive({type:'conflicts',version:1,checked:1,conflicts:[]});
+  assert.equal(ui.nodes.conflictResult!.textContent,'');
+  ui.receive({type:'conflicts',version:2,checked:1,conflicts:[]});
+  assert.match(ui.nodes.conflictResult!.textContent,/Checked 1 accepted file. No conflicts found/);
 });

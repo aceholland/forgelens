@@ -15,6 +15,7 @@ function createFixture(parent, liveReview = false) {
     '.forgelensignore': '# Literal workspace exclusions\nprivate/\n',
     '.env': 'THIS_IS_SYNTHETIC_TEST_DATA=true\n',
     'src/visible.ts': 'export function previewFeature() { return "visible"; }\n',
+    'tests/visible.test.ts': 'import { previewFeature } from "../src/visible";\nexport const observed = previewFeature();\n',
     'src/tracked.tmp': 'export const trackedPreview = "tracked";\n',
     'ignored/blocked.ts': 'export const previewIgnored = "git exclusion";\n',
     'private/blocked.ts': 'export const previewPrivate = "workspace exclusion";\n',

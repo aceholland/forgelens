@@ -14,6 +14,7 @@ import { anchorExcerpt, draftInsertionOffsets } from './compactContext';
 import type { SequentialDraft } from './sequentialDraft';
 import { waitForDraftInterval } from './draftPacing';
 import { guardPythonDraftInsertions } from './pythonDraft';
+import type { InlineSelection } from './inlineSelection';
 
 const exactEdit = z.object({
  oldText:z.string().min(1).max(250000).describe('A unique literal from the current file to replace.'),
@@ -37,6 +38,9 @@ export interface EditorBridge {
  /** Actual local discovery supplied to the model as structured source excerpts. */
  compactContext?:ContextSelection;
  draftFromContext?:boolean;
+ inlineSelection?:InlineSelection;
+ /** Current editor text, including unsaved changes, for the captured inline document. */
+ inlineDocument?():Promise<string>;
  sequentialDraft?:SequentialDraft;
  draftModelIntervalSeconds?:number;
  onDraftWait?(remainingMs:number):void;
@@ -57,6 +61,7 @@ export interface EditorBridge {
 }
 export async function startMcp(bridge: EditorBridge) {
  const readOnly=bridge.readOnly===true;
+ const inline=readOnly?undefined:bridge.inlineSelection;
  let closed=false,closing:Promise<void>|undefined;
  const token=randomBytes(32).toString('hex');
  const transports=new Set<StreamableHTTPServerTransport>();
@@ -87,7 +92,7 @@ export async function startMcp(bridge: EditorBridge) {
   const current=attempt.getStore();
   if(current && current.generation!==generation)throw new Error('This tool call belongs to a cancelled turn.');
  };
- const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;discoveryComplete=preselected;exploration.clear();};
+ const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;discoveryComplete=preselected;exploration.clear();inline?.reset();};
  const missingContext=()=>({...show('Missing exploration request context.'),isError:true});
  const failed=(error:unknown,used:number)=>({...show(error instanceof Error?error.message:'Exploration failed.',used),isError:true});
  const digest=(...values:(string|number)[])=>createHash('sha256').update(JSON.stringify(values)).digest('hex');
@@ -223,6 +228,40 @@ export async function startMcp(bridge: EditorBridge) {
   },async({query})=>collectContext(query,false));
   }
   if(!readOnly){
+  if(inline){
+   const selectedView=async()=>{
+    guard();
+    await confinedPath(bridge.root,inline.file);
+    const current=bridge.inlineDocument?await bridge.inlineDocument():await readWorkspace(bridge.root,inline.file);
+    guard();
+    if(current!==inline.original)throw new Error('Document changed after selection. Start a new inline edit.');
+    return bridge.pending?.(inline.file)??current;
+   };
+   mcp.registerTool('read_selection',{description:'Read another part of the original editor selection by UTF-16 offset. Use this if the supplied selection excerpt was truncated.',
+    inputSchema:{offset:z.number().int().min(0)}},async({offset})=>{
+    await selectedView();
+    const text=inline.text.slice(offset,offset+4000);
+    return output(JSON.stringify({offset,text,remaining:Math.max(0,inline.text.length-offset-text.length)}));
+   });
+   mcp.registerTool('prepare_selection',{description:'Prepare the complete replacement for the selected text in memory. Returns a draft to check before the first editor diff.',
+    inputSchema:{replacement:z.string().max(250000).describe('Complete replacement for just the selected range, preserving indentation and unchanged selected lines.')}},async({replacement})=>{
+    const base=await selectedView();
+    report('prepare_selection',safeLabel(inline.file));
+    return output(JSON.stringify(inline.prepare(base,replacement)));
+   });
+   mcp.registerTool('propose_selection',{description:'Submit the checked draft to human hunk review. Supply replacement to correct the draft, or omit it to use the prepared text.',
+    inputSchema:{draftId:z.string(),replacement:z.string().max(250000).optional()}},async({draftId,replacement},extra)=>{
+    const base=await selectedView();
+    const content=inline.proposal(draftId,replacement,base);
+    extra.signal.throwIfAborted();
+    inline.reset();
+    report('propose_selection',safeLabel(inline.file));
+    const feedback=await bridge.propose(inline.file,content,base,extra.signal);
+    guard();
+    if(bridge.pending?.(inline.file)!==undefined)hasProposed=true;
+    return output(feedback);
+   });
+  }
   if(preselected)mcp.registerTool('propose_changes',{
    description:sequential ? 'Include your ordered file plan on the first call. Propose exact edits for one planned file per call. Tests run on the reviewed candidate after the last file.' : 'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
    inputSchema:{...(sequential?{plan:z.array(z.object({path:draftPath,reason})).min(1).max(12).optional()}:{}),
@@ -312,6 +351,7 @@ export async function startMcp(bridge: EditorBridge) {
    guard();return show(results.join('\n'));
   });
   if(draftPaths)return mcp;
+  if(!inline){
   mcp.registerTool('report_plan',{
    description:'Record planned workspace-relative files and the reason for each before staging edits. Does not consume exploration calls or write disk.',
    inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400)})).min(1).max(12)}
@@ -331,6 +371,7 @@ export async function startMcp(bridge: EditorBridge) {
    try{await lstat(target);throw new Error('File already exists.');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
    guard();report('create_file',safeLabel(path));const result=await bridge.create!(path,content,extra.signal);guard();if(bridge.pending?.(path)!==undefined)hasProposed=true;return show(result);
   });
+  }
   if(bridge.validate)mcp.registerTool('validate_candidate',{description:'Request approval to test staged edits in a temporary copy using pytest and return its actual exit and output. Use failures to repair the current overlay in this turn.',inputSchema:{tests:z.array(z.string().min(1).max(400)).max(20).describe('Workspace-relative pytest paths or node IDs, or [] for the full suite.')}},async({tests},extra)=>{
    guard();report('validate_candidate');const result=await bridge.validate!(tests,extra.signal);guard();return show(result);
   });

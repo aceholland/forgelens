@@ -16,6 +16,8 @@ export interface ForgeOptions {
   sourceEvidence?: string;
   /** Draft from the supplied context with one preloaded, review-required editor tool. */
   draftFromContext?: boolean;
+  /** Preload selection-scoped drafting and review tools for a single editor region. */
+  inlineEdit?: boolean;
   sequentialDraft?: SequentialDraft;
   baseUrl: string; model: string; fallbackModel?: string; preloadTools?: boolean; reasoningEffort?: string; dynamicSubAgents?: boolean; mcpName: string; instructions: string;
   fallbackModels?: readonly string[];
@@ -132,7 +134,7 @@ export class ForgeRunner {
   private producedOutput = false;
   private transport: ReturnType<typeof createForgeTransport>;
   private get contextScout() {
-    return this.options.draftFromContext ? undefined : this.options.contextScout;
+    return this.options.draftFromContext || this.options.inlineEdit ? undefined : this.options.contextScout;
   }
   constructor(private readonly options: ForgeOptions) {
     const modelWindow = Math.max(900000, options.modelCallTimeoutMs || 0);
@@ -340,10 +342,15 @@ export class ForgeRunner {
   private async runModel(prompt: string, model: string, observe:(event:TrueForgeApi.TurnStreamingEvent)=>void, attemptSignal:AbortSignal,scout=false): Promise<RunResult> {
     this.sessionId = '';this.turnId='';this.terminalModelTimeout=false;this.retryWaitMs=undefined;this.usedTools=false;this.producedOutput=false;
     const draft = this.options.draftFromContext === true;
+    const inline = this.options.inlineEdit === true;
     const native=this.contextScout?.mode==='native';
     const readConnector:TrueForgeApi.McpServer={name:this.contextScout?.mcpName??'',preload:scout,
       enableTools:READ_TOOLS,requireApprovalForTools:[]};
-    const parentConnector:TrueForgeApi.McpServer=draft?{
+    const parentConnector:TrueForgeApi.McpServer=inline?{
+      name:this.options.mcpName,preload:true,
+      enableTools:['prepare_selection','propose_selection','read_selection','read_file','search_workspace','validate_candidate','run_command'],
+      requireApprovalForTools:['propose_selection','validate_candidate','run_command'],
+    }:draft?{
       name:this.options.mcpName,preload:true,enableTools:['propose_changes'],requireApprovalForTools:['propose_changes'],
     }:{name:this.options.mcpName,preload:this.options.preloadTools??false,
       ...(this.options.sourceEvidence?{enableTools:['propose_changes','propose_edit','create_file','read_file','search_workspace','validate_candidate']}:{}),
@@ -525,7 +532,9 @@ export class ForgeRunner {
         };
         let decision:ApprovalDecision;
         const rootEditorCall = approval.threadId==='main' && source?.type==='model.message' && source.threadId==='main' && details.serverName===this.options.mcpName;
-        if(draft && (!rootEditorCall || call.toolInfo.type!=='mcp' || details.name!=='propose_changes')){
+        if(inline && (!rootEditorCall || call.toolInfo.type!=='mcp' || !parentConnector.requireApprovalForTools?.includes(details.name))){
+          decision={allowed:false,reason:'Inline edits require the checked selection proposal from the main editor thread.'};
+        }else if(draft && (!rootEditorCall || call.toolInfo.type!=='mcp' || details.name!=='propose_changes')){
           decision={allowed:false,reason:'Draft from context permits only a directly reviewed proposal from the main editor thread.'};
         }else if(native && !rootEditorCall){
           decision={allowed:false,reason:'Scout threads can use only the read-only context connector. This editor operation was denied.'};

@@ -1,7 +1,7 @@
 import { selectContext, type ContextFile, type ContextSelection } from './context';
 import { listWorkspace, readWorkspace } from './workspace';
 
-export async function previewWorkspace(root: string, prompt: string, budget: number, stopped: () => boolean, tokenBudget=10000) {
+export async function readContextFiles(root: string, stopped: () => boolean) {
   const files: ContextFile[] = [];
   let scanned = 0;
   for (const file of await listWorkspace(root)) {
@@ -18,7 +18,12 @@ export async function previewWorkspace(root: string, prompt: string, budget: num
     if (scanned === 8_000_000) break;
   }
   if (stopped()) return undefined;
-  return selectContext(files, prompt, budget, undefined, tokenBudget);
+  return files;
+}
+
+export async function previewWorkspace(root: string, prompt: string, budget: number, stopped: () => boolean, tokenBudget=10000) {
+  const files = await readContextFiles(root, stopped);
+  return files && selectContext(files, prompt, budget, undefined, tokenBudget);
 }
 
 export function describeContext(result: ContextSelection) {

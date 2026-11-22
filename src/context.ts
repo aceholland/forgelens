@@ -40,7 +40,7 @@ function terms(value: string): string[] {
 }
 
 type Role = 'source' | 'tests' | 'docs' | 'other';
-function fileIdentity(path: string): { role: Role; family: string } {
+export function fileIdentity(path: string): { role: Role; family: string } {
   const parts = path.toLowerCase().split('/');
   const base = parts.at(-1)!;
   const stem = base.replace(/\.[^.]+$/, '').replace(/^test[_-]/, '').replace(/[_.-](?:test|spec)s?$/, '');

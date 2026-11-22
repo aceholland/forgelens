@@ -106,6 +106,20 @@ test('compact mode keeps repository text in user-role context and exposes focuse
  assert.ok(!spec.mcpServers[0].enableTools.includes('select_context'));
  assert.deepEqual(f.calls.find(c=>c.method==='stream')!.args[1].input,[{type:'user.message',content:'Original task'}]);
 });
+test('inline sessions keep the operator prompt separate and expose only checked selection edits',async()=>{
+ const f=fixture();
+ Object.assign(f.options,{inlineEdit:true,sourceEvidence:'Untrusted selected text',contextScout:{mcpName:'scout',mode:'native'}});
+ assert.equal((await new ForgeRunner(f.options).run('Document the selected function.')).status,'done');
+ const spec=f.calls.find(c=>c.method==='create')!.args[0].agent.spec;
+ assert.equal(spec.mcpServers.length,1);
+ const tools=spec.mcpServers[0];
+ assert.equal(tools.preload,true);
+ assert.ok(tools.enableTools.includes('prepare_selection') && tools.enableTools.includes('propose_selection'));
+ assert.ok(!tools.requireApprovalForTools.includes('prepare_selection') && tools.requireApprovalForTools.includes('propose_selection'));
+ assert.ok(!tools.enableTools.includes('propose_edit') && !tools.enableTools.includes('create_file'));
+ assert.deepEqual(spec.messages,[{type:'user.message',content:'Untrusted selected text'}]);
+ assert.deepEqual(f.calls.find(c=>c.method==='stream')!.args[1].input,[{type:'user.message',content:'Document the selected function.'}]);
+});
 const approvalEvents = [created,
   {id:'m1',type:'model.message',toolCalls:[{id:'c1',function:{arguments:JSON.stringify({mcp_server:'editor',tool_name:'propose_edit',input:{path:'a.ts',content:'new'}})},toolInfo:{type:'truefoundry-system',name:'call_tool'}}]},
   {id:'a1',type:'tool.approval_required',threadId:'th1',toolCalls:[{id:'c1',sourceEventId:'m1'}]},

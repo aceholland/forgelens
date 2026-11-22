@@ -12,6 +12,22 @@ export interface ReviewHunk {
 export interface FileProposal { path: string; original: string; proposed: string; hunks: ReviewHunk[]; kind?: 'create' }
 export interface AppliedEdit { path: string; before: string; after: string; kind?: 'create' }
 
+/** Inspect only accepted changes. Collect every conflict so the reviewer can resolve them together. */
+export async function checkAcceptedFiles(files: FileProposal[], readOriginal: (file: FileProposal) => Promise<string>) {
+  const accepted = files.filter(file => file.hunks.some(hunk => hunk.status === 'accepted'));
+  const conflicts: {path: string; reason: string}[] = [];
+  for (const file of accepted) {
+    try {
+      if (await readOriginal(file) !== file.original) {
+        conflicts.push({path: file.path, reason: 'Contents changed since review began.'});
+      }
+    } catch (error) {
+      conflicts.push({path: file.path, reason: error instanceof Error ? error.message : 'Could not verify this path.'});
+    }
+  }
+  return {checked: accepted.length, conflicts};
+}
+
 /** Pure staging: all offsets address the immutable original, never the filesystem. */
 export function createProposal(path: string, original: string, proposed: string): FileProposal {
   const hunks: ReviewHunk[] = [];

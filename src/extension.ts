@@ -7,7 +7,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { ForgeRunner, registerMcp, TurnStreamInterrupted, type ForgeOptions } from './client';
 import { startMcp } from './mcp';
 import { confinedPath } from './workspace';
-import { ReviewStore, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
+import { ReviewStore, checkAcceptedFiles, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
 import type { ContextSelection } from './context';
 import { describeContext, previewWorkspace } from './contextPreview';
 import { compactContext, compactEvidence, compactInstructions, draftInstructions, sequentialDraftInstructions } from './compactContext';
@@ -19,11 +19,14 @@ import { nextPendingHunk, ReviewSummary } from './reviewSummary';
 import { userFixturePins } from './candidateFixtures';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
+import { registerContextTools } from './editorContextTools';
 
 import { instructionsForTools } from './instructions';
+import { InlineSelection, inlineInstructions } from './inlineSelection';
 import { SequentialDraft } from './sequentialDraft';
 
 export async function activate(context:vscode.ExtensionContext) {
+ registerContextTools(context);
  const store=new ReviewStore(); const undo:(AppliedEdit & {identity?:string})[]=[]; const virtual=new Map<string,string>();
  const live=new LiveReviews();
  const lensesChanged=new vscode.EventEmitter<void>();
@@ -49,7 +52,7 @@ export async function activate(context:vscode.ExtensionContext) {
   const files=reviewFiles();
   void panel?.webview.postMessage({type:'state',phase,active,pending:files.length>0,canUndo:undo.length>0,
    canExport:files.some(f=>f.hunks.some(h=>h.status==='accepted')),canExportSummary:summary.available});
-  void panel?.webview.postMessage({type:'queue',version:++reviewVersion,editable:!reviewing&&(!active||live.list().length>0),
+  void panel?.webview.postMessage({type:'queue',version:++reviewVersion,canCheck:!active&&!reviewing,editable:!reviewing&&(!active||live.list().length>0),
    files:files.map(f=>({path:f.path,kind:f.kind,editable:!reviewing&&(!active||!!live.get(f.path)),hunks:f.hunks.map(h=>({id:h.id,status:h.status}))}))});
   lensesChanged.fire();
  };
@@ -129,14 +132,15 @@ export async function activate(context:vscode.ExtensionContext) {
   const range=doc.validateRange(new vscode.Range(item.startLine-1,0,item.endLine-1,Number.MAX_SAFE_INTEGER));
   await vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:range,preview:true});
  }
- async function exportPatch(){
+ async function exportPatch(onlyPath?:string){
   if(active||reviewing)return;
   const folder=root();
   const version=reviewVersion;
-  const files=store.list().filter(p=>p.hunks.some(h=>h.status==='accepted'));
+  const files=store.list().filter(p=>(onlyPath===undefined||p.path===onlyPath)&&p.hunks.some(h=>h.status==='accepted'));
   if(!files.length){void vscode.window.showInformationMessage('Mark at least one hunk Accepted in the panel to export a patch.');return;}
-  const destination=await vscode.window.showSaveDialog({title:'Export accepted hunks as a Git patch',
-   defaultUri:vscode.Uri.file(path.join(root(),'forgelens-accepted.patch')),filters:{'Git patch':['patch','diff']}});
+  const filename=onlyPath ? path.basename(onlyPath)+'.patch' : 'forgelens-accepted.patch';
+  const destination=await vscode.window.showSaveDialog({title:onlyPath?'Export accepted hunks for '+onlyPath:'Export accepted hunks as a Git patch',
+   defaultUri:vscode.Uri.file(path.join(folder,filename)),filters:{'Git patch':['patch','diff']}});
   if(!destination)return;
   if(destination.scheme!=='file'||!(/\.(patch|diff)$/i).test(destination.fsPath))throw new Error('Choose a local .patch or .diff file.');
   const exportTarget=await resolvedExportPath(destination.fsPath);
@@ -145,7 +149,7 @@ export async function activate(context:vscode.ExtensionContext) {
    if(files.includes(file)&&await originalText(file.path,file.kind==='create')!==file.original)throw new Error(`The workspace changed at ${file.path}. Refresh the proposal before exporting.`);
   }
   if(version!==reviewVersion||folder!==root())throw new Error('The review changed. Export again with your current decisions.');
-  const patch=exportAcceptedPatch(store);
+  const patch=exportAcceptedPatch(store,onlyPath);
   await vscode.workspace.fs.writeFile(destination,Buffer.from(patch,'utf8'));
   emit(`Exported accepted hunks to ${path.basename(destination.fsPath)}.`);
  }
@@ -260,16 +264,37 @@ export async function activate(context:vscode.ExtensionContext) {
   const stat=await lstat(file,{bigint:true});
   return stat.isFile()?`${stat.dev}:${stat.ino}:${stat.birthtimeNs}`:undefined;
  }
+ async function inspectAcceptedFiles(){
+  const folder=root(),version=reviewVersion;
+  const result=await checkAcceptedFiles(store.list(),async file=>{
+   if(file.kind==='create')return originalText(file.path,true);
+   const local=await confinedPath(folder,file.path);
+   if(!(await lstat(local)).isFile())throw new Error('The reviewed path is no longer a regular file.');
+   return (await vscode.workspace.openTextDocument(vscode.Uri.file(local))).getText();
+  });
+  if(folder!==root()||version!==reviewVersion)throw new Error('The review changed during the check. Check the current review again.');
+  void panel?.webview.postMessage({type:'conflicts',version,...result});
+  return result;
+ }
  async function review(){
   if(reviewing||undoing)return;
   if(active){void vscode.window.showInformationMessage('Finish or cancel the run before applying staged edits.');return;}
   const folder=root();
   reviewing=true;updateState();
-  try {for(const p of store.list()){
-   for(const h of p.hunks){
-    if(h.status!=='pending')continue; await preview(p,h.id);
-    const answer=await vscode.window.showInformationMessage(`${p.path} · ${h.id}: review the diff, then choose.`,{modal:true},'Accept hunk','Reject hunk');
-    if(!answer||root()!==folder||!store.get(p.path))return;summary.observe(store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected'));
+  try {
+   for(const p of store.list()){
+    for(const h of p.hunks){
+     if(h.status!=='pending')continue; await preview(p,h.id);
+     const answer=await vscode.window.showInformationMessage(`${p.path} · ${h.id}: review the diff, then choose.`,{modal:true},'Accept hunk','Reject hunk');
+     if(!answer||root()!==folder||!store.get(p.path))return;summary.observe(store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected'));
+    }
+   }
+   const {conflicts}=await inspectAcceptedFiles();
+   if(conflicts.length)throw new Error('Resolve workspace conflicts before applying: '+conflicts.map(file=>file.path).join(', '));
+   for(const p of store.list()){
+   if(!p.hunks.some(h=>h.status==='accepted')){
+    store.remove(p.path);
+    continue;
    }
    const created=p.kind==='create';
    const edit=store.prepare(p.path,await originalText(p.path,created));
@@ -329,15 +354,23 @@ export async function activate(context:vscode.ExtensionContext) {
      }
      case 'allHunks':{
       if(reviewing||message.version!==reviewVersion||(message.action!=='accepted'&&message.action!=='rejected'))break;
-      for(const proposal of active?live.list():store.list())decide(proposal.path,undefined,message.action);
+      const files=active?live.list():store.list();
+      for(const proposal of files){
+       if(message.paths!==undefined&&(!Array.isArray(message.paths)||!message.paths.includes(proposal.path)))continue;
+       if(proposal.hunks.some(hunk=>hunk.status==='pending'))decide(proposal.path,undefined,message.action);
+      }
       break;
      }
      case 'verify': await verifySavedWorkspace(emit); break;
      case 'export': await exportPatch(); break;
+     case 'exportFile': if(message.version===reviewVersion&&typeof message.path==='string'&&store.get(message.path))await exportPatch(message.path); break;
+     case 'checkConflicts': if(!active&&!reviewing&&message.version===reviewVersion)await inspectAcceptedFiles(); break;
      case 'exportSummary': await exportSummary(); break;
      case 'nextHunk': {
       if(reviewing||message.version!==reviewVersion)break;
-      const next=nextPendingHunk(active?live.list():store.list(),lastVisitedHunk);
+      const files=active?live.list():store.list();
+      const visible=message.paths===undefined?files:files.filter(file=>Array.isArray(message.paths)&&message.paths.includes(file.path));
+      const next=nextPendingHunk(visible,lastVisitedHunk);
       if(next){
        lastVisitedHunk={path:next.file.path,id:next.hunk.id};
        await preview(next.file,next.hunk.id);
@@ -371,7 +404,7 @@ export async function activate(context:vscode.ExtensionContext) {
   if(root()===folder&&undo.at(-1)===previous&&await vscode.workspace.applyEdit(change)){if(undo.at(-1)===previous)undo.pop();emit(`Undid ${previous.path}.`);updateState();}
   }finally{undoing=false;}
  }
- async function run(prompt:string,scope?:{file:string;start:number;end:number},draftFromContext=false){
+ async function run(prompt:string,scope?:InlineSelection,draftFromContext=false){
   if(reviewing||undoing)throw new Error('Finish the active edit operation first.');
   if(active)throw new Error('A run is active. Stop it first.');if(!prompt.trim())return;
   if(!vscode.workspace.isTrusted)throw new Error('Trust this workspace before enabling agent tools.');
@@ -391,12 +424,13 @@ export async function activate(context:vscode.ExtensionContext) {
    const budget=config.get<number>('contextBudget',24000);
    const tokenBudget=config.get<number>('tokenBudget',10000);
    const compact=draftFromContext||(!scope && config.get<boolean>('compactRequests',false));
-   const selected=compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation,draftFromContext):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
+   const selected=scope?scope.context(budget,tokenBudget):compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation,draftFromContext):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
    if(!selected||cancellation)return;
-   showContext(selected,draftFromContext?'Draft source context':'Initial retrieval preview',folder);
+   showContext(selected,scope?'Selected editor context':draftFromContext?'Draft source context':'Initial retrieval preview',folder);
    if(draftFromContext&&!selected.items.length)throw new Error('No files matched this draft. Refine the task, mention a file, or choose Run agent.');
    if(draftFromContext)emit('Draft from context · proposals are limited to the retrieved files.');
-   bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,sequentialDraft,
+   bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,sequentialDraft,inlineSelection:scope,
+    inlineDocument:scope?()=>originalText(scope.file,false):undefined,
     draftModelIntervalSeconds:config.get<number>('draftModelIntervalSeconds',0),
     onDraftWait:ms=>emit('Draft model interval · waiting '+Math.ceil(ms/1000)+'s before returning the tool result.'),
     compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
@@ -465,7 +499,7 @@ export async function activate(context:vscode.ExtensionContext) {
     emit('Read-only child scout enabled for this turn.');
    }
    if(cancellation)return;
-   runner=new ForgeRunner({baseUrl,model,preloadTools,draftFromContext,sequentialDraft,contextScout,onScoutFinished:async()=>{
+   runner=new ForgeRunner({baseUrl,model,preloadTools,draftFromContext,inlineEdit:!!scope,sequentialDraft,contextScout,onScoutFinished:async()=>{
     const completed=scoutBridge;scoutBridge=undefined;await completed?.close();
    },runTimeoutMs:config.get<number>('runTimeoutMinutes',5)*60000,
    modelCallTimeoutMs:Math.round(config.get<number>('modelCallTimeoutSeconds',120)*1000),
@@ -474,8 +508,8 @@ export async function activate(context:vscode.ExtensionContext) {
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
    fallbackModels:config.get<string[]>('fallbackModels'),
-   mcpName,instructions:sequentialDraft?sequentialDraftInstructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
-   sourceEvidence:compact&&selected.items.length?compactEvidence(selected,draftFromContext):undefined,onEvent:event=>{
+   mcpName,instructions:scope?inlineInstructions:sequentialDraft?sequentialDraftInstructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
+   sourceEvidence:scope?scope.evidence(selected):compact&&selected.items.length?compactEvidence(selected,draftFromContext):undefined,onEvent:event=>{
     if(cancellation)return;
     if(event.type==='model.message.delta')emitDelta(String(event.content||''));
     else if(event.type==='client.status'){
@@ -512,14 +546,17 @@ export async function activate(context:vscode.ExtensionContext) {
      }catch(error){return {allowed:false,reason:'Invalid proposal path: '+(error instanceof Error?error.message:'correct the paths and try again')};}
      return (await vscode.window.showInformationMessage('Allow TrueForge to propose changes for review?',{modal:true,detail:names.join('\n')},'Review files'))==='Review files'&&permitted();
     }
-    if(details.name==='propose_edit'||details.name==='propose_write'||details.name==='create_file'){
-     const file=details.arguments.path;
+    if(details.name==='propose_selection'||details.name==='propose_edit'||details.name==='propose_write'||details.name==='create_file'){
+     const selection=details.name==='propose_selection'?scope:undefined;
+     const file=selection?.file??details.arguments.path;
      if(typeof file!=='string')return {allowed:false,reason:'Proposal validation failed: path must be a string. Correct the tool arguments and retry.'};
      const creating=details.name==='create_file';
      try{
       const base=await originalText(file,creating||store.get(file)?.kind==='create');
       const current=currentOverlay(file)??base;
-      const content=creating?details.arguments.content:resolveAgentProposal(current,details.arguments);
+      if(selection && base!==selection.original)throw new Error('Document changed after selection. Start a new inline edit.');
+      const content=selection?selection.proposal(details.arguments.draftId,details.arguments.replacement,current):
+       creating?details.arguments.content:resolveAgentProposal(current,details.arguments);
       if(typeof content!=='string'||content.includes('\0')||content.length>250000||(creating&&!content))throw new Error('Expected a bounded text proposal.');
       if(scope&&(creating||file!==scope.file||!isWithinSelection(base,content,scope.start,scope.end)))throw new Error('Change escapes the selected text.');
       await preview(createProposal(file,current,content),undefined,false);
@@ -547,7 +584,7 @@ export async function activate(context:vscode.ExtensionContext) {
  const command=(name:string,fn:()=>unknown)=>context.subscriptions.push(vscode.commands.registerCommand(name,async()=>{try{await fn();}catch(error){void vscode.window.showErrorMessage(error instanceof Error?error.message:'ForgeLens operation failed');}}));
  command('forgelens.start',()=>openPanel());command('forgelens.review',review);command('forgelens.cancel',cancel);command('forgelens.undo',undoLast);
  command('forgelens.verify',()=>verifySavedWorkspace(emit));
- command('forgelens.exportPatch',exportPatch);
+ command('forgelens.exportPatch',()=>exportPatch());
  context.subscriptions.push(vscode.commands.registerCommand('forgelens.previewContext',async (input?:string)=>{
   const prompt=typeof input==='string'?input:await vscode.window.showInputBox({prompt:'Describe the task to preview its source context'});
   if(!prompt)return;
@@ -566,7 +603,7 @@ export async function activate(context:vscode.ExtensionContext) {
   if(!prompt)return;
   if(doc.version!==version || target!==root())throw new Error('The selection changed. Select the code again.');
   await confinedPath(target,file);
-  await run(`Inline edit in @file:${file}\nOnly modify selected region and directly associated documentation. Selection starts line ${selection.start.line+1}.\nInstruction: ${prompt}\nSelected code:\n${doc.getText(selection)}`,{file,start:doc.offsetAt(selection.start),end:doc.offsetAt(selection.end)});
+  await run(prompt,new InlineSelection(file,doc.getText(),doc.offsetAt(selection.start),doc.offsetAt(selection.end)));
  });
  context.subscriptions.push({dispose(){void cancel();void bridge?.close();}});
 }

@@ -7,7 +7,8 @@ export function renderWebview(nonce: string): string {
 header,.bar,.context-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}header{justify-content:space-between}h1{font-weight:600;font-size:1.45rem;margin:2px 0 12px}h2{font-size:1.05rem;margin:0}label{display:block;margin:4px 0 6px}
 textarea{width:100%;box-sizing:border-box;min-height:76px;resize:vertical;padding:8px;color:var(--vscode-input-foreground);background:var(--vscode-input-background);border:1px solid var(--vscode-input-border,var(--vscode-panel-border));font:inherit}
 button{cursor:pointer;border:1px solid transparent;padding:5px 9px;border-radius:3px;font:inherit;color:var(--vscode-button-secondaryForeground);background:var(--vscode-button-secondaryBackground)}
-button:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:2px}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:2px}
+#queue input,#queue select{font:inherit;padding:4px;color:var(--vscode-input-foreground);background:var(--vscode-input-background);border:1px solid var(--vscode-input-border,var(--vscode-panel-border))}
 #run{color:var(--vscode-button-foreground);background:var(--vscode-button-background)}button:disabled{opacity:.6;cursor:default}.bar{margin:8px 0}section,details{border-top:1px solid var(--vscode-panel-border);margin-top:14px;padding-top:11px}
 #phase,#budget,.reason,.range{color:var(--vscode-descriptionForeground)}#context[hidden]{display:none}progress{width:100%;height:7px;accent-color:var(--vscode-progressBar-background)}.files{padding:0;list-style:none}.files li{margin:8px 0}.file{padding:0;text-align:left;color:var(--vscode-textLink-foreground);background:transparent;overflow-wrap:anywhere}.range{margin-left:6px}.reason{display:block;margin-top:2px}
 summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--vscode-editor-font-size,13px)/1.4 var(--vscode-editor-font-family,monospace)}
@@ -16,7 +17,10 @@ summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(
 <label for="task">What would you like to change?</label><textarea id="task" placeholder="Describe the change, or include @file:path or @symbol:name."></textarea>
 <div class="bar"><button id="run">Run agent</button><button id="draft" title="Propose edits to the retrieved files in this task">Draft from context</button><button id="inspect">Preview context</button><button id="stop">Stop</button></div>
 <section><h2>Review &amp; verify</h2><div class="bar"><button id="review">Review hunks</button><button id="undo">Undo last</button><button id="verify">Verify saved changes</button><button id="exportSummary" disabled>Export review summary…</button></div></section>
-<section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2><div class="bar"><button id="nextHunk" disabled>Next pending hunk</button><button id="accept-all">Accept all pending hunks</button><button id="reject-all">Reject all pending hunks</button></div><div id="hunks"></div><button id="export">Export accepted patch</button></section>
+<section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2>
+<div class="bar"><label for="fileFilter">Filter files</label><input type="search" id="fileFilter"><label for="decisionFilter">Decision</label><select id="decisionFilter"><option value="all">All decisions</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select></div>
+<div class="bar"><button id="nextHunk" disabled>Next pending hunk</button><button id="accept-all">Accept all pending hunks</button><button id="reject-all">Reject all pending hunks</button></div><div id="hunks"></div>
+<div class="bar"><button id="export">Export accepted patch</button><button id="checkConflicts" disabled>Check workspace conflicts</button></div><div id="conflictResult" role="status"></div></section>
 <section id="context" hidden><div class="context-head"><h2 id="context-title">Context preview</h2><span id="budget"></span></div><progress id="meter" aria-label="Source excerpt budget"></progress><ul class="files" id="files"></ul></section>
 <section id="plan" aria-label="Agent file plan" hidden></section>
 <details open><summary>Run output</summary><pre id="events" role="log">Ready.</pre></details>
@@ -25,6 +29,7 @@ const api = acquireVsCodeApi();
 const el = id => document.getElementById(id);
 let streaming = false;
 let running = false;
+let queueVersion = 0;
 for (const type of ['run','draft','inspect','stop','review','undo','verify','export']) {
   el(type).onclick = () => api.postMessage({type, prompt: el('task').value});
 }
@@ -37,6 +42,10 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('message', ({data}) => {
   if (data.type === 'state') {
+    if (data.active && !running) {
+      el('fileFilter').value='';
+      el('decisionFilter').value='all';
+    }
     running = data.active;
     el('phase').textContent = data.phase;
     el('run').disabled = running;
@@ -55,18 +64,31 @@ window.addEventListener('message', ({data}) => {
     el('events').textContent = 'Ready.';
     streaming = false;
   } else if (data.type === 'queue') {
+    queueVersion=data.version;
+    el('conflictResult').replaceChildren();
+    el('checkConflicts').disabled=!data.canCheck || !data.files.some(file=>file.hunks.some(h=>h.status==='accepted'));
+    el('checkConflicts').onclick=()=>api.postMessage({type:'checkConflicts',version:data.version});
+    const renderQueue=()=>{
     const list=el('hunks');
     list.replaceChildren();
     el('queue').hidden=!data.files.length;
+    const pathText=el('fileFilter').value.trim().toLowerCase();
+    const status=el('decisionFilter').value || 'all';
+    const visible=data.files.filter(file=>file.path.toLowerCase().includes(pathText)).map(file=>({
+      ...file,hunks:file.hunks.filter(h=>status==='all'||h.status===status),hasAccepted:file.hunks.some(h=>h.status==='accepted')
+    })).filter(file=>file.hunks.length);
     const pending=file=>(file.editable ?? data.editable) && file.hunks.some(h=>h.status==='pending');
-    el('nextHunk').disabled=!data.files.some(pending);
-    el('nextHunk').onclick=()=>api.postMessage({type:'nextHunk',version:data.version});
+    const scope=pathText?{paths:visible.filter(pending).map(file=>file.path)}:{};
+    el('nextHunk').disabled=!visible.some(pending);
+    el('nextHunk').onclick=()=>api.postMessage({type:'nextHunk',version:data.version,...scope});
     for (const [id,action] of [['accept-all','accepted'],['reject-all','rejected']]) {
       const button=el(id);
-      button.disabled=!data.files.some(pending);
-      button.onclick=()=>api.postMessage({type:'allHunks',version:data.version,action});
+      button.textContent=(action==='accepted'?'Accept':'Reject')+(pathText?' visible':' all')+' pending hunks';
+      button.disabled=!visible.some(pending);
+      button.onclick=()=>api.postMessage({type:'allHunks',version:data.version,action,...scope});
     }
-    for (const file of data.files) {
+    if (!visible.length && data.files.length) list.textContent='No hunks match these filters.';
+    for (const file of visible) {
       const editable=file.editable ?? data.editable;
       const heading=document.createElement('h3');
       heading.textContent=(file.kind==='create'?'New file · ':'')+file.path;
@@ -95,7 +117,32 @@ window.addEventListener('message', ({data}) => {
         button.onclick=()=>api.postMessage({type,version:data.version,path:file.path,action});
         actions.appendChild(button);
       }
+      const exportFile=document.createElement('button');
+      exportFile.textContent='Export accepted file patch…';
+      exportFile.disabled=!data.canCheck || !file.hasAccepted;
+      exportFile.onclick=()=>api.postMessage({type:'exportFile',version:data.version,path:file.path});
+      actions.appendChild(exportFile);
       list.appendChild(actions);
+    }
+    };
+    el('fileFilter').oninput=renderQueue;
+    el('decisionFilter').onchange=renderQueue;
+    renderQueue();
+  } else if (data.type === 'conflicts' && data.version===queueVersion) {
+    const result=el('conflictResult');
+    result.replaceChildren();
+    const count=data.checked+' accepted file'+(data.checked===1?'':'s');
+    if(!data.conflicts.length){
+      result.textContent='Checked '+count+'. No conflicts found.';
+    }else{
+      result.textContent='Workspace conflicts in '+data.conflicts.length+' of '+count+'.';
+      const list=document.createElement('ul');
+      for(const file of data.conflicts){
+        const row=document.createElement('li');
+        row.textContent=file.path+' · '+file.reason;
+        list.appendChild(row);
+      }
+      result.appendChild(list);
     }
   } else if (data.type === 'context') {
     const {items,usedChars,budgetChars,usedTokens,budgetTokens,encoding} = data.preview;

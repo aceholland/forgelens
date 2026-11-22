@@ -2,9 +2,11 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.4.1](https://github.com/aceholland/forgelens/releases/download/v0.4.1/forgelens-0.4.1.vsix) · [Watch the narrated VS Code demo](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.0-ABC-and-0.4.1-review.mp4) · [Demo evidence and chapters](docs/evidence/v040-abc/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+[Install ForgeLens 0.4.2](https://github.com/aceholland/forgelens/releases/download/v0.4.2/forgelens-0.4.2.vsix) · [Narrated v0.4.2 Task A run](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-task-a.mp4) · [Task A results](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-task-a.json) · [Narrated v0.4.0 A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.0-ABC-and-0.4.1-review.mp4) · [Original Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-Version 0.4.1 adds **Next pending hunk** and **Export review summary**. The demo runs the three Flask tasks on the published v0.4.0 extension, then shows the two new review controls in v0.4.1. Version 0.4.0 introduced ordered fallback models, automatic summaries for long conversations and support for desktop VS Code 1.95. These releases follow the competition deadline. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.1-overview.txt) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
+Version 0.4.2 changes how inline edits reach review. TrueForge asks the model to prepare the selected replacement in memory, check the proposed code and its documentation against the original instruction, then offer the first editable diff. You decide which hunks to accept. The release also adds five tools for inspecting context and reviewing patches. [v0.4.2 release evidence](https://github.com/aceholland/forgelens/releases/tag/v0.4.2)
+
+The earlier A/B/C video uses v0.4.0 for the Flask tasks and v0.4.1 for the review navigation and summary export. These releases follow the competition deadline. [Video chapters and results](docs/evidence/v040-abc/README.md) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
 
 ![ForgeLens 0.4.1 in Windows VS Code. The reviewer accepted one source edit, rejected another, and used Next pending hunk to open the remaining change in the test file.](docs/evidence/v040-abc/pending-hunk.png)
 
@@ -24,6 +26,20 @@ The v0.3.1 Windows run took **4 minutes 18 seconds**. The provider reported **$0
 ## What you can do
 
 [See how these controls map to the reference demo](docs/video-comparison.md).
+
+### Five additions in v0.4.2
+
+| Tool | How to use it |
+| --- | --- |
+| **Filter review hunks** | In **Staged changes**, search by file path and choose a decision status to narrow the visible queue. |
+| **Check workspace conflicts** | Check accepted files against their reviewed originals before applying. The panel identifies changed buffers and collisions with newly created paths. |
+| **Export a single file’s accepted patch** | Use the file’s export control to save its accepted hunks as a standalone Git patch. |
+| **Compare Context Budgets** | Run this command from the Command Palette. Enter a task and an alternative token limit. The read-only report shows which files and excerpt ranges each budget selects from the same saved workspace snapshot. |
+| **Find Related Tests** | With a source file active, run this Command Palette command. Choose a test to open. The picker explains whether it imports the source or has a matching filename. Static import matching covers Python and JavaScript/TypeScript. |
+
+Both context commands run locally and respect ForgeLens’s file exclusions.
+
+### Agent and review controls
 
 | In the editor | What happens |
 | --- | --- |
@@ -48,7 +64,7 @@ In 0.2.0, the local preview identified Flask's CLI code, tests and documentation
 
 ## Try it in VS Code
 
-**1. Install v0.4.1.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install v0.4.2.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
@@ -146,7 +162,7 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-The extension targets **desktop VS Code 1.95 or newer with a trusted local folder**. TrueForge runs in a separate Node.js 22.14+ process. The release check installs one VSIX into isolated Windows, macOS and Linux editor profiles. Each editor opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs Git checks with both a zero and a deliberately nonzero exit. The live review check uses a real local TrueForge server and a scripted provider. Two models reject the request. The third receives the hunk decisions and the result of running pytest in the staged copy. The check also verifies that the original files keep their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Tested installer and platform results](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.1-package-verification.json)
+The extension targets **desktop VS Code 1.95 or newer with a trusted local folder**. TrueForge runs in a separate Node.js 22.14+ process. The release check installs one VSIX into isolated Windows, macOS and Linux editor profiles. Each editor checks all ten public commands, previews allowed and ignored paths, compares excerpt budgets, opens a related test, and runs Git checks with both a zero and a deliberately nonzero exit. The live review check uses a real local TrueForge server and a scripted provider. Two models reject the request. The third receives the hunk decisions and the result of running pytest in the staged copy. The check also verifies that the original files keep their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Tested installer and platform results](https://github.com/aceholland/forgelens/releases/download/v0.4.2/ForgeLens-0.4.2-package-verification.json)
 
 | Editor host | Coverage |
 | --- | --- |
@@ -161,7 +177,7 @@ The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot ru
 ## Build from a clean clone
 
 ```sh
-git clone --branch v0.4.1 https://github.com/aceholland/forgelens.git
+git clone --branch v0.4.2 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 python -m pip install pytest==9.0.2

@@ -17,9 +17,10 @@ function quotePath(value: string): string {
  * New files use /dev/null as their patch base. Empty edits to existing files truncate them.
  * Returns an empty string when there are no accepted content changes.
  */
-export function exportAcceptedPatch(store: Pick<ReviewStore, 'list'>): string {
+export function exportAcceptedPatch(store: Pick<ReviewStore, 'list'>, onlyPath?: string): string {
   const patches: string[] = [];
   for (const proposal of store.list()) {
+    if (onlyPath !== undefined && proposal.path !== onlyPath) continue;
     const after = renderProposal(proposal, 'accepted');
     if (after === proposal.original) continue;
     const file = proposal.path;

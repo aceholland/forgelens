@@ -69,6 +69,23 @@ test('export is explicitly empty for no accepted changes',()=>{
  store.stage('unchanged.ts','same','same');assert.equal(exportAcceptedPatch(store),'');
 });
 
+test('a per-file patch applies only accepted hunks from the selected file',async t=>{
+ const root=await fixture(t),store=new ReviewStore();
+ const before='one\ntwo\nthree\n',proposed='ONE\ntwo\nTHREE\n';
+ for(const file of ['a.txt','b.txt']){
+  await writeFile(path.join(root,file),before);
+  const proposal=store.stage(file,before,proposed);
+  store.decide(file,proposal.hunks[0]!.id,'accepted');
+  store.decide(file,proposal.hunks[1]!.id,'rejected');
+ }
+ assert.equal(exportAcceptedPatch(store,'missing.txt'),'');
+ const patch=exportAcceptedPatch(store,'b.txt');
+ assert.doesNotMatch(patch,/a\.txt|\+THREE/);
+ apply(root,patch,true);apply(root,patch,false);
+ assert.equal(await readFile(path.join(root,'a.txt'),'utf8'),before);
+ assert.equal(await readFile(path.join(root,'b.txt'),'utf8'),'ONE\ntwo\nthree\n');
+});
+
 test('an approved new file produces a real Git creation patch and retains its undo kind after revision',async t=>{
  const root=await fixture(t),store=new ReviewStore();
  const p=store.stage('new file.txt','','created\n','create');

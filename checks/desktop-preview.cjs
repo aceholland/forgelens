@@ -108,7 +108,8 @@ exports.run = async () => {
     await extension.activate();
     assert.equal(extension.isActive, true);
     const commands = await vscode.commands.getCommands(true);
-    for (const id of ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch']) assert.ok(commands.includes('forgelens.' + id), `Missing command ${id}`);
+    const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets'];
+    for (const id of commandIds) assert.ok(commands.includes('forgelens.' + id), `Missing command ${id}`);
     const selected = await bounded(vscode.commands.executeCommand('forgelens.previewContext',
       'Preview @file:src/visible.ts @file:src/tracked.tmp @file:nested/keep.drop'));
     assert.ok(selected && selected.items.length, 'Provider-free context preview must return real selected snippets');
@@ -141,6 +142,31 @@ exports.run = async () => {
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${process.env.FORGELENS_PICKER_PORT}`);
     const page = browser.contexts().flatMap(context => context.pages()).find(candidate => /workbench/i.test(candidate.url()));
     assert.ok(page, 'Desktop renderer must be available for the native verification picker');
+    const captureDir=process.env.FORGELENS_QA_CAPTURE_DIR;
+    if(captureDir){
+      await vscode.commands.executeCommand('workbench.action.closeSidebar');
+      await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+    }
+    const budgetUri = await bounded(vscode.commands.executeCommand('forgelens.compareContextBudgets', '@file:src/visible.ts', 2));
+    assert.equal(budgetUri.scheme, 'forgelens-context');
+    const comparison = (await vscode.workspace.openTextDocument(budgetUri)).getText();
+    assert.match(comparison, /(?:Changed|Removed)  src\/visible\.ts/);
+    assert.doesNotMatch(comparison, /export function/);
+    assert.equal(config.get('tokenBudget'), 10000);
+    if(captureDir){
+      await page.locator('.monaco-editor .view-lines:visible').filter({hasText:'src/visible.ts'}).first().waitFor();
+      await page.screenshot({path:path.join(captureDir,'context-budgets.png')});
+    }
+    await vscode.window.showTextDocument(vscode.Uri.file(path.join(folder, 'src/visible.ts')));
+    const selection = vscode.commands.executeCommand('forgelens.findRelatedTests');
+    const relatedPicker = page.locator('.quick-input-widget:visible').filter({hasText:'Related tests for src/visible.ts'});
+    if(captureDir){
+      await relatedPicker.getByText('tests/visible.test.ts',{exact:true}).waitFor();
+      await page.screenshot({path:path.join(captureDir,'related-tests.png')});
+    }
+    await relatedPicker.getByText('tests/visible.test.ts', {exact:true}).click({timeout:30000});
+    const opened = await bounded(selection);
+    assert.equal(path.relative(folder,opened.fsPath).split(path.sep).join('/'), 'tests/visible.test.ts');
     const checks = [];
     checks.push(await verifyCommand(vscode, page, folder, 'Git status', 0));
     checks.push(await verifyCommand(vscode, page, folder, 'Git diff check', 0));
@@ -156,7 +182,8 @@ exports.run = async () => {
     assert.equal(requests, 0, 'Native saved-file checks must not contact the model endpoint');
     console.log('FORGELENS_PREVIEW_DESKTOP_PASS ' + JSON.stringify({
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
-      version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: 8,
+      version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: commandIds.length,
+      contextInspection: {budgetComparison:true, relatedTest:'tests/visible.test.ts'},
       installedPackage: { directory: path.basename(installedPath), sha256: process.env.FORGELENS_VSIX_SHA256 },
       selectedPaths, ignoredExplicitMentionsExcluded: true, fixtureUnchanged: true, trueforgeRequests: requests,
       verification: { nativeQuickPick: true, driver: 'Clicked the visible native picker item', actualTaskProcessEvents: checks, fixtureRestored: true },

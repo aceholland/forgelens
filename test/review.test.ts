@@ -1,6 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createProposal, decideHunk, renderProposal, prepareApply, undoEdit, ReviewStore} from '../src/review';
+import {checkAcceptedFiles, createProposal, decideHunk, renderProposal, prepareApply, undoEdit, ReviewStore} from '../src/review';
+
+test('checks all accepted files, including changed buffers and unavailable create paths', async ()=>{
+ const store=new ReviewStore();
+ for(const file of ['unchanged','modified','unreadable','new-file','pending','rejected']){
+  const create=file==='new-file';
+  store.stage(file,create?'':'base','candidate',create?'create':undefined);
+  if(file!=='pending')store.decide(file,'hunk-1',file==='rejected'?'rejected':'accepted');
+ }
+ const seen:string[]=[];
+ const result=await checkAcceptedFiles(store.list(),async file=>{
+  seen.push(file.path);
+  if(file.kind==='create')throw new Error('The new file already exists.');
+  if(file.path==='unreadable')throw new Error('Could not open the file.');
+  return file.path==='modified'?'local edit':file.original;
+ });
+ assert.deepEqual(seen,['unchanged','modified','unreadable','new-file']);
+ assert.deepEqual(result,{checked:4,conflicts:[
+  {path:'modified',reason:'Contents changed since review began.'},
+  {path:'unreadable',reason:'Could not open the file.'},
+  {path:'new-file',reason:'The new file already exists.'},
+ ]});
+});
 
 test('stages two line hunks without changing original; accepts and rejects independently', () => {
  const original='one\ntwo\nthree\nfour\n';
