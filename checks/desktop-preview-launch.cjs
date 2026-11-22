@@ -130,20 +130,20 @@ async function main() {
       launchArgs.push('--no-sandbox');
     }
     async function runHost(resume){
-    const host = spawn(editor, ['--new-window','--no-first-run','--disable-renderer-backgrounding',
-      '--extensionDevelopmentPath='+driver, ...launchArgs],
-      { env:{...process.env,...extensionTestsEnv,FORGELENS_RESUME_CHECK:resume?'1':'0'}, stdio:'inherit', windowsHide:true });
-    let timer;
-    try {
-      await new Promise((resolve,reject) => {
-        timer = setTimeout(() => reject(Error('Live editor fixture timed out')), 180000);
-        host.once('error', reject);
-        host.once('exit', code => code===0 ? resolve() : reject(Error('Editor exited with code '+code)));
-      });
-    } finally { clearTimeout(timer); if (host.exitCode===null && host.signalCode===null) host.kill(); }
-    const result = JSON.parse(fs.readFileSync(resultPath,'utf8'));
-    assert.ok(result.evidence, result.error || 'The live editor driver did not finish');
-    return result;
+      const host = spawn(editor, ['--new-window','--no-first-run','--disable-renderer-backgrounding',
+        '--extensionDevelopmentPath='+driver, ...launchArgs],
+        { env:{...process.env,...extensionTestsEnv,FORGELENS_RESUME_CHECK:resume?'1':'0'}, stdio:'inherit', windowsHide:true });
+      let timer;
+      try {
+        await new Promise((resolve,reject) => {
+          timer = setTimeout(() => reject(Error('Live editor fixture timed out')), 180000);
+          host.once('error', reject);
+          host.once('exit', code => code===0 ? resolve() : reject(Error('Editor exited with code '+code)));
+        });
+      } finally { clearTimeout(timer); if (host.exitCode===null && host.signalCode===null) host.kill(); }
+      const result = JSON.parse(fs.readFileSync(resultPath,'utf8'));
+      assert.ok(result.evidence, result.error || 'The live editor driver did not finish');
+      return result;
     }
     const result=await runHost(false);
     fs.unlinkSync(resultPath);

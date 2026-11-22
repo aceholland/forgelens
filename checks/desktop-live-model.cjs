@@ -60,7 +60,7 @@ async function start(storage, temp) {
         delta = {role:'assistant', tool_calls:[{index:0, id:'review-fixture', type:'function', function:{name:'propose_changes', arguments:JSON.stringify(proposal)}}]};
       } else {
         const feedback = JSON.stringify(input.messages.filter(m => m.role === 'tool').at(-1)?.content);
-        for (const observed of ['accepted', 'rejected', 'originalStart', 'Candidate pytest exited 0', 'Baseline exit 0 · Candidate exit 0', '2 passed', '2 staged file(s)']) {
+        for (const observed of ['accepted', 'rejected', 'originalStart', 'Candidate pytest exited 0', 'Baseline exit 0', 'Candidate exit 0', '2 passed', '2 staged file(s)']) {
           assert.ok(feedback?.includes(observed), 'Missing model feedback: ' + observed);
         }
         delta = {role:'assistant', content:'Reviewed the two files and observed two passing candidate tests.'};

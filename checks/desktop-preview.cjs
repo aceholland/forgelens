@@ -193,8 +193,12 @@ exports.run = async () => {
       const configured=await bounded(vscode.commands.executeCommand('forgelens.checkSetup'));
       assert.ok(configured.every(row=>row.ok),JSON.stringify(configured));
       if(captureDir) {
-        await page.getByText('ForgeLens setup check',{exact:false}).first().waitFor({timeout:10000});
-        await page.screenshot({path:path.join(captureDir,'check-my-setup.png')});
+        // Output automatically scrolls to the last row. The title can be above
+        // Monaco's rendered viewport, particularly in the VS Code 1.95 panel.
+        await vscode.commands.executeCommand('workbench.action.toggleMaximizedPanel');
+        try {
+          await page.locator('.monaco-editor .view-lines:visible').filter({hasText:'local/qa'}).first().waitFor({timeout:15000});
+        } finally { await page.screenshot({path:path.join(captureDir,'check-my-setup.png')}); }
       }
     } finally {
       setupServer.closeAllConnections();

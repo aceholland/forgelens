@@ -104,7 +104,7 @@ exports.run = async () => {
     const output = await panel.locator('#events').innerText();
     assert.match(output, /Candidate pytest exited 0/);
     assert.match(output, /2 passed/);
-    assert.match(await panel.locator('#testComparison').innerText(),/Baseline exit 0 · Candidate exit 0/);
+    assert.match(await panel.locator('#testComparison').innerText(),/Baseline exit 0[^\n]+Candidate exit 0/);
     await panel.locator('#testComparison').scrollIntoViewIfNeeded();
     await capture('baseline-comparison');
     assert.deepEqual(snapshot(folder), original);
