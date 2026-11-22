@@ -51,7 +51,7 @@ async function main() {
         assert.ok(name, 'Missing native sandbox exec in ' + names.join(', '));
         if (step === 1) assert.ok(history.includes('Read the `tests` field'), 'The skill contents did not reach the model: ' + history.slice(-1800));
         delta = {role:'assistant', tool_calls:[{index:0, id:'sandbox-call-' + step, type:'function',
-          function:{name, arguments:JSON.stringify({command:commands[step]})}}]};
+          function:{name, arguments:JSON.stringify({command:commands[step], intent:step === 0 ? 'Read the review checklist' : 'Summarize review counts'})}}]};
         providerSteps.push(step === 0 ? 'read-checklist' : 'run-python-mcp');
         finish = 'tool_calls';
       } else {

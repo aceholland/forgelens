@@ -68,7 +68,8 @@ export async function runCodeModeReview(baseUrl: string, model: string, input: R
           if (call.toolInfo.type !== 'truefoundry-system' || call.toolInfo.name !== 'exec') continue;
           try {
             const args = JSON.parse(call.function.arguments);
-            if (args.command === command && Object.keys(args).length === 1 && tracker.verified()) calls.add(call.id);
+            if (args.command === command && typeof args.intent === 'string' &&
+                args.cwd === undefined && args.env === undefined && tracker.verified()) calls.add(call.id);
           } catch { /* Tool arguments may still be streaming. */ }
         }
       } else {

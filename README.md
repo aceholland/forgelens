@@ -2,7 +2,32 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.5.0](https://github.com/aceholland/forgelens/releases/download/v0.5.0/forgelens-0.5.0.vsix) · [Narrated A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-demo.mp4) · [Video script](docs/video-script.md) · [Illustrated write-up (PDF)](docs/forgelens-0.5.0-illustrated-writeup.pdf) · [Verification files](https://github.com/aceholland/forgelens/releases/tag/v0.5.0)
+[Install ForgeLens 0.6.0](https://github.com/aceholland/forgelens/releases/download/v0.6.0/forgelens-0.6.0.vsix) · [Narrated A/B/C demo from 0.5.0](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-demo.mp4) · [Video script](docs/video-script.md) · [Illustrated write-up (PDF)](docs/forgelens-0.5.0-illustrated-writeup.pdf)
+
+### Analyze a review with TrueForge Code Mode
+
+After reviewing proposed changes, open the Command Palette and choose **ForgeLens: Analyze Review with Code Mode**. Confirm the model shown. The **ForgeLens Review Analysis** output lists accepted, rejected and pending hunks, and tells you whether your staged tests passed, failed, need a rerun or have yet to run.
+
+```mermaid
+flowchart LR
+  A["Review in VS Code"] -->|Approve analysis| B["Standalone TrueForge"]
+  B --> C["Read pinned review skill in local sandbox"]
+  C --> D["Run Python helper in Code Mode"]
+  D -->|Read-only MCP| E["Anonymous counts and staged test status"]
+  E --> D
+  D --> F["Verify totals and display result in VS Code"]
+```
+
+The sandbox needs a standalone TrueForge service on macOS or Linux with Python 3 and venv. On Linux, TrueForge also checks for bubblewrap, socat and ripgrep. The service needs GitHub access to fetch the pinned skill. Native Windows TrueForge cannot host this sandbox. The normal Windows editing, review and test commands use the existing Windows setup. For zero-price inference, choose your registered local model.
+
+| TrueForge capability | Where it does work |
+| --- | --- |
+| **Skills** | The review agent reads the published checklist in the sandbox. ForgeLens verifies its contents against the pinned revision. |
+| **Code Mode and sandboxing** | The skill’s Python helper calls the editor’s read-only MCP tool from the local sandbox and aggregates the results. ForgeLens checks the receipt and totals before displaying them. File paths, source text and test logs stay out of the connector. |
+| **Subagents** | Enable **ForgeLens › Context Scout** for a multi-file agent run. The parent can delegate discovery to a read-only child and use its results to plan a change. |
+| **Context compaction** | TrueForge summarizes long conversations and continues the same turn. The regression check crosses the 60,000-input-token threshold and verifies the resumed request contains the summary. |
+
+[Pinned skill and Python helper](https://github.com/aceholland/forgelens/tree/bcfead660104e687ec72d76b50e5bd2bd762adf8/agent/skills/forgelens-review-checklist) · [Sandbox integration check](checks/native-review.ts) · [Scout and compaction check](checks/native-scout.ts)
 
 ### Verified on the Windows laptop
 
@@ -98,7 +123,7 @@ In 0.2.0, the local preview identified Flask's CLI code, tests and documentation
 
 ## Try it in VS Code
 
-**1. Install v0.5.0.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install the extension.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
@@ -217,7 +242,7 @@ The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot ru
 ## Build from a clean clone
 
 ```sh
-git clone --branch v0.5.0 https://github.com/aceholland/forgelens.git
+git clone --branch v0.6.0 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 python -m pip install pytest==9.0.2

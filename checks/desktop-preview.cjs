@@ -110,6 +110,8 @@ exports.run = async () => {
     const commands = await vscode.commands.getCommands(true);
     const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets', 'checkSetup', 'analyzeReviewInSandbox'];
     for (const id of commandIds) assert.ok(commands.includes('forgelens.' + id), `Missing command ${id}`);
+    assert.equal(await bounded(vscode.commands.executeCommand('forgelens.analyzeReviewInSandbox')), undefined);
+    assert.equal(requests, 0, 'An empty review must stop before contacting TrueForge');
     const selected = await bounded(vscode.commands.executeCommand('forgelens.previewContext',
       'Preview @file:src/visible.ts @file:src/tracked.tmp @file:nested/keep.drop'));
     assert.ok(selected && selected.items.length, 'Provider-free context preview must return real selected snippets');
