@@ -2,6 +2,14 @@ name: Task B live model
 
 on:
   workflow_dispatch:
+    inputs:
+      model:
+        description: Open model to run on the standard CPU runner
+        type: choice
+        default: gpt-oss-20b
+        options:
+          - gpt-oss-20b
+          - qwen3-coder-30b-a3b
   push:
     branches: [codex/task-b-workflow-20261122]
     paths:
@@ -16,6 +24,8 @@ jobs:
     if: github.event.repository.private == false
     runs-on: ubuntu-24.04
     timeout-minutes: 100
+    env:
+      SOLVER_MODEL: ${{ inputs.model || 'qwen3-coder-30b-a3b' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,7 +43,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: task-b-model-${{ github.run_id }}-${{ github.run_attempt }}
+          name: task-b-${{ env.SOLVER_MODEL }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 30
           path: |
