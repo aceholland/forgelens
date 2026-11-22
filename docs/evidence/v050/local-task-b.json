@@ -1,0 +1,27 @@
+{
+  "version": "0.5.0",
+  "editor": "1.147.0",
+  "model": "local-llama/qwen-local",
+  "userMessages": 1,
+  "operatorAnswers": 0,
+  "corrections": 0,
+  "modelPriceUSD": 0,
+  "remoteModelAPIRequests": 0,
+  "case": "official B with the installed local Qwen3.5-4B default sequential mode",
+  "vsixSha256": "70f78eb988b641a5c9ab034ea43c61889cfeb37c84bed2fe89024dff6d2e12e2",
+  "session": "01m8221y7snb9mvc1vf8n2enpy",
+  "startedUTC": "2026-11-22T16:39:53.770Z",
+  "finishedUTC": "2026-11-22T17:07:25.866Z",
+  "nativeStatus": "cancelled",
+  "success": false,
+  "stopReason": "ForgeLens automatically stopped after three edit proposals without progress.",
+  "rejections": [
+    "The requested old text was not a unique match.",
+    "A proposed module-level declaration would split an existing decorator group.",
+    "The requested old text was not a unique match."
+  ],
+  "filesStaged": 0,
+  "gitStatusClean": true,
+  "trackedFilesByteIdenticalToPinnedCommit": 235,
+  "testsRunOnCandidate": false
+}

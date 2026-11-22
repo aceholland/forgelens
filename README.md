@@ -14,7 +14,7 @@ ForgeLens is a desktop VS Code extension for making reviewed changes across sour
 
 [Windows screenshots and checks](docs/evidence/v050/README.md) · [Cross-platform CI](https://github.com/aceholland/forgelens/actions/runs/45044139432) · [Download the patches and run receipts](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-evidence.zip)
 
-The daily VS Code profile on this laptop uses free local Qwen on D. The filmed A and B runs used separate zero-price hosted models. An earlier local A run passed the behavioral tests but produced a contradictory sentence in its docstring. Earlier hosted B attempts hit rate limits or returned incomplete edits. The evidence archive records those attempts.
+The daily VS Code profile on this laptop uses free local Qwen on D. In its CPU-only Task B trial, three proposed edits failed validation. ForgeLens stopped after 27 minutes 32 seconds with zero files staged. The filmed A and B runs used separate zero-price hosted models. An earlier local A run passed the behavioral tests but produced a contradictory sentence in its docstring. Earlier hosted B attempts hit rate limits or returned incomplete edits. [CPU-only Task B receipt](docs/evidence/v050/local-task-b.json)
 
 ### What’s new in 0.5.0
 

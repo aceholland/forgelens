@@ -20,6 +20,8 @@ The installer used on the Windows laptop had SHA-256 `70f78eb988b641a5c9ab034ea4
 
 On the Windows laptop, the 249 source tests passed and installed copies of desktop VS Code 1.95.0 and 1.147.0 passed the setup and live-review fixtures. The desktop CI run used Linux, macOS and Windows. The live-review fixtures use a deterministic local model to make each editor action repeatable. The separate official Flask runs use actual inference. [Windows receipts, patches and official task evidence](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-evidence.zip) · [Cross-platform results](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-package-verification.json)
 
-The daily Windows profile runs Qwen3.5-4B Q4_K_M through a local TrueForge service and llama.cpp on the CPU. No hosted model is configured in that profile. The test runner uses the project's available dependencies. It does not install npm packages or run package scripts.
+The daily Windows profile runs Qwen3.5-4B Q4_K_M through a local TrueForge service and llama.cpp on the CPU. No hosted model is configured in that profile. During the CPU-only Task B trial the model proposed three invalid edits. ForgeLens stopped automatically after 27 minutes 32 seconds, with zero files staged. [CPU-only run receipt](local-task-b.json)
+
+The test runner uses the project's available dependencies. It does not install npm packages or run package scripts.
 
 In the recorded installer, the separator between the baseline and candidate exit codes includes an extra character. Both numerical exit codes and the per-test classifications were verified. The source on main uses a plain vertical bar.
