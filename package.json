@@ -162,7 +162,7 @@
             "medium",
             "high"
           ],
-          "description": "Optional provider-supported reasoning effort. Empty uses provider default; none can reduce local CPU latency."
+          "description": "Optional provider-supported reasoning effort. Empty uses the provider default. For Google-hosted Gemma 4 31B and 26B A4B, none and minimal turn off thinking."
         },
         "forgelens.runTimeoutMinutes": {
           "type": "number",

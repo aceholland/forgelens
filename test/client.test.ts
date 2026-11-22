@@ -37,6 +37,24 @@ test('a model final message cannot complete a partial sequential plan', async()=
   assert.ok(!f.events.some(e=>(e as any).type==='turn.done' && (e as any).state.status==='done'));
 });
 
+test('hosted Gemma 4 translates explicit off/minimal into native Google thinkingLevel only',async()=>{
+  const native = {thinking_config:{thinkingLevel:'minimal',includeThoughts:false}};
+  for(const [model,effort,params] of [
+    ['google-gemini/gemma-4-31b-it','none',native],['google-gemini/gemma-4-26b-a4b-it','minimal',native],
+    ['google-gemini/gemma-4-31b-it','minimal',native],['google-gemini/gemma-4-26b-a4b-it','none',native],
+    ['google-gemini/gemma-4-31b-it','',undefined],['google-gemini/gemma-4-31b-it','high',{reasoning_effort:'high'}],
+    ['google-gemini/unknown','none',{reasoning_effort:'none'}],['other/gemma-4-31b-it','minimal',{reasoning_effort:'minimal'}],
+  ] as const){
+    const f=fixture();
+    Object.assign(f.options,{model,reasoningEffort:effort,draftFromContext:true});
+    const result=await new ForgeRunner(f.options).run('Fixture task');
+    assert.equal(result.status,'done');
+    const session=f.calls.find(call=>call.method==='create')!.args[0];
+    const wire=await CreateSessionRequest.jsonOrThrow(session,{unrecognizedObjectKeys:'fail'});
+    assert.deepEqual((wire as typeof session).agent.spec.model,params?{name:model,params}:{name:model});
+  }
+});
+
 test('compact mode keeps repository text in user-role context and exposes focused tools',async()=>{
  const f=fixture();f.options.sourceEvidence='Untrusted repository excerpt for this test.';
  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');

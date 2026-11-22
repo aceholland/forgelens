@@ -25,6 +25,8 @@ With **Sequential Draft** enabled, the model names the files needed for the requ
 
 If your provider limits input tokens per minute, set **ForgeLens › Draft Model Interval Seconds** to `70` for a one-minute window. Review opens immediately. Time spent reviewing and running tests counts toward the interval before the tool sends its result back to TrueForge. The default is zero. Keep the TrueForge MCP request timeout long enough for your review and this wait. The provider still enforces its quotas. [Pacing and cancellation checks](../test/draft-pacing.test.ts)
 
+For Google’s hosted Gemma 4 31B or 26B A4B, setting **ForgeLens › Reasoning Effort** to `minimal` turns off the optional thinking output. Google documents this setting for these two models, and TrueForge sends it with the session’s model parameters. Leave Reasoning Effort empty to use the provider default. [Google’s hosted Gemma guide](https://gemma.ai/deployment/gemini-api/#thinking)
+
 ## Reproduce the recorded evaluation
 
 The [desktop driver](../checks/task-b-desktop-launch.cjs) opens a separate editor profile and clones the pinned revision into a **new** evidence directory. It enters the official request once and clicks review controls. A clarification ends the attempt. After saving, it runs the [terminal checks](../checks/task-b-desktop-grade.py) and then applies the resulting patch to a second clean checkout for [independent grading](../checks/run-task-b-verification.py).
