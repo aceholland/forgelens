@@ -486,14 +486,22 @@ test('explicit terminal timeout fallback requires known zero staged proposals',a
   assert.equal(f.calls.filter(c=>c.method==='create').length,staged===0?2:1);
  }
 });
-test('each completed model call gets an independent timeout budget',async()=>{
- const f=fixture();f.options.modelCallTimeoutMs=30;
- f.sessions.createTurnStream=async()=>(async function*(){yield created;
-  for(let i=0;i<3;i++){yield {id:`model${i}`,type:'model.message',threadId:'main'};await new Promise(r=>setTimeout(r,15));yield {id:`model${i}`,type:'model.message.delta',threadId:'main',content:'x',finishReason:'stop'};}
-  yield done;
- })() as any;
- assert.equal((await new ForgeRunner(f.options).run('read')).status,'done');
- assert.ok(!f.calls.some(x=>x.method==='cancel'));
+test('each completed model call gets an independent timeout budget',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=fixture();
+  f.options.modelCallTimeoutMs=30;
+  f.sessions.createTurnStream=async()=>(async function*(){
+    yield created;
+    for(let i=0;i<3;i++){
+      const id=`model${i}`;
+      yield {id,type:'model.message',threadId:'main'};
+      t.mock.timers.tick(16);
+      yield {id,type:'model.message.delta',threadId:'main',content:'x',finishReason:'stop'};
+    }
+    yield done;
+  })() as any;
+  assert.equal((await new ForgeRunner(f.options).run('read')).status,'done');
+  assert.ok(!f.calls.some(x=>x.method==='cancel'));
 });
 test('default model call budget is two minutes, shorter than five-minute run budget',()=>{
  assert.equal(DEFAULT_MODEL_CALL_TIMEOUT_MS,120000);

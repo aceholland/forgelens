@@ -12,12 +12,12 @@ def main():
     output = Path(os.environ["FORGELENS_RUN_EVIDENCE"])
     setup = json.loads((output / "setup.json").read_text(encoding="utf-8"))
     repo = Path(setup["workspace"])
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(repo / "src"), str(output)]),
+    env = dict(os.environ, PYTHONPATH=str(repo / "src"),
                PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8", PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
 
-    def command(args, timeout=240):
+    def command(args, timeout=240, command_env=None):
         print("\n$", subprocess.list2cmdline(args), flush=True)
-        result = subprocess.run(args, cwd=repo, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        result = subprocess.run(args, cwd=repo, env=command_env or env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace", timeout=timeout)
         print(result.stdout, flush=True)
         return result
@@ -44,11 +44,14 @@ def main():
             time.sleep(.1)
     wait_for_camera("camera-cli")
     help_output = command([sys.executable, "-m", "flask", "--help"])
-    app = output / "demo_config_fixture.py"
+    fixtures = output / "fixtures"
+    fixtures.mkdir(exist_ok=True)
+    app = fixtures / "demo_config_fixture.py"
     app.write_text("from flask import Flask\napp=Flask(__name__)\n"
                    "app.config.update(SECRET_KEY='secret-fixture', ApiToken='token-fixture',"
                    "DatabasePassword='password-fixture', BENIGN_TEXT='visible')\n", encoding="utf-8")
-    config = command([sys.executable, "-m", "flask", "--app", "demo_config_fixture:app", "config"])
+    fixture_env = dict(env, PYTHONPATH=os.pathsep.join([str(repo / "src"), str(fixtures)]))
+    config = command([sys.executable, "-m", "flask", "--app", "demo_config_fixture:app", "config"], command_env=fixture_env)
     try:
         data = json.loads(config.stdout)
     except ValueError:

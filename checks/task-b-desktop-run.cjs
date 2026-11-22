@@ -151,12 +151,19 @@ exports.run = async dir => {
     await panel.locator('#events').evaluate(el=>el.scrollIntoView({block:'end'})).catch(()=>{});
     await shot('04-session');
     if (!result.staged) throw Error('The model staged no files.');
+    const confirmed=new Set();
     await panel.locator('#review').click();
     const applyUntil=Date.now()+90000;
     while(Date.now()<applyUntil){
       let acted=false;
       for(const name of ['Accept hunk','Apply accepted','Create file']){
         const button=buttonFor(name);if(!await button.isVisible())continue;
+        if(name!=='Accept hunk'){
+          const detail=await button.evaluate(el=>el.closest('[role=dialog], [role=alertdialog], .monaco-dialog-box')?.innerText||'');
+          const relative=detail.match(/Apply accepted hunks to ([^?\n]+)\?|Create ([^?\n]+) on disk with the accepted content\?/);
+          assert.ok(relative,'Expected the reviewed path in the native confirmation dialog');
+          confirmed.add(relative[1]||relative[2]);
+        }
         await button.click({timeout:3000});
         result.approvals.push({control:name,at:new Date().toISOString()});acted=true;break;
       }
@@ -164,7 +171,26 @@ exports.run = async dir => {
       await delay(180);
     }
     assert.ok(!await panel.locator('#queue').isVisible(),'Some staged hunks still await review');
-    assert.ok(await vscode.workspace.saveAll(false),'Could not save the reviewed buffers');
+    assert.equal(confirmed.size,result.staged,'Every staged file needs its native Apply confirmation');
+    result.saved=[];
+    for(const file of confirmed){
+      const uri=vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri,...file.split('/'));
+      const doc=await vscode.workspace.openTextDocument(uri);
+      await until(async()=>{
+        const log=await panel.locator('#events').innerText();
+        return log.includes('Applied reviewed hunks to '+file+'.') || log.includes('Created '+file+'.');
+      },'completed editor edit for '+file);
+      let before;
+      try{before=execFileSync('git',['-C',setup.workspace,'show','HEAD:'+file],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']});}
+      catch{before=undefined;}
+      const normalized=s=>s.replace(/\r\n/g,'\n');
+      await until(()=>before===undefined || normalized(doc.getText())!==normalized(before),'reviewed buffer for '+file);
+      const expected=doc.getText();
+      assert.ok(await doc.save(),'The editor could not save '+file);
+      await until(async()=>Buffer.from(await vscode.workspace.fs.readFile(uri)).equals(Buffer.from(expected,'utf8')),'saved bytes for '+file);
+      result.saved.push(file);
+      save();
+    }
     result.files=execFileSync('git',['-C',setup.workspace,'status','--short'],{encoding:'utf8',windowsHide:true}).trimEnd().split('\n');
     save();
     const gradeFile=path.join(setup.root,'checks/task-b-desktop-grade.py');

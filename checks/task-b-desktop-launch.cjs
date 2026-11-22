@@ -65,10 +65,16 @@ async function main() {
     'telemetry.telemetryLevel':'off','update.mode':'none','extensions.autoUpdate':false,'extensions.autoCheckUpdates':false,
     'terminal.integrated.gpuAcceleration':'off','terminal.integrated.enablePersistentSessions':false
   };
-  for (const [source,setting] of [['FORGELENS_ASK_QUESTIONS','forgelens.askQuestions'],['FORGELENS_PRELOAD_TOOLS','forgelens.preloadTools']]) {
+  for (const [source,setting] of [['FORGELENS_ASK_QUESTIONS','forgelens.askQuestions'],['FORGELENS_PRELOAD_TOOLS','forgelens.preloadTools'],['FORGELENS_COMPACT_REQUESTS','forgelens.compactRequests']]) {
     if (env[source] === undefined) continue;
     assert.ok(['true','false'].includes(env[source]),source+' must be true or false');
     config[setting] = env[source] === 'true';
+  }
+  if(env.FORGELENS_REASONING_EFFORT!==undefined){
+    const setting='forgelens.reasoningEffort';
+    const manifest=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+    assert.ok(manifest.contributes.configuration.properties[setting].enum.includes(env.FORGELENS_REASONING_EFFORT),'Unsupported reasoning effort');
+    config[setting]=env.FORGELENS_REASONING_EFFORT;
   }
   fs.writeFileSync(path.join(dir,'profile/User/settings.json'),JSON.stringify(config));
   const prompt = fs.readFileSync(path.join(root,'diagnostics/metadata.ts'),'utf8').match(/export const TASK_B_PROMPT = `([^`]+)`;/)[1];
@@ -79,7 +85,7 @@ async function main() {
   await new Promise(resolve=>socket.close(resolve));
   const evidence = {root,dir,workspace,base:base.href,model:env.TRUEFORGE_MODEL,mode,minutes,port,python,playwright,prompt,
     pinned,source:git(['rev-parse','HEAD'],root),bundleHash:sha(fs.readFileSync(bundle)),
-    packageHash:vsix && sha(fs.readFileSync(vsix)),askQuestions:config['forgelens.askQuestions'],preloadTools:config['forgelens.preloadTools']};
+    packageHash:vsix && sha(fs.readFileSync(vsix)),askQuestions:config['forgelens.askQuestions'],preloadTools:config['forgelens.preloadTools'],compactRequests:config['forgelens.compactRequests'],reasoningEffort:config['forgelens.reasoningEffort']};
   fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify(evidence,null,2));
   const driver=path.join(extensions,'acesentry.task-b-check-1.0.0');
   fs.mkdirSync(driver);
