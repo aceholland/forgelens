@@ -119,6 +119,11 @@ async function main() {
         require('node:fs').writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(result));
         await require('vscode').commands.executeCommand('workbench.action.quit');
       });`);
+    // The GitHub-hosted Linux VM runs the unpacked editor without a setuid
+    // helper. Match Test Electron's Chromium flag only in that disposable VM.
+    if (process.platform==='linux' && process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted') {
+      launchArgs.push('--no-sandbox');
+    }
     const host = spawn(editor, ['--new-window','--no-first-run','--disable-renderer-backgrounding',
       '--extensionDevelopmentPath='+driver, ...launchArgs],
       { env:{...process.env,...extensionTestsEnv}, stdio:'inherit', windowsHide:true });

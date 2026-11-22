@@ -17,6 +17,8 @@ Version 0.3.0 is a post-deadline release. Read the [two-page evidence supplement
 | Does live feedback change what the agent sees? | In real Windows VS Code, a scripted model received the exact accepted and rejected hunks, then read the accepted overlay. In a second fixture it received an actual pytest failure and repaired the change in the same turn. The original three file hashes stayed unchanged. [Review and repair evidence](docs/live-review-check.md) |
 | Does allocating context across more files help? | On an independently selected set of 40 Flask changes, every target file appeared in the context for **16/40** changes versus **3/40** with whole-file BM25. ForgeLens used 5,016 excerpt tokens on average. The report includes the queries, both methods, scores and the separate published 79-change sample. [Retrieval evaluation](docs/flask-retrieval.md) |
 
+The [historical results](docs/evidence/task-b-historical/README.md) also cover eleven archived runs with no operator answers. One passed all 491 tests while omitting the CLI documentation. This is why the Task B check inspects the changed files and runs the command as well as running pytest.
+
 ## What you can do
 
 [See how these controls map to the reference demo](docs/video-comparison.md).
@@ -87,6 +89,8 @@ Enable **ForgeLens › Context Scout** to let TrueForge create a child during mu
 For a provider with a small request quota, enable **ForgeLens › Compact Requests**. ForgeLens places the locally selected excerpts in the first model request. The model can propose a plan, exact edits across several files and a pytest check in one tool call. ForgeLens verifies all anchors before the first review. The editor still shows each file and asks before executing tests.
 
 For a CPU-hosted model that takes several minutes to generate an edit, set **Run Timeout Minutes** and **Model Call Timeout Seconds** in VS Code User Settings. The defaults are 5 minutes per run and 120 seconds per model call. For slower hardware you can raise the limits to 90 minutes per run and 30 minutes per generation. TrueForge's own provider header and body timeouts must also allow that time. Escape still stops a run. [Reproducible CPU integration setup](checks/run-task-b-runner.sh)
+
+If a local llama.cpp model answers a draft in prose, you can opt into a loopback adapter that requests a native edit proposal on the first generation. The model supplies every file path and edit. VS Code still asks for hunk and test approval. [Local provider setup](docs/llama-draft-provider.md)
 
 ## What happens to proposed changes
 
