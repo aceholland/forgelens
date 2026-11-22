@@ -68,7 +68,12 @@ exports.run = async () => {
     assert.equal(config.get('model'), '');
     assert.equal(config.get('contextScout'), false);
     const extension = vscode.extensions.getExtension('forgelens-team.forgelens');
-    assert.ok(extension, 'Editor did not discover the source extension');
+    assert.ok(extension, 'Editor did not discover the installed ForgeLens VSIX');
+    assert.equal(extension.extensionUri.scheme, 'file');
+    const installedRoot = fs.realpathSync(process.env.FORGELENS_INSTALLED_EXTENSIONS);
+    const installedPath = fs.realpathSync(extension.extensionPath);
+    assert.equal(path.relative(installedRoot, path.dirname(installedPath)), '',
+      'ForgeLens must activate from a direct child of the isolated CLI installation directory');
     assert.equal(extension.packageJSON.version, require('../package.json').version);
     await extension.activate();
     assert.equal(extension.isActive, true);
@@ -122,6 +127,7 @@ exports.run = async () => {
     console.log('FORGELENS_PREVIEW_DESKTOP_PASS ' + JSON.stringify({
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
       version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: 8,
+      installedPackage: { directory: path.basename(installedPath), sha256: process.env.FORGELENS_VSIX_SHA256 },
       selectedPaths, ignoredExplicitMentionsExcluded: true, fixtureUnchanged: true, trueforgeRequests: requests,
       verification: { nativeQuickPick: true, driver: 'Clicked the visible native picker item', actualTaskProcessEvents: checks, fixtureRestored: true },
     }));
