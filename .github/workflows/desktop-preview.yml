@@ -90,3 +90,43 @@ jobs:
           else
             node checks/desktop-preview-launch.cjs "$RUNNER_TEMP/forge-package/forgelens.vsix"
           fi
+
+  live-review-with-trueforge:
+    needs: build-package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      FORGELENS_VSIX_SHA256: ${{ needs.build-package.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: forgelens-desktop-vsix
+          path: ${{ runner.temp }}/forge-package
+      - name: Install the deterministic model fixture and desktop test dependencies
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          python -m pip install pytest==9.0.2
+          npm install --prefix "$RUNNER_TEMP/forge-preview-harness" --no-audit --no-fund @vscode/test-electron@3.1.0 playwright-core@1.58.2 @truefoundry/trueforge@0.185.1
+      - name: Exercise installed VSIX, hunk decisions, candidate pytest and model feedback
+        shell: bash
+        run: |
+          export FORGELENS_QA_PYTHON="$(python -c 'import sys; print(sys.executable)')"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            xvfb-run -a node checks/desktop-preview-launch.cjs "$RUNNER_TEMP/forge-package/forgelens.vsix" --live-review
+          else
+            node checks/desktop-preview-launch.cjs "$RUNNER_TEMP/forge-package/forgelens.vsix" --live-review
+          fi

@@ -6,11 +6,11 @@ const net = require('node:net');
 const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 
-function createFixture(parent) {
+function createFixture(parent, liveReview = false) {
   const storage = fs.mkdtempSync(path.join(parent, 'forgelens-desktop-preview-'));
   const folder = path.join(storage, 'workspace');
   fs.mkdirSync(folder);
-  const files = {
+  const files = liveReview ? require('./desktop-live-model.cjs').files : {
     '.gitignore': '*.tmp\nignored/\n',
     '.forgelensignore': '# Literal workspace exclusions\nprivate/\n',
     '.env': 'THIS_IS_SYNTHETIC_TEST_DATA=true\n',
@@ -33,7 +33,7 @@ function createFixture(parent) {
   const excludes = path.join(folder, '.git', 'fixture-global-excludes');
   fs.writeFileSync(excludes, '');
   git('config', 'core.excludesFile', excludes);
-  git('add', '-f', 'src/tracked.tmp');
+  if (!liveReview) git('add', '-f', 'src/tracked.tmp');
   return { storage, folder };
 }
 
@@ -44,7 +44,8 @@ async function main() {
   assert.ok(vsix && fs.statSync(vsix).isFile(), 'Pass the built ForgeLens VSIX to the desktop check');
   const sha256 = createHash('sha256').update(fs.readFileSync(vsix)).digest('hex');
   if (process.env.FORGELENS_VSIX_SHA256) assert.equal(sha256, process.env.FORGELENS_VSIX_SHA256);
-  const { storage, folder } = createFixture(temp);
+  const liveReview = process.argv[3] === '--live-review';
+  const { storage, folder } = createFixture(temp, liveReview);
   const userData = path.join(storage, 'user-data');
   const extensionsDir = path.join(storage, 'extensions');
   fs.mkdirSync(extensionsDir);
@@ -88,17 +89,28 @@ async function main() {
   await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
   const port = socket.address().port;
   await new Promise(resolve => socket.close(resolve));
-  await runTests({
+  const live = liveReview ? await require('./desktop-live-model.cjs').start(storage, temp) : undefined;
+  try {
+    if (live) {
+      const settings = path.join(userData, 'User', 'settings.json');
+      fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, 'utf8')),
+        'forgelens.model': 'fixture/scripted', 'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
+        'forgelens.pythonPath': process.env.FORGELENS_QA_PYTHON || 'python',
+        'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom' }));
+    }
+    await runTests({
     vscodeExecutablePath: editor,
     extensionDevelopmentPath: driver,
-    extensionTestsPath: path.join(__dirname, 'desktop-preview.cjs'),
-    extensionTestsEnv: { FORGELENS_PREVIEW_FIXTURE: folder, FORGELENS_PICKER_PORT: String(port),
+    extensionTestsPath: path.join(__dirname, live ? 'desktop-live-review.cjs' : 'desktop-preview.cjs'),
+    extensionTestsEnv: { RUNNER_TEMP: temp, FORGELENS_PREVIEW_FIXTURE: folder, FORGELENS_PICKER_PORT: String(port),
       FORGELENS_INSTALLED_EXTENSIONS: extensionsDir, FORGELENS_VSIX_SHA256: sha256 },
     // Trust is disabled only in this disposable synthetic workspace/profile.
     launchArgs: [folder, '--disable-gpu', '--skip-welcome', '--skip-release-notes',
       '--disable-workspace-trust', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${port}`,
       '--user-data-dir', userData, '--extensions-dir', extensionsDir],
-  });
+    });
+    if (live) live.assertComplete();
+  } finally { await live?.close(); }
 }
 
 exports.createFixture = createFixture;

@@ -59,6 +59,19 @@ The editor driver compared the original file hashes at the consent and hunk-deci
 
 ## Draft from context in the editor
 
+Developers can reproduce the two-file review with the packaged extension, a local TrueForge 0.185.1 server, and a deterministic loopback model. The `live-review-with-trueforge` job in the [desktop workflow](../.github/workflows/desktop-preview.yml) includes the pinned setup. With Node 22, Git and a Python environment containing pytest, run these commands from a POSIX shell. On headless Linux, prepend `xvfb-run -a` to the final command.
+
+```sh
+export RUNNER_TEMP="$(mktemp -d)"
+npm ci
+npm run package -- --out "$RUNNER_TEMP/forgelens.vsix"
+npm install --prefix "$RUNNER_TEMP/forge-preview-harness" @vscode/test-electron@3.1.0 playwright-core@1.58.2 @truefoundry/trueforge@0.185.1
+export FORGELENS_QA_PYTHON="$(python -c 'import sys; print(sys.executable)')"
+node checks/desktop-preview-launch.cjs "$RUNNER_TEMP/forgelens.vsix" --live-review
+```
+
+The check installs the VSIX in a temporary editor profile, accepts two hunks, rejects an unrelated tag change, and approves pytest. The candidate tests verify the new behavior and the preserved tag. The check also verifies that the model received the decisions and both passing tests, and that the saved workspace and editor buffers match their original state.
+
 The Windows VS Code 1.147.0 driver clicked **Draft from context** with ordinary compact requests and tool preloading disabled, and the optional scout enabled in settings. The deterministic provider captured three requests from the same TrueForge turn. Each offered the ForgeLens `propose_changes` tool and TrueForge’s built-in clock. The retrieved excerpts arrived in a labeled user-role message separate from the task.
 
 The fixture deliberately supplied an incorrect anchor for `src/doubles.py`. ForgeLens returned a short excerpt from that file and staged zero edits. The fixture then proposed corrected edits to the implementation, its test and its documentation. The editor accepted all three requested changes and rejected an unrelated tag modification. After the driver clicked **Run candidate tests**, pytest exited 0 with one passing test in the staged copy. The provider received both the hunk decisions and the pytest result. The three source-file hashes still matched their originals and the editor buffers were clean.
