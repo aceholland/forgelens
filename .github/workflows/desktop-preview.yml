@@ -20,6 +20,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  native-sandbox-review:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the local sandbox prerequisites and pinned TrueForge
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y bubblewrap socat ripgrep python3-venv
+          npm ci --no-audit --no-fund
+          npm install --prefix "$RUNNER_TEMP/forge-native" --no-audit --no-fund @truefoundry/trueforge@0.185.1
+      - name: Run the published skill and its Python MCP helper inside the native sandbox
+        shell: bash
+        run: TRUEFORGE_CLI="$RUNNER_TEMP/forge-native/node_modules/@truefoundry/trueforge/dist/cli.js" node --import tsx checks/native-review.ts
+
   build-package:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -38,7 +38,8 @@ export function registerCodeModeReview(context: vscode.ExtensionContext, getRevi
         title: 'ForgeLens is analyzing the review in TrueForge', cancellable: true}, async (_, token) => {
         const cancelled = token.onCancellationRequested(() => controller.abort());
         const foldersChanged = vscode.workspace.onDidChangeWorkspaceFolders(() => controller.abort());
-        const timer = setTimeout(() => controller.abort(), 120000);
+        const timeoutMs = config.get<number>('runTimeoutMinutes', 5) * 60_000;
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const result = await runCodeModeReview(config.get<string>('baseUrl', 'http://127.0.0.1:8790'),
             model, snapshot, controller.signal);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -23,6 +23,10 @@ async function main() {
   assert.ok(cli && path.isAbsolute(cli));
   const scratch = await mkdtemp('/tmp/flr-'); // Short path for Darwin Unix-domain sockets.
   await mkdir(path.join(scratch, 'home'));
+  const project = path.join(scratch, 'project');
+  await mkdir(project);
+  const original = 'export const answer = 42;\n';
+  await writeFile(path.join(project, 'sample.ts'), original);
   const providerSteps: string[] = [];
   let failure: unknown;
   const provider = http.createServer(async (req, res) => {
@@ -77,7 +81,8 @@ async function main() {
   await new Promise<void>(resolve => reservation.close(() => resolve()));
   const base = 'http://127.0.0.1:' + port;
   const output = createWriteStream(path.join(scratch, 'server.log'));
-  const child = spawn(process.execPath, [cli, '--port', String(port)], {cwd:scratch, stdio:['ignore','pipe','pipe'],
+  // A real desktop project and the service's private application data are siblings.
+  const child = spawn(process.execPath, [cli, '--port', String(port)], {cwd:project, stdio:['ignore','pipe','pipe'],
     env:{PATH:process.env.PATH, HOST:'127.0.0.1', HOME:path.join(scratch,'home'), TMPDIR:'/tmp',
       STANDALONE:'true', SQLITE_PATH:path.join(scratch,'state.sqlite'), NODE_ENV:'test', SENTRY_ENABLED:'false',
       LOG_LEVEL:'warn', ACCESS_LOGS:'false', NETWORK_POLICY_ENABLED:'true',
@@ -107,6 +112,8 @@ async function main() {
     assert.deepEqual(counts, {files:2,accepted:3,pending:1,rejected:2,tests:'stale'});
     const registrations = await client.settings.mcpServers.list();
     assert.ok(registrations.data.every(item => !item.name.startsWith('forgelens-review-')));
+    assert.deepEqual(await readdir(project), ['sample.ts']);
+    assert.equal(await readFile(path.join(project,'sample.ts'),'utf8'), original);
     console.log('FORGELENS_NATIVE_REVIEW_PASS ' + JSON.stringify({platform:process.platform,
       skillCommit:reviewSkillManifest.ref, provider:'deterministic loopback', steps:providerSteps, ...receipt}));
     passed = true;
