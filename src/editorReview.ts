@@ -1,6 +1,13 @@
 import { decideHunk, renderProposal, type FileProposal, type ReviewHunk } from './review';
 
 export type Decision = 'accepted' | 'rejected';
+export function batchForReview(files:unknown) {
+  if (!Array.isArray(files) || files.length<1 || files.length>12 ||
+      files.some(file=>!file || typeof file!=='object' || Array.isArray(file))) {
+    return {allowed:false as const,reason:'The files field requires a JSON array of 1–12 file objects. Resend the same edits as objects directly in that array. A quoted string containing JSON cannot be reviewed.'};
+  }
+  return {files};
+}
 /** Pytest may see only completed live reviews, including just the accepted side of a mixed decision. */
 export function reviewedCandidate(files: FileProposal[], liveMode: boolean, hasLiveProposal: boolean) {
   if (!liveMode || hasLiveProposal || files.some(file => file.hunks.some(hunk => hunk.status === 'pending'))) {

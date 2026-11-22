@@ -8,6 +8,19 @@ Open **ForgeLens: Open Agent**, enter the request below once, and choose **Draft
 
 Review the proposed hunks and any pytest request. To reproduce the unassisted check, supply no further messages or edits. Once the turn ends, apply the accepted hunks, save and run `python -m pytest tests/test_cli.py -q` in the VS Code terminal. Inspect `python -m flask --help`, the JSON for a test app with mixed-case secret keys, and the CLI documentation.
 
+```mermaid
+flowchart LR
+    Request["One request in VS Code"] --> Context["Select Flask source, tests and docs"]
+    Context --> Agent["TrueForge calls the free model"]
+    Agent --> Review["Review the model’s edits"]
+    Review --> Staged["Run pytest on accepted changes"]
+    Staged -->|Failure and source excerpt| Agent
+    Staged -->|Approved changes| Save["Apply and save in VS Code"]
+    Save --> Grade["Check CLI help, masking, docs and full suite"]
+```
+
+**Run agent** can also work from a single request. Turn off **ForgeLens › Ask Questions**. Enable **Compact Requests** to provide the initial source excerpts while allowing the model to read more files as it works. Both modes retain hunk review and test approvals.
+
 ## Reproduce the recorded evaluation
 
 The [desktop driver](../checks/task-b-desktop-launch.cjs) opens a separate editor profile and clones the pinned revision into a **new** evidence directory. It enters the official request once and clicks review controls. A clarification ends the attempt. After saving, it runs the [terminal checks](../checks/task-b-desktop-grade.py) and then applies the resulting patch to a second clean checkout for [independent grading](../checks/run-task-b-verification.py).

@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProposal, decideHunk, renderProposal, ReviewStore } from '../src/review';
-import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate } from '../src/editorReview';
+import { LiveReviews, batchForReview, lensOffsets, reviewFeedback, reviewedCandidate } from '../src/editorReview';
+
+test('malformed batches get a structural denial without disclosing or parsing their contents', () => {
+  const files=[{path:'fixture.py',edits:[]}];
+  for(const value of ['[{"path":"PRIVATE_CONTENT"}]',[],Array(13).fill({}),[null],[[]]]){
+    const denied=batchForReview(value);
+    assert.equal(denied.allowed,false);
+    assert.match(denied.reason!,/JSON array of 1–12 file objects/);
+    assert.doesNotMatch(denied.reason!,/PRIVATE_CONTENT|editor user/);
+  }
+  assert.equal(batchForReview(files).files,files);
+});
 
 test('candidate tests require all live decisions and include only accepted content', () => {
   const pending = createProposal('sample.py', 'a\nx\nb\n', 'A\nx\nB\n');

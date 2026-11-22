@@ -13,7 +13,7 @@ import { describeContext, previewWorkspace } from './contextPreview';
 import { compactContext, compactEvidence, compactInstructions, draftInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
-import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
+import { LiveReviews, batchForReview, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
 import { candidateTestArgs, validateCandidate } from './candidateValidation';
 import { userFixturePins } from './candidateFixtures';
 import { resolveAgentProposal } from './patch';
@@ -447,11 +447,11 @@ export async function activate(context:vscode.ExtensionContext) {
     const epoch=reviewEpoch;
     const permitted=()=>active&&!cancellation&&!runExpired&&!modelSwitching&&epoch===reviewEpoch&&folder===root();
     if(details.name==='propose_changes' && compact && !scope) {
-     const files=details.arguments.files;
-     if(!Array.isArray(files) || !files.length || files.length>12)return false;
+     const batch=batchForReview(details.arguments.files);
+     if(batch.allowed===false)return batch;
      const names:string[]=[];
      try{
-      for(const file of files){
+      for(const file of batch.files){
        if(typeof file?.path!=='string')throw new Error('Expected a workspace-relative path for every file.');
        if(draftFromContext&&!selected.items.some(item=>item.path===file.path))throw new Error('Use Run agent to edit a file outside the retrieved context.');
        await confinedPath(folder,file.path);
