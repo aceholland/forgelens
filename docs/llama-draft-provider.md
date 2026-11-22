@@ -21,3 +21,15 @@ Configure a custom OpenAI-compatible provider in TrueForge with base URL `http:/
 Selecting this provider opts into a first-inference rule. It recognizes the trusted ForgeLens draft instruction, user input without any assistant or tool history, and the existing `propose_changes` function schema. The only other advertised function it accepts for this rule is TrueForge’s `get_current_datetime`. If tool choice is absent or `auto`, the adapter sends the original proposal schema alone and requests `tool_choice: "required"`. The b12613 server reads tool choice as a string. With one function available, that function is the required choice. [llama.cpp b12613 request parser](https://github.com/ggml-org/llama.cpp/blob/b12613/tools/server/server-common.cpp#L1396-L1400)
 
 Ordinary Agent requests, later inferences, and calls with an explicit `none`, `required` or named selection retain their original payloads. The adapter passes the model’s response stream and HTTP errors through to TrueForge. Disconnecting a client closes the upstream inference connection. Its process log contains a request number and whether the rule applied. Source text, credentials and model output stay out of that log. A model can still generate edits that fail review or tests. [Adapter](../scripts/llama-draft-adapter.mjs) · [HTTP and cancellation tests](../test/llama-draft-adapter.test.ts)
+
+### Generate the first proposal as structured JSON
+
+For a local model that supports llama.cpp’s JSON Schema output, start this adapter on the same two ports in the second terminal. Use one adapter per listening port.
+
+```sh
+node scripts/llama-schema-draft.mjs 18932 18931
+```
+
+On the first **Draft from context** generation, llama.cpp receives the original messages and the edit tool’s schema. The model writes the file paths, reasons and edits. The adapter passes its generated JSON to TrueForge as the proposal arguments. A completed first proposal produces a SHA-256 receipt. Later generations receive the real review decisions and pytest output through the usual tool protocol. This setup uses local CPU inference and needs no model API account. [Schema adapter](../scripts/llama-schema-draft.mjs)
+
+To repeat a recorded editor benchmark on a public fork, open **Actions → Task B live model → Run workflow** and choose a model ending in `-desktop`. The standard Linux runner downloads checked model weights, installs the extension in desktop VS Code, submits the request once and retains the screen capture, saved patch and test receipts. The job checks that the saved files match the model’s reviewed edits. [Workflow](../.github/workflows/task-b-model.yml) · [Desktop setup and grader](../checks/run-task-b-desktop-ci.sh)

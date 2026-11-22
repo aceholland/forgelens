@@ -13,15 +13,11 @@ on:
           - qwen2-5-coder-7b
           - qwen2-5-coder-14b-desktop
           - ornith-1-5-9b-desktop
+          - qwen3-coder-30b-a3b-desktop
       request_first_draft_tool:
         description: Ask the 7B draft model to use the native edit tool on its first request
         type: boolean
         default: false
-  push:
-    branches: [codex/task-b-workflow-20261122]
-    paths:
-      - '.github/workflows/task-b-model.yml'
-      - 'checks/run-task-b-runner.sh'
 
 permissions:
   contents: read
@@ -32,8 +28,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 115
     env:
-      SOLVER_MODEL: ${{ inputs.model || 'qwen2-5-coder-14b-desktop' }}
-      REQUEST_FIRST_DRAFT_TOOL: ${{ (github.event_name == 'push' || inputs.request_first_draft_tool) && 'true' || 'false' }}
+      SOLVER_MODEL: ${{ inputs.model }}
+      REQUEST_FIRST_DRAFT_TOOL: ${{ inputs.request_first_draft_tool && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:

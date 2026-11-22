@@ -33,6 +33,17 @@ case "$model" in
     export FORGELENS_DRAFT_FROM_CONTEXT=true
     if [[ "${REQUEST_FIRST_DRAFT_TOOL:-false}" == true ]]; then use_adapter=true; fi
     ;;
+  qwen3-coder-30b-a3b-desktop)
+    # The model and desktop editor share a 16 GiB standard runner.
+    model_sha=7055a02d4d974fd68b26b095a9c676f099507aed1171f89a47275025df3f521d
+    model_url=https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/b17cb02dd882d5b6ab62fc777ad2995f19668350/Qwen3-Coder-30B-A3B-Instruct-UD-IQ2_M.gguf
+    context=12288
+    max_output=5200
+    model_flags=(--batch-size 256 --ubatch-size 128 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --no-ui)
+    desktop=true
+    use_adapter=true
+    export FORGELENS_DRAFT_FROM_CONTEXT=true
+    ;;
   qwen2-5-coder-14b-desktop|ornith-1-5-9b-desktop)
     context=12288
     model_flags=(--batch-size 256 --ubatch-size 128 --no-ui)
