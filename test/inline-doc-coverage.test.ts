@@ -61,3 +61,18 @@ test('distinguishes negative English phrases and exact case-sensitive literals f
   const denied = 'An empty string does not return False. A missing key, "no" and "STOP" return False.';
   assert.match(pythonDocCoverageIssues(request, sample(denied, 'options.get("entry")',body)).join(' '),/empty/i);
 });
+
+test('keeps a reStructuredText or Markdown false-value list separate from the following wrapped prose', () => {
+  const heading = 'The following labels are treated as ``False`` (ignoring case):';
+  const bullets = ['skip','pause','false'].map(v=>'- ``"'+v+'"``').join('\n');
+  const explanation = 'Any other non-empty string is treated as ``True``. A blank string or missing\n    configuration entry results in ``False``.';
+  const valid = [heading,bullets,explanation].join('\n\n');
+  assert.deepEqual(pythonDocCoverageIssues(request,sample(valid)), []);
+  assert.deepEqual(pythonDocCoverageIssues(request,sample(valid.replaceAll('\n\n','\n'))), []);
+  const wrongList = pythonDocCoverageIssues(request,sample(valid.replace('as ``False','as ``True'))).join(' ');
+  assert.match(wrongList, /"skip"/); assert.match(wrongList, /"pause"/);
+  const wrongBranch = pythonDocCoverageIssues(request,sample(valid.replace('results in ``False','results in ``True'))).join(' ');
+  assert.match(wrongBranch, /empty/i); assert.match(wrongBranch, /missing/i);
+  const omitted = valid.replace('A blank string or missing\n    configuration entry','A missing entry');
+  assert.match(pythonDocCoverageIssues(request,sample(omitted)).join(' '), /empty/i);
+});

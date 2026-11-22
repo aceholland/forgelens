@@ -72,21 +72,40 @@ function readFunction(source:string) {
 
 const emptyWords = /\b(?:empty|blank|zero[ -]length|length (?:zero|0)|no characters)\b|""|''/i;
 const missingWords = /\b(?:unset|undefined|missing|absent|nonexistent|unspecified|omitted|unconfigured|not (?:set|defined|present|provided|found|specified|supplied|configured)|does(?:n't| not) exist|no (?:environment variable|key|entry|value)(?:\s+is)?\b)/i;
-const falseMeaning = /\b(?:returns?|yields?|is|are|defaults? to|counts? as|treated as|interpreted as|considered|evaluates? to|resolves? to|as)\s+(?:the (?:boolean|value)\s+)?["']?false\b|\bfalse\s+(?:if|when|for|values?|inputs?|cases?)\b|\b(?:disabled?|turns? off)\b|\btrue\s+(?:unless|except(?: when| for)?)\b/gi;
-const trueMeaning = /\b(?:returns?|is|are|yields?|evaluates? to|treated as)\s+["']?true\b(?!\s+(?:unless|except))/i;
+const falseMeaning = /\b(?:returns?|yields?|is|are|defaults? to|counts? as|treated as|interpreted as|considered|evaluates? to|resolves? to|results? in|as)\s+(?:the (?:boolean|value)\s+)?["']?false\b|\bfalse\s+(?:if|when|for|values?|inputs?|cases?)\b|\b(?:disabled?|turns? off)\b|\btrue\s+(?:unless|except(?: when| for)?)\b/gi;
+const trueMeaning = /\b(?:returns?|is|are|yields?|evaluates? to|results? in|treated as)\s+["']?true\b(?!\s+(?:unless|except))/i;
+
+function docBlocks(doc:string) {
+  const blocks:{bullet:boolean;text:string}[] = [];
+  // Preserve block boundaries before joining soft wraps. A blank line between a heading and its list is valid RST.
+  for (const paragraph of doc.replace(/\x60/g,'').split(/\n[ \t]*\n/)) {
+    let block:{bullet:boolean;text:string}|undefined, listIndent=0;
+    for (const line of paragraph.split('\n')) {
+      const row = /^(\s*)(?:([-*+]|\d+[.)])\s+)?(.*)$/.exec(line)!;
+      const [, indent, marker, text] = row;
+      if (!text?.trim()) continue;
+      if (!block || marker || (block.bullet && indent!.length<=listIndent)) {
+        block={bullet:Boolean(marker),text:''};
+        listIndent=indent!.length;
+        blocks.push(block);
+      }
+      block.text+=(block.text?' ':'')+text.trim();
+    }
+  }
+  return blocks;
+}
 
 function documentedConditions(doc:string) {
-  const text = doc.replace(/\x60/g,'').replace(/\s+/g,' ').trim();
   const negative:string[] = [], positive:string[] = [];
-  let previousWasList = false;
-  for (const sentence of text.split(/(?<=[.!?])\s+|\botherwise\b|\bbut\b/i)) {
-    if (/\b(?:not|never|doesn't)\s+(?:return(?:s)?|treated as|considered|evaluate to|count as)\s+false\b/i.test(sentence)) {
-      positive.push(sentence.replace(falseMeaning,' ')); previousWasList=false; continue;
+  let list:string[]|undefined;
+  for (const block of docBlocks(doc)) {
+    for (const sentence of block.text.split(/(?<=[.!?;])\s+|\botherwise\b|\bbut\b/i)) {
+      const statement = sentence.replace(falseMeaning,' ');
+      const denied = /\b(?:not|never|doesn't)\s+(?:return(?:s)?|treated as|considered|evaluate to|result in|count as)\s+false\b/i.test(sentence);
+      const polarity = denied || trueMeaning.test(statement) ? positive : statement!==sentence ? negative : undefined;
+      (polarity ?? list)?.push(statement);
+      if (!block.bullet) list = /:\s*$|\b(?:following|these)\b/i.test(sentence) ? polarity : undefined;
     }
-    const statement = sentence.replace(falseMeaning,' ');
-    if (trueMeaning.test(statement)) { positive.push(statement); previousWasList=false; continue; }
-    if (statement!==sentence || previousWasList) negative.push(statement);
-    previousWasList = statement!==sentence && /\b(?:following|these)\b/.test(sentence);
   }
   return {negative:negative.join(' '), positive:positive.join(' ')};
 }
@@ -102,11 +121,13 @@ export function pythonDocCoverageIssues(request:string, replacement:string):stri
   if (!contract) return [];
   const docs = documentedConditions(parsed.doc);
   const missing:string[] = [];
-  const directPositive = docs.positive.replace(/\b(?:non[- ]?|not\s+)(?:empty|blank|missing|absent|unset)\b/gi,'');
+  const complement = /\b(?:non[- ]?|not\s+)(?:empty|blank|missing|absent|unset)\b/gi;
+  const directPositive = docs.positive.replace(complement,'');
+  const directNegative = docs.negative.replace(complement,'');
   // An unquoted determiner in a noun phrase is not a named input.
   const listWords = docs.negative.replace(/(?<!["'])\b(?:no|any|the|each|a|an)\s+(?=(?:environment\s+variable|key|entry|value|characters|input|variable)\b)/gi,'');
   for (const [condition, pattern, label] of [[contract.empty,emptyWords,'an empty string'],[contract.missing,missingWords,'a missing lookup key']] as const) {
-    if (condition && (!pattern.test(docs.negative) || pattern.test(directPositive))) missing.push(label);
+    if (condition && (!pattern.test(directNegative) || pattern.test(directPositive))) missing.push(label);
   }
   for (const literal of contract.literals) {
     const escaped = literal.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
