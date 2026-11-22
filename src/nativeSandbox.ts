@@ -5,7 +5,7 @@ export async function assertLocalNativeSandbox(client: TrueForge, signal: AbortS
   const options = {abortSignal: signal, maxRetries: 0, timeoutInSeconds: 5};
   const {data: caps} = await client.server.getCapabilities(options);
   if (!caps.sandbox.enabled) {
-    throw Error('TrueForge reports no native sandbox. Start standalone TrueForge on Linux or macOS. On Windows, run the service inside WSL2 Linux with bubblewrap, socat, ripgrep and Python 3 with venv.');
+    throw Error('TrueForge reports no native sandbox. Use standalone TrueForge on macOS or Linux. Linux requires bubblewrap, socat, ripgrep and Python 3 with venv. A Windows editor using a WSL2 service also needs loopback access in both directions.');
   }
 
   // Managed TrueFoundry can supply a platform sandbox even without a Daytona settings record.

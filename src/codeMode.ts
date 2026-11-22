@@ -82,9 +82,9 @@ export async function runCodeModeReview(baseUrl: string, model: string, input: R
       if (event.type === 'turn.done') {
         terminal = true;
         if (event.state.status !== 'done') throw Error('TrueForge ended the review analysis with status ' + event.state.status + '.');
-        if (!sandboxCreated || !tracker.verified() || !receiptVerified) {
-          throw Error('The turn did not produce a verified sandbox receipt after reading the review skill. See TrueForge session ' + sessionId + '.');
-        }
+        const missing = !sandboxCreated ? 'sandbox creation' : !tracker.verified() ? 'the pinned checklist read'
+          : !receiptVerified ? 'the Python helper’s review receipt' : undefined;
+        if (missing) throw Error('TrueForge finished before ForgeLens could verify ' + missing + '. See session ' + sessionId + '.');
         return {sessionId, ...bridge.totals};
       }
     }

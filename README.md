@@ -18,7 +18,7 @@ flowchart LR
   D --> F["Verify totals and display result in VS Code"]
 ```
 
-The sandbox needs a standalone TrueForge service on macOS or Linux with Python 3 and venv. On Linux, TrueForge also checks for bubblewrap, socat and ripgrep. The service needs GitHub access to fetch the pinned skill. Native Windows TrueForge cannot host this sandbox. The normal Windows editing, review and test commands use the existing Windows setup. For zero-price inference, choose your registered local model.
+The sandbox needs a standalone TrueForge service on macOS or Linux with Python 3 and venv. On Linux, TrueForge also checks for bubblewrap, socat and ripgrep. The service needs GitHub access to fetch the pinned skill. Native Windows TrueForge cannot host this sandbox. If you pair Windows desktop VS Code with a WSL2 service, each side must be able to reach the other on loopback for the editor callback. The normal Windows editing, review and test commands use the existing Windows setup. For zero-price inference, choose your registered local model.
 
 | TrueForge capability | Where it does work |
 | --- | --- |

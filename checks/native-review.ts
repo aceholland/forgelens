@@ -89,7 +89,7 @@ async function main() {
   try {
     for (let tries=0; ; tries++) {
       assert.equal(child.exitCode, null, 'TrueForge exited before health check');
-      try { if ((await fetch(base + '/health')).ok) break; } catch {}
+      try { if ((await fetch(base + '/healthz')).ok) break; } catch {}
       assert.ok(tries < 240, 'TrueForge startup timeout');
       await delay(250);
     }

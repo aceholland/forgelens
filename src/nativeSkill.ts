@@ -63,7 +63,8 @@ export function createReviewSkillReadTracker() {
           if (call.toolInfo.type !== 'truefoundry-system' || call.toolInfo.name !== 'exec') continue;
           try {
             const input = JSON.parse(call.function.arguments);
-            if (input?.command === reviewSkillReadCommand) pending.add(JSON.stringify([event.threadId, call.id]));
+            if (input?.command === reviewSkillReadCommand && typeof input.intent === 'string' &&
+                input.cwd === undefined && input.env === undefined) pending.add(JSON.stringify([event.threadId, call.id]));
           } catch { /* Ignore incomplete arguments in a streaming tool call. */ }
         }
       } else if (event.type === 'tool.response' && pending.delete(JSON.stringify([event.threadId, event.toolCallId]))) {

@@ -30,7 +30,7 @@ test('only a successful native sandbox read of the pinned checklist is verified'
   const common = {createdAt: '2026-01-01T00:00:00Z', threadId: 'main'};
   const call = (id: string, command: string, toolInfo: TrueForgeApi.ToolInfo = {type: 'truefoundry-system', name: 'exec'}) =>
     tracker.observe({...common, type: 'model.message', id: 'model-' + id, toolCalls: [{id, type: 'function', toolInfo,
-      function: {name: 'exec', arguments: JSON.stringify({command})}}]});
+      function: {name: 'exec', arguments: JSON.stringify({command, intent: 'Read the checklist'})}}]});
   const reply = (id: string, result: string, exitCode = 0, threadId = 'main') => tracker.observe({...common,
     threadId, type: 'tool.response', id: 'tool-' + id, toolCallId: id, content: JSON.stringify({success: true, response: {exitCode, result}})});
   reply('missing', checklist);
