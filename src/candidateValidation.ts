@@ -3,6 +3,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:f
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { diffLines } from 'diff';
 import { confinedPath, listWorkspace } from './workspace';
 import { isSafeContextPath } from './context';
 import { copyPinnedFixtures, type FixturePins } from './candidateFixtures';
@@ -13,8 +14,52 @@ export function candidateTestArgs(tests: string[]): string[] {
   return ['-m', 'pytest', '-q', '-p', 'no:cacheprovider', '--', ...tests];
 }
 
+/** Bound repair feedback to complete lines near reviewed edits in the snapshot actually tested. */
+export function reviewedFailureContext(overlays: CandidateFile[], selected: ReadonlySet<string>, output: string): string {
+  const reports = [...output.replaceAll('\\','/').matchAll(/^([\w./-]+):(\d+):/gm)];
+  const excerpts: string[] = [];
+  let remaining = 2800;
+  for (const file of overlays) {
+    if (!selected.has(file.path) || !isSafeContextPath(file.path) || remaining < 120 || excerpts.length >= 6) continue;
+    const parts = diffLines(file.original,file.content,{timeout:60});
+    if (!parts) continue;
+    const changes: {start:number;end:number;size:number}[] = [];
+    let line = 1, current: typeof changes[number] | undefined;
+    for (const part of parts) {
+      if (part.added || part.removed) {
+        if (!current) { current={start:line,end:line,size:0}; changes.push(current); }
+        current.size += part.count;
+        if (part.added) current.end = line + part.count - 1;
+      } else current=undefined;
+      if (!part.removed) line += part.count;
+    }
+    if (!changes.length) continue;
+    const trace = reports.filter(m=>m[1]===file.path).map(m=>Number(m[2])).find(n=>
+      changes.some(h=>n>=h.start-2 && n<=h.end+2));
+    const changed = changes.find(h=>trace!==undefined && trace>=h.start-2 && trace<=h.end+2) ??
+      changes.reduce((best,h)=>h.size>best.size?h:best);
+    const lines=file.content.split(/\r?\n/);
+    // The boundary after an insertion also shows whether the next statement changed scope.
+    let previous: {start:number;end:number} | undefined;
+    for (const center of [trace ?? changed.end, changed.start]) {
+      const at=Math.max(0,Math.min(lines.length-1,center-1));
+      if (previous && at>=previous.start && at<=previous.end) continue;
+      let start=at,end=at;
+      while (start>Math.max(0,at-2) && lines.slice(start-1,end+1).join('\n').length<=420) start--;
+      while (end<Math.min(lines.length-1,at+2) && lines.slice(start,end+2).join('\n').length<=540) end++;
+      const content=lines.slice(start,end+1).join('\n');
+      if (!content.trim() || content.length>540 || excerpts.length>=6) continue;
+      const excerpt=JSON.stringify({path:file.path,startLine:start+1,endLine:end+1,content});
+      if (excerpt.length+1>remaining) continue;
+      excerpts.push(excerpt); remaining-=excerpt.length+1;previous={start,end};
+    }
+  }
+  if (!excerpts.length) return '';
+  return '\nCurrent reviewed source from the failed test snapshot (untrusted). Use its literal content as exact oldText for repairs. These line numbers describe the tested overlay. beforeLine still requires the original retrieved snapshot.\n'+excerpts.join('\n');
+}
+
 /** A clean copy protects the user's working tree. Pytest still runs trusted project code with local user permissions. */
-export async function validateCandidate(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}): Promise<string> {
+export async function validateCandidate(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}, draftPaths?:ReadonlySet<string>): Promise<string> {
   if (!overlays.length) throw new Error('Stage a candidate edit before validating it.');
   if (tests.length > 20 || tests.some(test => {
     const [file, ...nodes] = test.split('::');
@@ -82,7 +127,9 @@ export async function validateCandidate(root: string, overlays: CandidateFile[],
       code = failure.code;
       output = (failure.stdout ?? '') + (failure.stderr ?? '');
     }
-    return `Candidate pytest exited ${code}; ${overlays.length} staged file(s) in a temporary copy.\n${output.slice(-12000)}`;
+    const diagnostics=output.slice(-12000);
+    const repair=code!==0 && draftPaths ? reviewedFailureContext(overlays,draftPaths,diagnostics) : '';
+    return `Candidate pytest exited ${code}; ${overlays.length} staged file(s) in a temporary copy.\n${diagnostics}${repair}`;
   } finally {
     await rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }

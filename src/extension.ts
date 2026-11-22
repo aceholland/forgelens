@@ -379,7 +379,8 @@ export async function activate(context:vscode.ExtensionContext) {
     if(commandAbort)throw new Error('Another verification process is already active.');
     const controller=new AbortController();commandAbort=controller;
     const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
-    try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal,fixtures);emit(result);return result;}
+    const repairPaths=draftFromContext?new Set(selected.items.map(item=>item.path)):undefined;
+    try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal,fixtures,repairPaths);emit(result);return result;}
     finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
    },command:async(command,args,signal)=>{
     const allowed=(command==='pytest'&&args.every(a=>a==='-q'||/^tests\/[\w/.-]+\.py(?:::[\w]+)*$/.test(a)))||(command==='git'&&['status --short','diff --stat','diff'].includes(args.join(' ')))||(command==='flask'&&args.join(' ')==='--help');
