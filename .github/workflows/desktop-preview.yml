@@ -154,6 +154,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.editor == 'stable'
         shell: bash
         run: TRUEFORGE_CLI="$RUNNER_TEMP/forge-preview-harness/node_modules/@truefoundry/trueforge/dist/cli.js" node --import tsx checks/native-scout.ts
+      - name: Run pinned review skill and Code Mode in the native TrueForge sandbox
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: TRUEFORGE_CLI="$RUNNER_TEMP/forge-preview-harness/node_modules/@truefoundry/trueforge/dist/cli.js" node --import tsx checks/native-review.ts
       - name: Exercise installed VSIX, hunk decisions, candidate pytest and model feedback
         shell: bash
         run: |

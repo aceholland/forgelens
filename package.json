@@ -2,7 +2,7 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "forgelens-team",
   "repository": {
     "type": "git",
@@ -22,6 +22,10 @@
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "forgelens.analyzeReviewInSandbox",
+        "title": "ForgeLens: Analyze Review with Code Mode"
+      },
       {
         "command": "forgelens.checkSetup",
         "title": "ForgeLens: Check My Setup"

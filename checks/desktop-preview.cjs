@@ -108,7 +108,7 @@ exports.run = async () => {
     await extension.activate();
     assert.equal(extension.isActive, true);
     const commands = await vscode.commands.getCommands(true);
-    const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets', 'checkSetup'];
+    const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets', 'checkSetup', 'analyzeReviewInSandbox'];
     for (const id of commandIds) assert.ok(commands.includes('forgelens.' + id), `Missing command ${id}`);
     const selected = await bounded(vscode.commands.executeCommand('forgelens.previewContext',
       'Preview @file:src/visible.ts @file:src/tracked.tmp @file:nested/keep.drop'));

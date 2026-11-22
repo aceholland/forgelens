@@ -22,6 +22,7 @@ import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
 import { registerContextTools } from './editorContextTools';
 import { registerSetupCheck } from './setupCommand';
+import { registerCodeModeReview } from './codeModeCommand';
 import {ReviewJournal,restoreReview} from './reviewRecovery';
 import {prepareMerge,resolveMerge} from './reviewMerge';
 
@@ -51,6 +52,7 @@ export async function activate(context:vscode.ExtensionContext) {
  let reviewVersion=0;
  let reviewEpoch=0;
  let summary = new ReviewSummary();
+ registerCodeModeReview(context, () => summary.snapshot());
  let workspaceKey=vscode.workspace.workspaceFolders?.[0]?.uri.toString();
  const journal=new ReviewJournal(context.workspaceState,error=>{output.appendLine('Could not save local review recovery: '+String(error));void vscode.window.showWarningMessage('ForgeLens could not save this review for restart.');});
  let savedAwaiting=!!(workspaceKey && journal.get(workspaceKey)?.checkpoint), suspending=false;
