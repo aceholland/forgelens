@@ -25,6 +25,7 @@ Version 0.3.0 is a post-deadline release. Read the [two-page evidence supplement
 | --- | --- |
 | **Preview context** | See which paths, line ranges and selection reasons would reach the agent. Local ranking combines text relevance (BM25), file roles, symbols and static imports. Two limits bound the excerpts, initially 24,000 characters and 10,000 reference tokens. Preview works offline. |
 | **Run agent** | Give a multi-file request without naming paths. The editor shows discovery, the file plan, tool activity, review requests and the run result. An optional native TrueForge child can investigate supporting code inside the same turn. |
+| **Draft from context** | Ask for a specific change across existing files. ForgeLens selects excerpts locally and gives the model one editor tool to propose the edits together. Review each hunk and approve any requested pytest run. Choose **Run agent** when the task needs other files, more investigation or a clarification. |
 | **Edit selection** | Select code and press **Ctrl+Alt+I** or **Cmd+Alt+I**. The editor checks the proposed changes stay inside the selection. |
 | **Review a proposal** | Accept or reject an individual hunk, the pending hunks in a file, or all pending hunks. Use the panel or open the editor hunk controls. The running agent receives the decisions and can read the accepted version. |
 | **Test before applying** | Approve a pytest request to run against a temporary copy containing the staged candidate. A failure and its output go back to the agent so it can revise the proposal in the same turn. |

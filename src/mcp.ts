@@ -215,6 +215,7 @@ export async function startMcp(bridge: EditorBridge) {
     const base=await readView(file.path);
     try{prepared.push({path:file.path,base,content:resolveAgentProposal(base,file)});}
     catch(error){
+     guard();extra.signal.throwIfAborted();
      if(draftPaths&&error instanceof AnchorMismatch){
       const first=bridge.compactContext!.items.find(item=>item.path===file.path);
       const excerpt=anchorExcerpt(base,error.anchor,first?.startLine??1);

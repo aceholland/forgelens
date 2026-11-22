@@ -23,6 +23,12 @@ case "$model" in
     context=16384
     model_flags=(--flash-attn on --cache-type-k q8_0 --cache-type-v q8_0)
     ;;
+  qwen2-5-coder-7b)
+    model_sha=509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c
+    model_url=https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/13fb94bfda8c8cf22497dc57b78f391a9acb426a/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+    context=16384
+    export FORGELENS_DRAFT_FROM_CONTEXT=true
+    ;;
   *) echo "Unsupported diagnostic model"; exit 2 ;;
 esac
 llama_sha=1a1af0cb6dc2af9779e10085266de44084288d58a2917e14b64400c436fb124a

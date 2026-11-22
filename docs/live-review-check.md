@@ -57,6 +57,12 @@ The local model endpoint recorded four requests in the same TrueForge turn.
 
 The editor driver compared the original file hashes at the consent and hunk-decision steps and again at completion. All three disk files retained their original contents. The workspace contained no generated files outside Git's metadata, and no source buffer had unsaved changes. The candidate files stayed available for final user review.
 
+## Draft from context in the editor
+
+The Windows VS Code 1.147.0 driver clicked **Draft from context** with ordinary compact requests and tool preloading disabled, and the optional scout enabled in settings. The deterministic provider captured three requests from the same TrueForge turn. Each offered the ForgeLens `propose_changes` tool and TrueForge’s built-in clock. The retrieved excerpts arrived in a labeled user-role message separate from the task.
+
+The fixture deliberately supplied an incorrect anchor for `src/doubles.py`. ForgeLens returned a short excerpt from that file and staged zero edits. The fixture then proposed corrected edits to the implementation, its test and its documentation. The editor accepted all three requested changes and rejected an unrelated tag modification. After the driver clicked **Run candidate tests**, pytest exited 0 with one passing test in the staged copy. The provider received both the hunk decisions and the pytest result. The three source-file hashes still matched their originals and the editor buffers were clean.
+
 ## Deferred review blocks candidate execution
 
 A third Windows run used `forgelens.liveReview: false`. TrueForge returned a structured denial for a batch with an invalid workspace path, and the model retried with three valid files in the same turn. All proposed hunks were still pending when it requested pytest, first inside the batch and then through `validate_candidate`. The editor declined both requests and returned instructions to finish review. The exact-command execution dialog never opened. A marker in the disposable test module confirmed that pytest never collected it. File hashes and editor buffers remained unchanged.

@@ -10,6 +10,7 @@ on:
         options:
           - gpt-oss-20b
           - qwen3-coder-30b-a3b
+          - qwen2-5-coder-7b
   push:
     branches: [codex/task-b-workflow-20261122]
     paths:
@@ -25,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     env:
-      SOLVER_MODEL: ${{ inputs.model || 'gpt-oss-20b' }}
+      SOLVER_MODEL: ${{ inputs.model || 'qwen2-5-coder-7b' }}
     steps:
       - uses: actions/checkout@v4
         with:

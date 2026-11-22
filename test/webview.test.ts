@@ -63,6 +63,18 @@ test('context meter, literal path/reason and excerpt selection use the current s
   ui.receive({type:'context',id:9,label:'Preview',preview:{usedChars:0,budgetChars:30,items:[]}});
   assert.equal(ui.nodes.files!.textContent,'No matching excerpts.');
 });
+test('Draft from context sends the current task and follows the run lifecycle',()=>{
+  const ui=load();
+  ui.nodes.task!.value='Update the calculation, its test and the example.';
+  ui.nodes.draft!.onclick!();
+  assert.deepEqual({...ui.sent.at(-1)},{type:'draft',prompt:ui.nodes.task!.value});
+  ui.receive({type:'state',phase:'Drafting from context',active:true});
+  assert.equal(ui.nodes.phase!.textContent,'Drafting from context');
+  assert.equal(ui.nodes.draft!.disabled,true);
+  assert.equal(ui.nodes.run!.disabled,true);
+  ui.receive({type:'state',phase:'Review ready',active:false});
+  assert.equal(ui.nodes.draft!.disabled,false);
+});
 test('staged hunk actions carry the displayed proposal version and cannot apply a file',()=>{
   const ui=load();
   ui.receive({type:'queue',editable:true,version:3,files:[{path:'example.py',hunks:[{id:'hunk-1',status:'rejected'}]}]});

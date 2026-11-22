@@ -72,6 +72,7 @@ export function anchorExcerpt(current:string,anchor:string,fallbackLine:number) 
     const score=exact+matching;
     if(score>best){best=score;center=i;}
   }
-  const start=Math.max(0,center-2);
+  let start=Math.max(0,center-2);
+  while(start<center && lines.slice(start,center).join('\n').length>400) start++;
   return {startLine:start+1,content:lines.slice(start,center+4).join('\n').slice(0,1200)};
 }
