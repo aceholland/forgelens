@@ -68,11 +68,11 @@ exports.run = async () => {
     assert.match(output, /2 passed/);
     assert.deepEqual(snapshot(folder), original);
     assert.ok(!vscode.workspace.textDocuments.some(d=>d.uri.scheme==='file' && d.isDirty));
-    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS ' + JSON.stringify({editor:vscode.version, os:process.platform,
+    return {editor:vscode.version, os:process.platform,
       arch:process.arch, vsix:process.env.FORGELENS_VSIX_SHA256, provider:'deterministic loopback',
-      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true}));
+      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true};
   } catch (error) {
-    console.error('ForgeLens panel:', await panel.locator('body').innerText({timeout:5000}).catch(()=>'(unavailable)'));
-    throw error;
+    const diagnostic = await panel.locator('body').innerText({timeout:5000}).catch(()=>'(unavailable)');
+    throw Error(String(error)+'\nFixture panel:\n'+diagnostic.slice(-3000));
   }
 };

@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
 const { createHash } = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 
 function createFixture(parent, liveReview = false) {
   const storage = fs.mkdtempSync(path.join(parent, 'forgelens-desktop-preview-'));
@@ -78,39 +78,63 @@ async function main() {
   });
   assert.equal(installed.length, 1, `The CLI must install exactly one copy of ${expectedId}`);
   console.log('FORGELENS_VSIX_INSTALLED', expectedId, sha256);
-  // Test Electron requires a development extension. Give it a separate, inert
-  // test driver, so ForgeLens itself can load only from the installed VSIX.
-  const driver = path.join(storage, 'test-driver');
-  fs.mkdirSync(driver);
-  fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({
-    name: 'desktop-check', publisher: 'fixture', version: '1.0.0', engines: { vscode: '^1.101.0' },
-  }));
   const socket = net.createServer();
   await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve));
   const port = socket.address().port;
   await new Promise(resolve => socket.close(resolve));
-  const live = liveReview ? await require('./desktop-live-model.cjs').start(storage, temp) : undefined;
+  const extensionTestsEnv = { RUNNER_TEMP: temp, FORGELENS_PREVIEW_FIXTURE: folder, FORGELENS_PICKER_PORT: String(port),
+    FORGELENS_INSTALLED_EXTENSIONS: extensionsDir, FORGELENS_VSIX_SHA256: sha256 };
+  // Workspace trust is disabled only in this disposable synthetic workspace/profile.
+  const launchArgs = [folder, '--disable-gpu', '--skip-welcome', '--skip-release-notes',
+    '--disable-workspace-trust', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${port}`,
+    '--user-data-dir', userData, '--extensions-dir', extensionsDir];
+  const driverManifest = { name: 'desktop-check', publisher: 'fixture', version: '1.0.0', engines: { vscode: '^1.101.0' } };
+  if (!liveReview) {
+    const driver = path.join(storage, 'test-driver');
+    fs.mkdirSync(driver);
+    fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify(driverManifest));
+    await runTests({ vscodeExecutablePath: editor, extensionDevelopmentPath: driver, extensionTestsEnv,
+      extensionTestsPath: path.join(__dirname, 'desktop-preview.cjs'), launchArgs });
+    return;
+  }
+  const live = await require('./desktop-live-model.cjs').start(storage, temp);
   try {
-    if (live) {
-      const settings = path.join(userData, 'User', 'settings.json');
-      fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, 'utf8')),
-        'forgelens.model': 'fixture/scripted', 'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
-        'forgelens.pythonPath': process.env.FORGELENS_QA_PYTHON || 'python',
-        'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom' }));
-    }
-    await runTests({
-    vscodeExecutablePath: editor,
-    extensionDevelopmentPath: driver,
-    extensionTestsPath: path.join(__dirname, live ? 'desktop-live-review.cjs' : 'desktop-preview.cjs'),
-    extensionTestsEnv: { RUNNER_TEMP: temp, FORGELENS_PREVIEW_FIXTURE: folder, FORGELENS_PICKER_PORT: String(port),
-      FORGELENS_INSTALLED_EXTENSIONS: extensionsDir, FORGELENS_VSIX_SHA256: sha256 },
-    // Trust is disabled only in this disposable synthetic workspace/profile.
-    launchArgs: [folder, '--disable-gpu', '--skip-welcome', '--skip-release-notes',
-      '--disable-workspace-trust', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${port}`,
-      '--user-data-dir', userData, '--extensions-dir', extensionsDir],
-    });
-    if (live) live.assertComplete();
-  } finally { await live?.close(); }
+    const settings = path.join(userData, 'User', 'settings.json');
+    fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, 'utf8')),
+      'forgelens.model': 'fixture/scripted', 'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
+      'forgelens.pythonPath': process.env.FORGELENS_QA_PYTHON || 'python',
+      'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom' }));
+    // VS Code's extension-test mode rejects native consent dialogs. Activate a
+    // small driver in a normal workbench using this same isolated VSIX installation.
+    const driver = path.join(storage, 'live-driver');
+    fs.mkdirSync(driver);
+    fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({...driverManifest,
+      main:'./driver.cjs', activationEvents:['onStartupFinished']}));
+    const resultPath = path.join(storage, 'live-result.json');
+    fs.writeFileSync(path.join(driver, 'driver.cjs'), `
+      exports.activate = () => setImmediate(async () => {
+        let result;
+        try { result = { evidence:await require(${JSON.stringify(path.join(__dirname,'desktop-live-review.cjs'))}).run() }; }
+        catch (error) { result = { error:String(error.stack || error) }; }
+        require('node:fs').writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(result));
+        await require('vscode').commands.executeCommand('workbench.action.quit');
+      });`);
+    const host = spawn(editor, ['--new-window','--no-first-run','--disable-renderer-backgrounding',
+      '--extensionDevelopmentPath='+driver, ...launchArgs],
+      { env:{...process.env,...extensionTestsEnv}, stdio:'inherit', windowsHide:true });
+    let timer;
+    try {
+      await new Promise((resolve,reject) => {
+        timer = setTimeout(() => reject(Error('Live editor fixture timed out')), 180000);
+        host.once('error', reject);
+        host.once('exit', code => code===0 ? resolve() : reject(Error('Editor exited with code '+code)));
+      });
+    } finally { clearTimeout(timer); if (host.exitCode===null && host.signalCode===null) host.kill(); }
+    const result = JSON.parse(fs.readFileSync(resultPath,'utf8'));
+    assert.ok(result.evidence, result.error || 'The live editor driver did not finish');
+    live.assertComplete();
+    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS '+JSON.stringify(result.evidence));
+  } finally { await live.close(); }
 }
 
 exports.createFixture = createFixture;
