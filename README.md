@@ -2,7 +2,7 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.5.0](https://github.com/aceholland/forgelens/releases/download/v0.5.0/forgelens-0.5.0.vsix) · [Narrated A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-demo.mp4) · [Technical write-up](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-writeup.pdf) · [Verification files](https://github.com/aceholland/forgelens/releases/tag/v0.5.0)
+[Install ForgeLens 0.5.0](https://github.com/aceholland/forgelens/releases/download/v0.5.0/forgelens-0.5.0.vsix) · [Narrated A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-demo.mp4) · [Video script](docs/video-script.md) · [Illustrated write-up (PDF)](docs/forgelens-0.5.0-illustrated-writeup.pdf) · [Verification files](https://github.com/aceholland/forgelens/releases/tag/v0.5.0)
 
 ### Verified on the Windows laptop
 
