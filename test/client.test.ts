@@ -185,7 +185,7 @@ test('malformed approval arguments never dispatch an approval',async()=>{
 });
 
 test('optional schema preloading preserves MCP approvals while default remains deferred',async()=>{
- const f=fixture();f.options.preloadTools=true;await new ForgeRunner(f.options).run('edit');const m=f.calls[0].args[0].agent.spec.mcpServers[0];assert.equal(m.preload,true);assert.deepEqual(m.requireApprovalForTools,['propose_edit','propose_write','create_file','validate_candidate','run_command']);
+ const f=fixture();f.options.preloadTools=true;await new ForgeRunner(f.options).run('edit');const m=f.calls[0].args[0].agent.spec.mcpServers[0];assert.equal(m.preload,true);assert.deepEqual(m.requireApprovalForTools,['propose_edit','propose_write','propose_changes','create_file','validate_candidate','run_command']);
 });
 
 test('optional reasoning effort passes through TrueForge agent spec only',async()=>{
@@ -223,7 +223,7 @@ test('explicit direct mode disables dynamic delegation while retaining TrueForge
  await new ForgeRunner(f.options).run('edit');
  const spec=f.calls[0].args[0].agent.spec;
  assert.deepEqual(spec.config.dynamicSubAgents,{enabled:false});
- assert.deepEqual(spec.mcpServers[0].requireApprovalForTools,['propose_edit','propose_write','create_file','validate_candidate','run_command']);
+ assert.deepEqual(spec.mcpServers[0].requireApprovalForTools,['propose_edit','propose_write','propose_changes','create_file','validate_candidate','run_command']);
 });
 
 // These tests exercise the real runner; only the external SDK stream is substituted.

@@ -9,10 +9,11 @@ import { confinedPath } from './workspace';
 import { ReviewStore, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
 import type { ContextSelection } from './context';
 import { describeContext, previewWorkspace } from './contextPreview';
+import { compactContext, compactEvidence, compactInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, lensOffsets, reviewFeedback, type Decision } from './editorReview';
-import { validateCandidate } from './candidateValidation';
+import { candidateTestArgs, validateCandidate } from './candidateValidation';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
 
@@ -98,7 +99,7 @@ export async function activate(context:vscode.ExtensionContext) {
   const preview=describeContext(result);
   lastContext={type:'context',id:++contextId,label,preview,root:folder};
   void panel?.webview.postMessage(lastContext);
-  output.appendLine(`${label}: ${preview.usedChars}/${preview.budgetChars} characters; ${preview.items.length} files`);
+  output.appendLine(`${label}: ${preview.usedTokens}/${preview.budgetTokens} excerpt tokens (${preview.encoding}), ${preview.usedChars}/${preview.budgetChars} characters`);
   return preview;
  }
  async function inspectContext(prompt:string) {
@@ -131,10 +132,15 @@ export async function activate(context:vscode.ExtensionContext) {
    defaultUri:vscode.Uri.file(path.join(root(),'forgelens-accepted.patch')),filters:{'Git patch':['patch','diff']}});
   if(!destination)return;
   if(destination.scheme!=='file'||!(/\.(patch|diff)$/i).test(destination.fsPath))throw new Error('Choose a local .patch or .diff file.');
-  const exportTarget=await realpath(destination.fsPath).catch((error:NodeJS.ErrnoException)=>{if(error.code!=='ENOENT')throw error;return path.resolve(destination.fsPath);});
-  for(const file of files){
+  const exportTarget=await realpath(destination.fsPath).catch(async(error:NodeJS.ErrnoException)=>{
+   if(error.code!=='ENOENT')throw error;
+   const info=await lstat(destination.fsPath).catch((err:NodeJS.ErrnoException)=>{if(err.code!=='ENOENT')throw err;return undefined;});
+   if(info?.isSymbolicLink())throw new Error('Choose a patch destination without a broken symbolic link.');
+   return path.join(await realpath(path.dirname(destination.fsPath)),path.basename(destination.fsPath));
+  });
+  for(const file of store.list()){
    if(!path.relative(await confinedPath(folder,file.path),exportTarget))throw new Error('Choose a patch destination separate from the reviewed files.');
-   if(await originalText(file.path,file.kind==='create')!==file.original)throw new Error(`The workspace changed at ${file.path}. Refresh the proposal before exporting.`);
+   if(files.includes(file)&&await originalText(file.path,file.kind==='create')!==file.original)throw new Error(`The workspace changed at ${file.path}. Refresh the proposal before exporting.`);
   }
   if(version!==reviewVersion||folder!==root())throw new Error('The review changed. Export again with your current decisions.');
   const patch=exportAcceptedPatch(store);
@@ -145,6 +151,7 @@ export async function activate(context:vscode.ExtensionContext) {
   const suffix=randomBytes(8).toString('hex');
   const before=vscode.Uri.from({scheme:'forgelens',path:`/before/${suffix}/${p.path}`});
   const after=vscode.Uri.from({scheme:'forgelens',path:`/after/${suffix}/${p.path}`});
+  const viewColumn=panel?.viewColumn===vscode.ViewColumn.One?vscode.ViewColumn.Two:vscode.ViewColumn.One;
   virtual.set(before.toString(),p.original);
   const chosen=hunkId?{...p,hunks:p.hunks.filter(h=>h.id===hunkId)}:p;
   virtual.set(after.toString(),renderProposal(chosen,'all'));
@@ -161,9 +168,9 @@ export async function activate(context:vscode.ExtensionContext) {
   }
   try{if(sourceTab){
    virtual.delete(before.toString());
-   await vscode.window.showTextDocument(after,{viewColumn:vscode.ViewColumn.One,preview:true});
+   await vscode.window.showTextDocument(after,{viewColumn,preview:true});
   }else{
-   await vscode.commands.executeCommand('vscode.diff',before,after,`${p.path}${hunkId?' · '+hunkId:''} · Proposed (not saved)`,{preview:true,viewColumn:vscode.ViewColumn.One});
+   await vscode.commands.executeCommand('vscode.diff',before,after,`${p.path}${hunkId?' · '+hunkId:''} · Proposed (not saved)`,{preview:true,viewColumn});
   }}catch(error){virtual.delete(before.toString());virtual.delete(after.toString());lenses.delete(after.toString());throw error;}
  }
  function decide(file:string,id:string|undefined,decision:Decision) {
@@ -220,6 +227,12 @@ export async function activate(context:vscode.ExtensionContext) {
    return reviewFeedback(reviewed);
   }finally{signal?.removeEventListener('abort',abort);live.end(request);if(active&&!cancellation&&!runExpired)phase=live.list().length?'Review requested':'Running';updateState();}
  }
+ function reviewedCandidate(){
+  if(!liveMode || live.list().length || store.list().some(file=>file.hunks.some(h=>h.status==='pending'))){
+   throw new Error('Finish live hunk review before running candidate tests. With deferred review, apply and save your decisions and choose Verify saved changes.');
+  }
+  return store.list().map(p=>({path:p.path,original:p.original,content:renderProposal(p),isNew:p.kind==='create'})).filter(p=>p.content!==p.original);
+ }
  async function fileIdentity(file:string){
   const stat=await lstat(file,{bigint:true});
   return stat.isFile()?`${stat.dev}:${stat.ino}:${stat.birthtimeNs}`:undefined;
@@ -253,7 +266,7 @@ export async function activate(context:vscode.ExtensionContext) {
     undo.push({...edit,identity});emit(created?`Created ${p.path}. Undo available.`:`Applied reviewed hunks to ${p.path}. Buffer is unsaved; Save when ready. Undo available.`);
    }
    store.remove(p.path);
-  }}finally{reviewing=false;updateState();}
+  }}finally{reviewing=false;phase=store.list().length?'Review ready':'Ready';updateState();}
  }
  async function cancel(){
   if(reviewing)return;
@@ -340,48 +353,61 @@ export async function activate(context:vscode.ExtensionContext) {
   try{
    const budget=config.get<number>('contextBudget',24000);
    const tokenBudget=config.get<number>('tokenBudget',10000);
-   const selected=await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
+   const compact=!scope && config.get<boolean>('compactRequests',false);
+   const selected=compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
    if(!selected||cancellation)return;
    showContext(selected,'Initial retrieval preview',folder);
-   bridge=await startMcp({root:folder,budget,tokenBudget,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();},onPlan:files=>{
+   bridge=await startMcp({root:folder,budget,tokenBudget,compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
    },pending:currentOverlay,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
-   propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:async tests=>{
-    const overlays=store.list().map(p=>({path:p.path,original:p.original,content:currentOverlay(p.path)!,isNew:p.kind==='create'})).filter(p=>p.content!==p.original);
+   propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:async(tests,signal)=>{
+    const overlays=reviewedCandidate();
     if(!overlays.length)throw new Error('There are no staged changes to test.');
     const python=config.get<string>('pythonPath','python');
     const epoch=reviewEpoch;
     const choice=await vscode.window.showWarningMessage('Run the staged changes in an isolated workspace copy?',{
-     modal:true,detail:`Command: ${python} -m pytest -q ${tests.join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}\nTests execute project code with your user permissions.`
+     modal:true,detail:`Command: ${[python,...candidateTestArgs(tests)].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}\nTests execute project code with your user permissions.`
     },'Run candidate tests');
-    if(!choice||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||root()!==folder)throw new Error('Candidate validation declined or expired.');
+    if(!choice||signal?.aborted||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||root()!==folder)throw new Error('Candidate validation declined or expired.');
     if(commandAbort)throw new Error('Another verification process is already active.');
     const controller=new AbortController();commandAbort=controller;
+    const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
     try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal);emit(result);return result;}
-    finally{if(commandAbort===controller)commandAbort=undefined;}
-   },command:async(command,args)=>{
+    finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
+   },command:async(command,args,signal)=>{
     const allowed=(command==='pytest'&&args.every(a=>a==='-q'||/^tests\/[\w/.-]+\.py(?:::[\w]+)*$/.test(a)))||(command==='git'&&['status --short','diff --stat','diff'].includes(args.join(' ')))||(command==='flask'&&args.join(' ')==='--help');
     if(!allowed)throw new Error('Command is not in the validation allowlist. Run custom commands yourself in the terminal.');
-    const answer=await vscode.window.showWarningMessage(`Run ${command} ${args.join(' ')}? Tests/imports execute workspace code and may write caches.`,{modal:true},'Run command');if(!answer||cancellation||runExpired)throw new Error('Command denied or cancelled');
+    const epoch=reviewEpoch;
+    const current=()=>active&&!cancellation&&!runExpired&&!modelSwitching&&epoch===reviewEpoch&&vscode.workspace.isTrusted&&root()===folder;
+    if(signal?.aborted||!current())throw new Error('Saved-workspace command request expired.');
+    const answer=await vscode.window.showWarningMessage(`Run ${command} ${args.join(' ')}? Tests/imports execute workspace code and may write caches.`,{modal:true},'Run command');
+    if(answer!=='Run command'||signal?.aborted||!current())throw new Error('Command denied or cancelled.');
     if(commandAbort)throw new Error('Another verification process is already active.');
     const controller=new AbortController();commandAbort=controller;
-    try{return await new Promise<string>(resolve=>execFile(command,args,{cwd:folder,timeout:60000,maxBuffer:64000,signal:controller.signal,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}},(error,stdout,stderr)=>{const result=`${stdout}\n${stderr}`;emit(result);if(error)resolve(`Command failed: ${error.message}\n${result}`);else resolve(result);}));}
+    const processSignal=signal?AbortSignal.any([controller.signal,signal]):controller.signal;
+    try{return await new Promise<string>((resolve,reject)=>execFile(command,args,{cwd:folder,timeout:60000,maxBuffer:64000,signal:processSignal,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1'}},(error,stdout,stderr)=>{
+     if(processSignal.aborted){reject(new Error('Saved-workspace command was cancelled.'));return;}
+     const result=`${stdout}\n${stderr}`;emit(result);
+     resolve(error?`Command failed: ${error.message}\n${result}`:result);
+    }));}
     finally{if(commandAbort===controller)commandAbort=undefined;}
    }});
    if(cancellation)return;
    const mcpName=`forgelens-${randomBytes(4).toString('hex')}`;await registerMcp(baseUrl,mcpName,bridge.url,bridge.token);
    if(cancellation)return;
-   const preloadTools=config.get<boolean>('preloadTools',false);
+   emit('Connected to TrueForge · '+model);
+   const preloadTools=compact || config.get<boolean>('preloadTools',false);
    let contextScout:ForgeOptions['contextScout'];
    if(!scope&&config.get<boolean>('contextScout',false)){
     const deny=async()=>{throw new Error('The context scout is read-only.');};
     scoutBridge=await startMcp({root:folder,budget,tokenBudget,task:prompt,readOnly:true,requireDiscovery:true,active:()=>active&&!cancellation&&!runExpired,
-     propose:deny,command:deny,context:result=>showContext(result,'Scout discovery',folder)});
+     propose:deny,command:deny,onToolCall:summary=>emit('Read-only scout · '+summary),context:result=>showContext(result,'Scout discovery',folder)});
     if(cancellation)return;
     const name=`forgelens-scout-${randomBytes(6).toString('hex')}`;
     await registerMcp(baseUrl,name,scoutBridge.url,scoutBridge.token);
     contextScout={mcpName:name,mode:'native'};
+    emit('Read-only child scout enabled for this turn.');
    }
    if(cancellation)return;
    runner=new ForgeRunner({baseUrl,model,preloadTools,contextScout,onScoutFinished:async()=>{
@@ -392,7 +418,8 @@ export async function activate(context:vscode.ExtensionContext) {
    onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
-   mcpName,instructions:instructionsForTools(preloadTools),onEvent:event=>{
+   mcpName,instructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
+   sourceEvidence:compact&&selected.items.length?compactEvidence(selected):undefined,onEvent:event=>{
     if(cancellation)return;
     if(event.type==='model.message.delta')emitDelta(String(event.content||''));
     else if(event.type==='client.status'){
@@ -412,6 +439,19 @@ export async function activate(context:vscode.ExtensionContext) {
     if(cancellation||runExpired||modelSwitching)return false;
     const epoch=reviewEpoch;
     const permitted=()=>active&&!cancellation&&!runExpired&&!modelSwitching&&epoch===reviewEpoch&&folder===root();
+    if(details.name==='propose_changes' && compact && !scope) {
+     const files=details.arguments.files;
+     if(!Array.isArray(files) || !files.length || files.length>12)return false;
+     const names:string[]=[];
+     try{
+      for(const file of files){
+       if(typeof file?.path!=='string')throw new Error('Expected a workspace-relative path for every file.');
+       await confinedPath(folder,file.path);
+       names.push(file.path);
+      }
+     }catch(error){return {allowed:false,reason:'Invalid proposal path: '+(error instanceof Error?error.message:'correct the paths and try again')};}
+     return (await vscode.window.showInformationMessage('Allow TrueForge to propose changes for review?',{modal:true,detail:names.join('\n')},'Review files'))==='Review files'&&permitted();
+    }
     if(details.name==='propose_edit'||details.name==='propose_write'||details.name==='create_file'){
      const file=details.arguments.path;
      if(typeof file!=='string')return {allowed:false,reason:'Proposal validation failed: path must be a string. Correct the tool arguments and retry.'};

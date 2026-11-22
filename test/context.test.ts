@@ -110,6 +110,19 @@ test('file discovery keeps five unique bounded windows ranked by keywords and sy
  assert.ok(selection.usedChars<=4000);
 });
 
+test('automatic packs expand with both budgets and explicit discovery settings retain precedence',()=>{
+ const files=Array.from({length:24},(_,i)=>({path:`modules/part_${i}.ts`,content:'target behavior and example\n'.repeat(160)}));
+ const wide=selectContext(files,'target behavior',24000,undefined,10000);
+ assert.equal(wide.items.length,16);
+ assert.ok(wide.items.every(item=>item.content.includes('target behavior')));
+ assert.ok(wide.usedChars<=24000 && wide.usedTokens<=10000);
+ assert.equal(selectContext(files,'target behavior',24000,undefined,1800).items.length,4);
+ assert.equal(selectContext(files,'target behavior',9000,undefined,10000).items.length,6);
+ assert.equal(selectContext(files,'target behavior',24000,{maxFiles:5,maxLines:4},10000).items.length,5);
+ const explicit=selectContext(files,'@file:modules/part_2.ts',24000,undefined,10000);
+ assert.equal(explicit.items[0]?.content,files[2]!.content);
+});
+
 test('automatic discovery spends the preview budget on the matching source test and docs family',()=>{
  const content=('console command configuration JSON meaningful source line\n').repeat(200);
  const files=['src/console.py','tests/test_console.py','docs/console.rst','CHANGES.rst','settings/config.yaml'].map(path=>({path,content}));

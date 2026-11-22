@@ -48,11 +48,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("flask", type=Path, help="Local clone containing the official commit")
     parser.add_argument("evidence", type=Path, help="Directory containing the harness proposals.json")
+    parser.add_argument("--patch", type=Path, help="Grade a retained Git patch instead of proposals.json")
     args = parser.parse_args()
     evidence = args.evidence.resolve()
-    proposals = json.loads((evidence / "proposals.json").read_text(encoding="utf8"))
-    if not isinstance(proposals, dict) or not 1 <= len(proposals) <= 50:
-        raise ValueError("Expected a bounded JSON object of proposed file contents")
+    evidence.mkdir(parents=True, exist_ok=True)
     env = {name: value for name, value in os.environ.items() if name.upper() in {
         "PATH", "SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC", "TMP", "TEMP", "TMPDIR", "LANG", "LC_ALL"
     }}
@@ -67,6 +66,19 @@ def main():
             raise ValueError("Unexpected upstream commit")
         env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(scratch)])
         before = test_nodes(root, env)
+        if args.patch:
+            git(root, env, "apply", "--index", str(args.patch.resolve()))
+            changed = git(root, env, "diff", "--cached", "--name-only", "-z", "HEAD").strip("\0").split("\0")
+            proposals = {}
+            for name in changed:
+                file = root / name
+                if not file.is_file() or file.is_symlink() or not file.resolve().is_relative_to(root):
+                    raise ValueError("The patch must change ordinary files within the checkout")
+                proposals[name] = file.read_bytes().decode("utf8")
+        else:
+            proposals = json.loads((evidence / "proposals.json").read_text(encoding="utf8"))
+        if not isinstance(proposals, dict) or not 1 <= len(proposals) <= 50:
+            raise ValueError("Expected a bounded set of proposed files")
         for name, contents in proposals.items():
             item = PurePosixPath(name)
             if (not re.fullmatch(r"[A-Za-z0-9_.\-/]+", name) or item.is_absolute()
@@ -77,7 +89,8 @@ def main():
             if not target.resolve().is_relative_to(root) or any(parent.is_symlink() for parent in [target, *target.parents] if parent.is_relative_to(root)):
                 raise ValueError("Candidate contains a symlink")
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(contents.encode("utf8"))
+            # Flask's repository retains LF. Treat a Windows checkout's CRLF as the same text.
+            target.write_bytes(contents.replace("\r\n", "\n").encode("utf8"))
         git(root, env, "add", "--intent-to-add", "--", *proposals)
         patch = git(root, env, "diff", "--binary", "--no-ext-diff", "HEAD")
         (evidence / "candidate.patch").write_bytes(patch.encode("utf8"))
@@ -86,6 +99,20 @@ def main():
         all_tests = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"], root, env)
         cli_tests = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_cli.py"], root, env)
         additional_tests = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--", *new_tests], root, env) if new_tests else None
+        control = None
+        if new_tests:
+            # Check that at least one added test actually detects the missing feature.
+            baseline = scratch / "baseline"
+            git(scratch, env, "clone", "--local", "--no-hardlinks", "--no-checkout", str(args.flask.resolve()), str(baseline))
+            git(baseline, env, "checkout", "--detach", FLASK_COMMIT)
+            for name in proposals:
+                if name.startswith("tests/"):
+                    file = baseline / name
+                    file.parent.mkdir(parents=True, exist_ok=True)
+                    file.write_bytes((root / name).read_bytes())
+            control_env = {**env, "PYTHONPATH": os.pathsep.join([str(baseline / "src"), str(scratch)])}
+            control = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                           "--", *new_tests], baseline, control_env)
         help_text = run([sys.executable, "-m", "flask", "--help"], root, env)
         values = {name: "fixture-" + str(i) for i, name in enumerate(SENSITIVE)}
         (scratch / "grading_fixture.py").write_text(
@@ -106,12 +133,14 @@ def main():
             "includesFlaskDefaults": valid and "PERMANENT_SESSION_LIFETIME" in parsed,
             "documentedAlongsideBuiltins": bool(re.search(r"^\+(?!\+).*\bconfig\b", docs, re.I | re.M)),
             "addedTestsExecuted": bool(new_tests and additional_tests and additional_tests.returncode == 0 and re.search(r"\b[1-9]\d* passed\b", additional_tests.stdout)),
+            "addedTestsFailAgainstUnchangedFlask": bool(control and control.returncode == 1 and re.search(r"\b[1-9]\d* failed\b", control.stdout)),
             "existingTestNodesRetained": bool(before) and before <= after,
             "flaskCliTestsPass": cli_tests.returncode == 0,
             "fullFlaskSuitePasses": all_tests.returncode == 0,
         }
         summary = lambda result: next((line.strip() for line in reversed(result.stdout.splitlines()) if re.search(r"\b(?:passed|failed|error|skipped)\b", line)), "")[-220:]
         report = {"flaskCommit": FLASK_COMMIT, "python": sys.version.split()[0],
+                  "upstreamTestsCollected": len(before), "candidateTestsCollected": len(after),
                   "proposedFiles": sorted(proposals), "addedTests": new_tests,
                   "sensitiveKeysChecked": len(values), "cliTests": summary(cli_tests),
                   "fullTests": summary(all_tests), "checks": checks, "passed": all(checks.values())}

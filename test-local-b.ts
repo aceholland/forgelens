@@ -7,6 +7,7 @@ import { resolveAgentProposal } from './src/patch';
 import { readWorkspace } from './src/workspace';
 import { validateCandidate } from './src/candidateValidation';
 import { instructionsForTools } from './src/instructions';
+import { compactContext,compactEvidence,compactInstructions } from './src/compactContext';
 import { writeFile, mkdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { Metadata,TASK_B_PROMPT,loopbackUrl,toolName,failureMetadata,modelId } from './diagnostics/metadata';
@@ -40,7 +41,8 @@ async function main() {
  const model=process.env.TRUEFORGE_MODEL;
  const python=process.env.FORGELENS_PYTHON;
  const budget=Number(process.env.CONTEXT_BUDGET??6000);
- const preloadTools=process.env.PRELOAD_TOOLS!=='false';
+ const compact=process.env.FORGELENS_COMPACT_REQUESTS==='true';
+ const preloadTools=compact||process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
  const store=new ReviewStore(); let active=true,modelSwitching=false;
  const validateStaged=process.env.FORGELENS_VALIDATE_STAGED==='true';
@@ -50,7 +52,9 @@ async function main() {
  const baseUrl=loopbackUrl(process.env.TRUEFORGE_URL??'http://127.0.0.1:8790');
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
- mcp=await startMcp({root,budget,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
+ const selected=compact?await compactContext(root,prompt,budget,3200,()=>!active):undefined;
+ if(selected)metadata.paths('discovery',selected.items.map(item=>item.path));
+ mcp=await startMcp({root,budget,compactContext:selected,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
   propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const current=store.get(p);const original=current?.original??await readWorkspace(root,p); if(current)store.revise(p,original,c);else store.stage(p,original,c);await persistProposals();return `Staged ${p}; not applied. Continue any remaining requested work.`;},
   create:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);store.stage(p,'',c,'create');await persistProposals();return `Staged new file ${p}; not applied.`;},
   validate:validateStaged?async tests=>{
@@ -66,7 +70,7 @@ async function main() {
   phase='mcp_registration';
   const mcpName='forgelens-retest-'+Date.now();await registerMcp(baseUrl,mcpName,mcp.url,mcp.token);
   phase='agent_run';
-  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,instructions:instructionsForTools(preloadTools),runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
+  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,sourceEvidence:selected?.items.length?compactEvidence(selected):undefined,instructions:selected?.items.length?compactInstructions:instructionsForTools(preloadTools),runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
    modelCallTimeoutMs:Number(process.env.MODEL_CALL_TIMEOUT_MS??120000),onModelCallTimeout:()=>{metadata.modelTimeouts++;modelSwitching=true;},onFallback:()=>{metadata.fallback();mcp!.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>metadata.calls,
    onEvent:e=>{if(e.type==='client.status'&&e.message.startsWith('Run time limit reached.'))active=false;const safe=metadata.add(e);if(e.type!=='model.message.delta')console.log(JSON.stringify(safe));},
@@ -87,6 +91,7 @@ async function main() {
     return undefined;
    },
    onApproval:async d=>{
+    if(d.name==='propose_changes')return process.env.FORGELENS_COMPACT_REQUESTS==='true'&&Array.isArray(d.arguments.files);
     const file=d.arguments.path;
     if(d.name==='validate_candidate'&&validateStaged)return true;
     if(d.name==='create_file'&&typeof file==='string'&&typeof d.arguments.content==='string'){

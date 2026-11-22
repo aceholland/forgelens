@@ -118,8 +118,11 @@ export function selectContext(files: ContextFile[], query: string, budgetChars: 
   let usedChars = 0;
   let usedTokens = 0;
   const seen = new Set<string>();
-  const maxFiles=options?.maxFiles??4, maxLines=options?.maxLines??Infinity;
   const hasMentions=!!(mentions.files.length || mentions.symbols.length);
+  // Broader automatic packs get more focused windows when both budgets allow it.
+  // Explicit mentions and the discovery tool retain their own allocation rules.
+  const automaticWindows=Math.max(4,Math.min(16,Math.floor(budgetChars/1500),Math.floor(budgetTokens/600)));
+  const maxFiles=options?.maxFiles??(hasMentions?4:automaticWindows), maxLines=options?.maxLines??Infinity;
   const snippetBudget = !options&&hasMentions ? budgetChars : Math.ceil(budgetChars / Math.min(maxFiles, Math.max(1,candidates.length)));
   for (const file of candidates) {
     if (usedChars >= budgetChars || usedTokens >= budgetTokens) break;

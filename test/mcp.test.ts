@@ -6,6 +6,30 @@ import path from 'node:path';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
 import {StreamableHTTPClientTransport} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {startMcp} from '../src/mcp';
+import {compactContext,compactEvidence,compactInstructions} from '../src/compactContext';
+
+test('compact request checks all anchors first, preserves reviews and passes optional tests to validation',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forge-compact-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'widget.py'),'widget = 0');await writeFile(path.join(root,'test_widget.py'),'assert widget == 0');
+ const selected=await compactContext(root,'Adjust widget and add tests',12000,2000,()=>false);
+ assert.ok(selected?.items.length);assert.ok(selected.usedTokens<=2000);assert.match(compactEvidence(selected),/widget = 0/);assert.doesNotMatch(compactInstructions,/widget = 0/);
+ const plan:string[][]=[],overlay=new Map<string,string>(),tested:string[][]=[];
+ const bridge=await startMcp({root,budget:12000,requireDiscovery:true,compactContext:selected,active:()=>true,pending:p=>overlay.get(p),
+  onPlan:files=>plan.push(files.map(f=>f.path)),propose:async(p,content)=>{if(p.startsWith('test_'))return 'User rejected hunk-1';overlay.set(p,content);return 'User accepted hunk-1';},
+  validate:async tests=>{tested.push(tests);return 'Candidate pytest exited 1';},command:async()=>'',context:()=>{}});
+ t.after(()=>bridge.close());
+ const client=new Client({name:'compact-test',version:'1'});t.after(()=>client.close());
+ await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:'Bearer '+bridge.token}}}));
+ const file=(path:string,oldText:string)=>({path,reason:'fixture',edits:[{oldText,newText:'1'}]});
+ const call=(files:ReturnType<typeof file>[])=>client.callTool({name:'propose_changes',arguments:{files,tests:['test_widget.py']}});
+ assert.equal((await call([file('widget.py','0'),file('test_widget.py','missing')])).isError,true);
+ assert.equal((await call([file('widget.py','0'),file('widget.py','0')])).isError,true);
+ assert.equal(overlay.size,0);assert.equal(plan.length,0);assert.equal(tested.length,0);
+ const result=await call([file('widget.py','0'),file('test_widget.py','0')]);
+ assert.ok(!result.isError);assert.match(JSON.stringify(result),/User rejected hunk-1.*pytest exited 1/);
+ assert.deepEqual([...overlay],[['widget.py','widget = 1']]);assert.deepEqual(tested,[['test_widget.py']]);
+ assert.deepEqual(plan,[['widget.py','test_widget.py']]);assert.equal(await readFile(path.join(root,'widget.py'),'utf8'),'widget = 0');
+});
 
 test('read-only scout bridge exposes only saved-source tools and rejects every mutation callback',async t=>{
  const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-readonly-'));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -61,7 +85,7 @@ test('scout discovery never satisfies the separate parent bridge discovery gate'
 });
 
 test('closing a scout endpoint invalidates in-flight reads before any late context callback',async t=>{
- const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-close-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-scout-close-'));t.after(()=>rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:150}));
  for(let i=0;i<12;i++)await writeFile(path.join(root,`file${i}.py`),'target evidence\n');
  let contexts=0,started!:()=>void;const ready=new Promise<void>(r=>started=r);
  const bridge=await startMcp({root,budget:4000,readOnly:true,active:()=>{started();return true;},propose:async()=>'',command:async()=>'',context:()=>{contexts++;}});t.after(()=>bridge.close());
@@ -72,6 +96,34 @@ test('closing a scout endpoint invalidates in-flight reads before any late conte
  await client.close();await closing;await pending;await new Promise(r=>setTimeout(r,30));
  assert.equal(closedBeforeClient,true,'endpoint cleanup must close an in-flight HTTP request without waiting for its client');
  assert.equal(contexts,0,'closed scout must not publish context while its parent is running');
+});
+
+test('closing the MCP endpoint aborts saved-command consent before a delayed approval can start it',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-command-stop-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ let consentStarted!:()=>void,finishConsent!:()=>void,processStarts=0;
+ const dialog=new Promise<void>(resolve=>consentStarted=resolve);
+ const decision=new Promise<void>(resolve=>finishConsent=resolve);
+ let executionSignal:AbortSignal|undefined;
+ const bridge=await startMcp({root,budget:4000,active:()=>true,propose:async()=>'',context:()=>{},
+  command:async(_command,_args,signal)=>{
+   executionSignal=signal;
+   consentStarted();
+   await decision;
+   signal?.throwIfAborted();
+   processStarts++;
+   return 'finished';
+  }});
+ t.after(()=>bridge.close());
+ const client=new Client({name:'saved-command-cancel',version:'1'});
+ t.after(()=>client.close());
+ await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:'Bearer '+bridge.token}}}));
+ const pending=client.callTool({name:'run_command',arguments:{command:'git',args:['status','--short']}}).catch(()=>undefined);
+ await dialog;
+ await bridge.close();
+ assert.equal(executionSignal?.aborted,true);
+ finishConsent();await pending;
+ assert.equal(processStarts,0);
 });
 
 test('agent mode must discover budgeted context before workspace access, including after reset',async t=>{

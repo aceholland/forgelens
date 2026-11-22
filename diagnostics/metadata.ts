@@ -18,7 +18,7 @@ function statusCategory(message:unknown):string|undefined {
  if(message.startsWith('Local work stopped. Could not confirm'))return 'cancellation_unconfirmed';
  return 'status_update';
 }
-const allowedTools=new Set(['find_relevant_files','select_context','read_file','search_workspace','report_plan','propose_write','propose_edit','create_file','validate_candidate','run_command']);
+const allowedTools=new Set(['find_relevant_files','select_context','read_file','search_workspace','report_plan','propose_write','propose_edit','propose_changes','create_file','validate_candidate','run_command']);
 export const toolName=(name:string)=>allowedTools.has(name)?name:'[unknown tool]';
 const id=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9_.:-]{1,128}$/.test(v)?v:undefined;
 export const modelId=(v:unknown)=>typeof v==='string'&&/^[a-zA-Z0-9_./:-]{1,160}$/.test(v)&&!/(?:sk-|ghp_|github_pat_|AIza)/.test(v)?v:undefined;

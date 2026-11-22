@@ -2,7 +2,19 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.3.0](https://github.com/aceholland/forgelens/releases/download/v0.3.0/forgelens-0.3.0.vsix) · [Release downloads](https://github.com/aceholland/forgelens/releases/tag/v0.3.0) · [Original narrated Round 1 demo, 3m 59s](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+[Install ForgeLens 0.3.0](https://github.com/aceholland/forgelens/releases/download/v0.3.0/forgelens-0.3.0.vsix) · [Watch live review and undo, 1m 06s](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-review.mp4) · [Original narrated Round 1 demo, 3m 59s](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+
+Version 0.3.0 is a post-deadline release. The original competition recording, write-up and installable extension are preserved with [Round 1 release 0.1.13](https://github.com/aceholland/forgelens/releases/tag/v0.1.13).
+
+![A ForgeLens review in Windows VS Code. The first hunk is accepted, the second is pending, and both lines are visible in the editor diff.](docs/live-hunk-review.png)
+
+## Task B and feature evidence
+
+| Question | Observed result |
+| --- | --- |
+| Did a real model produce a working Flask command? | Gemini Flash Lite produced a four-file patch from the unchanged, path-free Task B prompt in 170 seconds in a headless TrueForge run. One procedural clarification supplied no code or paths. Replaying that exact patch passed **59 CLI tests and all 491 Flask tests**. The grader also checked help, JSON, 16 sensitive keys, ordinary values, docs and the newly added test. [Original run, patch and grader output](docs/evidence/task-b-flash-lite/README.md) |
+| Does live feedback change what the agent sees? | In real Windows VS Code, a scripted model received the exact accepted and rejected hunks, then read the accepted overlay. In a second fixture it received an actual pytest failure and repaired the change in the same turn. The original three file hashes stayed unchanged. [Review and repair evidence](docs/live-review-check.md) |
+| Does allocating context across more files help? | On an independently selected set of 40 Flask changes, every target file appeared in the context for **16/40** changes versus **3/40** with whole-file BM25. ForgeLens used 5,016 excerpt tokens on average. The report includes the queries, both methods, scores and the separate published 79-change sample. [Retrieval evaluation](docs/flask-retrieval.md) |
 
 ## What you can do
 
@@ -60,6 +72,8 @@ flowchart LR
 Use `@file:src/example.py` or `@symbol:get_debug_flag` to steer discovery. The token meter counts source excerpts using `o200k_base`. The provider may use a different tokenizer and also receives instructions, tool definitions and responses. Git ignore rules apply to automatic discovery. Put one literal file or folder path per line in a root `.forgelensignore` to exclude it even from explicit tool requests.
 
 Enable **ForgeLens › Context Scout** to let TrueForge create a child during multi-file requests. The child can read and search saved source. A parent-connector call from a child is denied before it reaches the editor. Scouting uses additional model calls and is off by default. [Native runtime regression check](checks/native-scout.ts) · [Versioned agent definition](agent/forgelens.json)
+
+For a provider with a small request quota, enable **ForgeLens › Compact Requests**. ForgeLens places the locally selected excerpts in the first model request. The model can propose a plan, exact edits across several files and a pytest check in one tool call. ForgeLens verifies all anchors before the first review. The editor still shows each file and asks before executing tests.
 
 ## What happens to proposed changes
 

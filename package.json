@@ -71,6 +71,11 @@
     "configuration": {
       "title": "ForgeLens",
       "properties": {
+        "forgelens.compactRequests": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include locally selected source excerpts in the first model request and allow related files and tests in one tool call. Every change still goes through review."
+        },
         "forgelens.liveReview": {
           "type": "boolean",
           "default": true,

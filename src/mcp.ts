@@ -7,18 +7,20 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import { confinedPath, listWorkspace, readWorkspace } from './workspace';
-import { isSafeContextPath, selectContext } from './context';
+import { isSafeContextPath, selectContext, type ContextSelection } from './context';
 import { resolveAgentProposal } from './patch';
 
 export interface EditorBridge {
  root:string; budget:number; tokenBudget?:number; task?:string; requireDiscovery?:boolean; active():boolean;
  /** Separate scout endpoint: saved-source reads only; never plans, proposals or commands. */
  readOnly?:boolean;
+ /** Actual local discovery supplied to the model as structured source excerpts. */
+ compactContext?:ContextSelection;
  pending?(path:string):string|undefined;
  propose(path:string, content:string, expectedBase?:string, signal?:AbortSignal):Promise<string>;
  create?(path:string,content:string,signal?:AbortSignal):Promise<string>;
  validate?(tests:string[],signal?:AbortSignal):Promise<string>;
- command(command:string,args:string[]):Promise<string>;
+ command(command:string,args:string[],signal?:AbortSignal):Promise<string>;
  onPlan?(files:{path:string;reason:string}[]):void;
  onToolCall?(summary:string):void;
  /** Authenticated protocol initialization; not registration or tools/list. */
@@ -38,7 +40,8 @@ export async function startMcp(bridge: EditorBridge) {
  // remain available; the TrueForge iteration limit and run deadline stop loops.
  const exploration = new Map<string,string>();
  const attempt=new AsyncLocalStorage<{used:number;generation:number}>();
- let generation=0,discoveryComplete=false;
+ const preselected=!readOnly && Boolean(bridge.compactContext?.items.length);
+ let generation=0,discoveryComplete=preselected;
  const explorationTools=new Set(['find_relevant_files','select_context','read_file','search_workspace']);
  let exposedChars=0, hasProposed=false, calls=0;
  const show=(text:string,used=calls)=>output(`${text}\nexploration calls used: ${used}`);
@@ -49,7 +52,7 @@ export async function startMcp(bridge: EditorBridge) {
   const current=attempt.getStore();
   if(current && current.generation!==generation)throw new Error('This tool call belongs to a cancelled turn.');
  };
- const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;discoveryComplete=false;exploration.clear();};
+ const resetExploration=()=>{generation++;calls=0;exposedChars=0;hasProposed=false;discoveryComplete=preselected;exploration.clear();};
  const missingContext=()=>({...show('Missing exploration request context.'),isError:true});
  const failed=(error:unknown,used:number)=>({...show(error instanceof Error?error.message:'Exploration failed.',used),isError:true});
  const digest=(...values:(string|number)[])=>createHash('sha256').update(JSON.stringify(values)).digest('hex');
@@ -180,6 +183,48 @@ export async function startMcp(bridge: EditorBridge) {
    inputSchema:{query:z.string().trim().min(1).max(4000)}
   },async({query})=>collectContext(query,false));
   if(!readOnly){
+  if(preselected)mcp.registerTool('propose_changes',{
+   description:'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
+   inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
+    edits:z.array(z.object({oldText:z.string().min(1).max(250000),newText:z.string().max(250000)})).min(1).max(20)})).min(1).max(12),
+    tests:z.array(z.string().min(1).max(400)).max(20).optional()}
+  },async({files,tests},extra)=>{
+   guard();
+   if(tests && !bridge.validate)throw new Error('Candidate testing is unavailable in this workspace.');
+   const targets=new Set<string>();
+   const prepared=[];
+   for(const file of files){
+    const target=await confinedPath(bridge.root,file.path);
+    const key=process.platform==='win32'?target.toLowerCase():target;
+    if(targets.has(key))throw new Error('Combine all edits for each file into one entry.');
+    targets.add(key);
+    const base=await readView(file.path);
+    try{prepared.push({path:file.path,base,content:resolveAgentProposal(base,file)});}
+    catch(error){throw new Error(file.path+': '+(error instanceof Error?error.message:'Invalid edit anchor'));}
+   }
+   guard();extra.signal.throwIfAborted();
+   bridge.onPlan?.(files.map(({path,reason})=>({path,reason})));
+   report('propose_changes','',prepared.length+' files');
+   const results:string[]=[];
+   for (const file of prepared) {
+    guard();extra.signal.throwIfAborted();
+    try {
+     const feedback=await bridge.propose(file.path,file.content,file.base,extra.signal);
+     results.push(file.path+' — '+feedback);
+     if(bridge.pending?.(file.path)!==undefined)hasProposed=true;
+    } catch(error) {
+     guard();extra.signal.throwIfAborted();
+     return {...show([...results,file.path+' stopped: '+(error instanceof Error?error.message:'Review failed.'),
+      'Later files were not proposed. Read the reviewed overlay before continuing.'].join('\n')),isError:true};
+    }
+   }
+   guard();extra.signal.throwIfAborted();
+   if(tests) {
+    try { results.push(await bridge.validate!(tests,extra.signal)); }
+    catch(error) { results.push('Candidate validation did not finish: '+(error instanceof Error?error.message:'unknown error')); }
+   }
+   guard();return show(results.join('\n'));
+  });
   mcp.registerTool('report_plan',{
    description:'Record planned workspace-relative files and the reason for each before staging edits. Does not consume exploration calls or write disk.',
    inputSchema:{files:z.array(z.object({path:z.string().min(1).max(400),reason:z.string().trim().min(1).max(400)})).min(1).max(12)}
@@ -202,7 +247,12 @@ export async function startMcp(bridge: EditorBridge) {
   if(bridge.validate)mcp.registerTool('validate_candidate',{description:'Request approval to test staged edits in a temporary copy using pytest and return its actual exit and output. Use failures to repair the current overlay in this turn.',inputSchema:{tests:z.array(z.string().min(1).max(400)).max(20).describe('Workspace-relative pytest paths or node IDs, or [] for the full suite.')}},async({tests},extra)=>{
    guard();report('validate_candidate');const result=await bridge.validate!(tests,extra.signal);guard();return show(result);
   });
-  mcp.registerTool('run_command',{description:'Request an explicitly approved validation command. Restricted to pytest, git status/diff, and flask --help; no shell.',inputSchema:{command:z.string(),args:z.array(z.string()).max(20)}},async({command,args})=>{guard();report('run_command');return show('Validation executes saved disk files, NOT staged proposals.\n'+await bridge.command(command,args));});
+  mcp.registerTool('run_command',{description:'Request an explicitly approved validation command. Restricted to pytest, git status/diff, and flask --help; no shell.',inputSchema:{command:z.string(),args:z.array(z.string()).max(20)}},async({command,args},extra)=>{
+   guard();extra.signal.throwIfAborted();report('run_command');
+   const result=await bridge.command(command,args,extra.signal);
+   guard();extra.signal.throwIfAborted();
+   return show('Validation executes saved disk files, NOT staged proposals.\n'+result);
+  });
   }
   return mcp;
  }

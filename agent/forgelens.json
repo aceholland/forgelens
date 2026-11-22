@@ -10,6 +10,7 @@
       "requireApprovalForTools": [
         "propose_edit",
         "propose_write",
+        "propose_changes",
         "create_file",
         "validate_candidate",
         "run_command"

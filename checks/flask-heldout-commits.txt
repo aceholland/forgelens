@@ -1,0 +1,102 @@
+# Upstream Flask commit IDs from the test slice in kinnuworks/countersign
+# https://github.com/kinnuworks/countersign/blob/40ba3492ac818d5a728866476e12122cc8dcebd6/evidence/results/replay.csv
+# MIT License
+#
+# Copyright (c) 2026 Countersign contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+c17f3793
+3d03098a
+ac5664d2
+3709c4a9
+709f83f6
+64dd0809
+97bddc1f
+ad68a126
+da6d075d
+55c62556
+d8259eb1
+9822a035
+53b8f082
+adeea007
+fb541598
+41ec5760
+959052fb
+6748a093
+4f7156f2
+4995a775
+470e2b8d
+e13373f8
+2c316030
+a9b99b34
+8aa161a4
+9efc1ebe
+c7a53888
+8f37c82f
+39e72083
+8f2bc008
+52ccd667
+c77b099c
+40b78fa2
+28d5a4d7
+d718ecf6
+9101439d
+5fdce4c3
+1af8f957
+5e059be1
+08d3185e
+59fd6aa1
+438edcdf
+293041a2
+3f6b243c
+0ec7f713
+04994df5
+80ae10f4
+46b32885
+8933d754
+bda295d3
+ed8ddb6a
+84e11a1e
+0a00e1b6
+8646edca
+8705dd39
+79ebf6c3
+64bc4587
+9659b11a
+7e6e68ae
+84c007d3
+8239765a
+c24f8c81
+04c21387
+b8b41001
+c4b39ba2
+b10b6d4a
+4256fc63
+2a33c178
+9c02f07f
+24df8fc8
+a6cd8f21
+ab93222b
+0b4b6114
+99b34f71
+3a35977d
+261e4a6c
+2a9d16d0
+cabda593
+d7b6c1f6

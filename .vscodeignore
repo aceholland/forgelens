@@ -7,6 +7,7 @@ evidence/**
 .git/**
 .vscode/**
 docs/superpowers/**
+docs/flask-retrieval-results.json
 **/*.map
 tsconfig.json
 package-lock.json

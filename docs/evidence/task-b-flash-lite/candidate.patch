@@ -1,0 +1,119 @@
+diff --git a/docs/api.rst b/docs/api.rst
+index 1aa8048..36ca9fb 100644
+--- a/docs/api.rst
++++ b/docs/api.rst
+@@ -715,3 +715,5 @@ Command Line Interface
+ .. autodata:: run_command
+ 
+ .. autodata:: shell_command
++
++.. autodata:: config_command
+diff --git a/docs/cli.rst b/docs/cli.rst
+index a72e6d5..462b00e 100644
+--- a/docs/cli.rst
++++ b/docs/cli.rst
+@@ -146,6 +146,20 @@ context will be active, and the app instance will be imported. ::
+ Use :meth:`~Flask.shell_context_processor` to add other automatic imports.
+ 
+ 
++Show Configuration
++------------------
++
++To show the loaded application's configuration as JSON, use the :func:`config <cli.config_command>` command. Values of any key containing ``SECRET``, ``PASSWORD``, ``TOKEN`` or ``KEY`` are masked as ``"***"``. ::
++
++    $ flask config
++    {
++      "DEBUG": false,
++      "ENV": "production",
++      "SECRET_KEY": "***",
++      "TESTING": false
++    }
++
++
+ .. _dotenv:
+ 
+ Environment Variables From dotenv
+diff --git a/src/flask/cli.py b/src/flask/cli.py
+index ed11f25..527b46d 100644
+--- a/src/flask/cli.py
++++ b/src/flask/cli.py
+@@ -594,6 +594,7 @@ class FlaskGroup(AppGroup):
+             self.add_command(run_command)
+             self.add_command(shell_command)
+             self.add_command(routes_command)
++            self.add_command(config_command)
+ 
+         self._loaded_plugin_commands = False
+ 
+@@ -1115,6 +1116,30 @@ def routes_command(sort: str, all_methods: bool) -> None:
+         click.echo(template.format(*row))
+ 
+ 
++@click.command("config", short_help="Show the app's configuration.")
++@with_appcontext
++def config_command() -> None:
++    """Show the loaded application configuration as JSON.
++
++    Values of any key containing SECRET, PASSWORD, TOKEN or KEY are masked as '***'.
++    """
++    import json
++
++    out = {}
++    for key, value in sorted(current_app.config.items()):
++        if any(token in key.upper() for token in ("SECRET", "PASSWORD", "TOKEN", "KEY")):
++            out[key] = "***"
++        else:
++            try:
++                # Ensure value is JSON serializable, otherwise fall back to string representation
++                json.dumps(value)
++                out[key] = value
++            except (TypeError, ValueError):
++                out[key] = str(value)
++
++    click.echo(json.dumps(out, indent=2))
++
++
+ cli = FlaskGroup(
+     name="flask",
+     help="""\
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index e254c1d..a12a344 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -443,6 +443,36 @@ def test_help_echo_exception():
+     assert "Usage:" in result.stdout
+ 
+ 
++class TestConfig:
++    @pytest.fixture
++    def app(self):
++        app = Flask(__name__)
++        app.config.update(
++            SECRET_KEY="super-secret",
++            DATABASE_PASSWORD="secret-password",
++            API_TOKEN="token-value",
++            CUSTOM_KEY="key-value",
++            PUBLIC_SETTING="visible",
++        )
++        return app
++
++    @pytest.fixture
++    def invoke(self, app, runner):
++        cli = FlaskGroup(create_app=lambda: app)
++        return partial(runner.invoke, cli)
++
++    def test_config(self, invoke):
++        result = invoke(["config"])
++        assert result.exit_code == 0
++        import json
++        data = json.loads(result.output)
++        assert data["SECRET_KEY"] == "***"
++        assert data["DATABASE_PASSWORD"] == "***"
++        assert data["API_TOKEN"] == "***"
++        assert data["CUSTOM_KEY"] == "***"
++        assert data["PUBLIC_SETTING"] == "visible"
++
++
+ class TestRoutes:
+     @pytest.fixture
+     def app(self):
