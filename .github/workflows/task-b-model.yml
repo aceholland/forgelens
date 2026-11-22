@@ -11,6 +11,10 @@ on:
           - gpt-oss-20b
           - qwen3-coder-30b-a3b
           - qwen2-5-coder-7b
+      request_first_draft_tool:
+        description: Ask the 7B draft model to use the native edit tool on its first request
+        type: boolean
+        default: false
   push:
     branches: [codex/task-b-workflow-20261122]
     paths:
@@ -27,6 +31,7 @@ jobs:
     timeout-minutes: 100
     env:
       SOLVER_MODEL: ${{ inputs.model || 'qwen2-5-coder-7b' }}
+      REQUEST_FIRST_DRAFT_TOOL: ${{ (github.event_name == 'push' || inputs.request_first_draft_tool) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,3 +58,4 @@ jobs:
             ${{ runner.temp }}/task-b-evidence/events.json
             ${{ runner.temp }}/task-b-evidence/candidate-verification.json
             ${{ runner.temp }}/task-b-evidence/candidate.patch
+            ${{ runner.temp }}/task-b-evidence/provider-audit.json

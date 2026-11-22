@@ -8,6 +8,7 @@ export FORGELENS_PYTHON="$(command -v python)"
 mkdir -p "$scratch/llama" "$EVIDENCE_DIR"
 model="${SOLVER_MODEL:-gpt-oss-20b}"
 model_flags=()
+use_adapter=false
 export FORGELENS_DRAFT_FROM_CONTEXT=false
 case "$model" in
   gpt-oss-20b)
@@ -28,14 +29,15 @@ case "$model" in
     model_url=https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/13fb94bfda8c8cf22497dc57b78f391a9acb426a/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     context=16384
     export FORGELENS_DRAFT_FROM_CONTEXT=true
+    if [[ "${REQUEST_FIRST_DRAFT_TOOL:-false}" == true ]]; then use_adapter=true; fi
     ;;
   *) echo "Unsupported diagnostic model"; exit 2 ;;
 esac
 llama_sha=1a1af0cb6dc2af9779e10085266de44084288d58a2917e14b64400c436fb124a
 llama_url=https://github.com/ggml-org/llama.cpp/releases/download/b12613/llama-b12613-bin-ubuntu-x64.tar.gz
 flags_json="$(node -e 'console.log(JSON.stringify(process.argv.slice(1)))' -- "${model_flags[@]}")"
-printf '{"forgeLens":"%s","flask":"22d924701a6ae2e4cd01e9a15bbaf3946094af65","trueForge":"0.185.1","model":"%s","modelSha256":"%s","contextLength":%d,"maxOutputTokens":4096,"modelFlags":%s,"draftFromContext":%s,"modelCallLimitSeconds":1800,"taskLimitSeconds":4800,"llamaCpp":"b12613","userRequests":1,"operatorAnswers":0,"diagnosticApproval":"stage bounded proposals and test disposable overlays"}\n' \
-  "$(git rev-parse HEAD)" "$model" "$model_sha" "$context" "$flags_json" "$FORGELENS_DRAFT_FROM_CONTEXT" > "$EVIDENCE_DIR/run.json"
+printf '{"forgeLens":"%s","flask":"22d924701a6ae2e4cd01e9a15bbaf3946094af65","trueForge":"0.185.1","model":"%s","modelSha256":"%s","contextLength":%d,"maxOutputTokens":4096,"modelFlags":%s,"draftFromContext":%s,"requestFirstDraftTool":%s,"modelCallLimitSeconds":1800,"taskLimitSeconds":4800,"llamaCpp":"b12613","userRequests":1,"operatorAnswers":0,"diagnosticApproval":"stage bounded proposals and test disposable overlays"}\n' \
+  "$(git rev-parse HEAD)" "$model" "$model_sha" "$context" "$flags_json" "$FORGELENS_DRAFT_FROM_CONTEXT" "$use_adapter" > "$EVIDENCE_DIR/run.json"
 git clone --depth 1 --branch 3.1.3 https://github.com/pallets/flask.git "$FLASK_ROOT"
 test "$(git -C "$FLASK_ROOT" rev-parse HEAD)" = 22d924701a6ae2e4cd01e9a15bbaf3946094af65
 # The upstream lockfile versions for Python 3.12 keep this a Flask 3.1.3 check.
@@ -55,7 +57,13 @@ export LD_LIBRARY_PATH="$(dirname "$server")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH
   --ctx-size "$context" "${model_flags[@]}" --parallel 1 --threads 4 --threads-batch 4 --n-gpu-layers 0 --jinja >"$scratch/llama.log" 2>&1 &
 llama_pid=$!
 trueforge_pid=''
-trap 'kill "$llama_pid" 2>/dev/null || true; if [[ -n "$trueforge_pid" ]]; then kill "$trueforge_pid" 2>/dev/null || true; fi' EXIT
+adapter_pid=''
+stop_services() {
+  for pid in "$llama_pid" "$trueforge_pid" "$adapter_pid"; do
+    if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; fi
+  done
+}
+trap stop_services EXIT
 export STANDALONE=true HOST=127.0.0.1 SQLITE_PATH="$scratch/trueforge.sqlite"
 export NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'
 export MODEL_HTTP_MAX_RETRIES=0 MODEL_HTTP_HEADERS_TIMEOUT_MS=1800000 MODEL_HTTP_BODY_TIMEOUT_MS=1800000
@@ -73,8 +81,15 @@ wait_for_service() {
 }
 wait_for_service http://127.0.0.1:18931/health "$llama_pid"
 wait_for_service http://127.0.0.1:18930/api/v1/models "$trueforge_pid"
+provider_url=http://127.0.0.1:18931/v1
+if [[ "$use_adapter" == true ]]; then
+  node scripts/llama-draft-adapter.mjs 18932 18931 >"$scratch/adapter.log" 2>&1 &
+  adapter_pid=$!
+  wait_for_service http://127.0.0.1:18932/health "$adapter_pid"
+  provider_url=http://127.0.0.1:18932/v1
+fi
 export TRUEFORGE_URL=http://127.0.0.1:18930 TRUEFORGE_MODEL="ci-local/$model"
-provider="$(node -e 'const [model,context]=process.argv.slice(1);console.log(JSON.stringify({manifest:{type:"custom",name:"ci-local",base_url:"http://127.0.0.1:18931/v1",auth:{api_key:"local-placeholder"},models:[{name:model,model_id:model,properties:{context_length:Number(context),max_output_tokens:4096}}]}}))' "$model" "$context")"
+provider="$(node -e 'const [model,context,url]=process.argv.slice(1);console.log(JSON.stringify({manifest:{type:"custom",name:"ci-local",base_url:url,auth:{api_key:"local-placeholder"},models:[{name:model,model_id:model,properties:{context_length:Number(context),max_output_tokens:4096}}]}}))' "$model" "$context" "$provider_url")"
 curl --fail --silent --show-error -o /dev/null -H 'Content-Type: application/json' \
   -d "$provider" \
   "$TRUEFORGE_URL/api/v1/settings/model-providers"
@@ -82,7 +97,30 @@ export CONTEXT_BUDGET=14000 FORGELENS_COMPACT_REQUESTS=true FORGELENS_VALIDATE_S
 export FORGELENS_TEST_FIXTURE_PINS="$PWD/docs/evidence/task-b-flash-lite/public-fixture-pins.json"
 export RUN_TIMEOUT_MS=4800000 MODEL_CALL_TIMEOUT_MS=1800000 STREAM_IDLE_TIMEOUT_MS=1800000
 model_status=0
+adapter_status=0
 node --import tsx test-local-b.ts || model_status=$?
+if [[ "$use_adapter" == true ]]; then
+  node --input-type=module - "$scratch/adapter.log" "$EVIDENCE_DIR/provider-audit.json" <<'NODE' || adapter_status=$?
+import {readFile,writeFile} from 'node:fs/promises';
+const [source,target] = process.argv.slice(2);
+const requests = [];
+for (const line of (await readFile(source,'utf8')).split(/\r?\n/)) {
+  let event;
+  try { event=JSON.parse(line); } catch { continue; }
+  if (event.event==='llama_adapter_request' && Number.isSafeInteger(event.request) &&
+      typeof event.forcedProposalToolChoice==='boolean') {
+    requests.push({request:event.request,forcedProposalToolChoice:event.forcedProposalToolChoice});
+  }
+}
+const selectedRequests = requests.filter(entry=>entry.forcedProposalToolChoice).length;
+await writeFile(target,JSON.stringify({requests,selectedRequests},null,2)+'\n');
+console.log('Loopback tool choice audit',JSON.stringify({requests,selectedRequests}));
+if(selectedRequests!==1) {
+  console.error('The request audit did not confirm exactly one native draft tool selection.');
+  process.exitCode=1;
+}
+NODE
+fi
 if [[ "$model_status" != 0 && -f "$EVIDENCE_DIR/result.json" ]]; then
   node --input-type=module <<'NODE'
 import { readFile, writeFile } from 'node:fs/promises';
@@ -113,4 +151,5 @@ NODE
 fi
 test -f "$EVIDENCE_DIR/proposals.json"
 python checks/run-task-b-verification.py "$FLASK_ROOT" "$EVIDENCE_DIR"
+test "$adapter_status" -eq 0
 test "$model_status" -eq 0
