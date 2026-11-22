@@ -15,6 +15,7 @@ import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
 import { candidateTestArgs, validateCandidate } from './candidateValidation';
+import { userFixturePins } from './candidateFixtures';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
 
@@ -361,16 +362,21 @@ export async function activate(context:vscode.ExtensionContext) {
     const overlays=snapshot();
     if(!overlays.length)throw new Error('There are no staged changes to test.');
     const python=config.get<string>('pythonPath','python');
+    const fixtureSetting=()=>userFixturePins(vscode.workspace.getConfiguration('forgelens').inspect('candidateTestFixtures'));
+    const fixtures=fixtureSetting();
+    const pinned=Object.entries(fixtures).map(([file,hash])=>file+'  '+hash);
+    const fixtureDetail=pinned.length?'\nPinned Git test fixtures (committed bytes):\n'+pinned.join('\n'):'';
     const epoch=reviewEpoch;
     const choice=await vscode.window.showWarningMessage('Run the staged changes in an isolated workspace copy?',{
-     modal:true,detail:`Command: ${[python,...candidateTestArgs(tests)].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}\nTests execute project code with your user permissions.`
+     modal:true,detail:`Command: ${[python,...candidateTestArgs(tests)].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}${fixtureDetail}\nTests execute project code with your user permissions.`
     },'Run candidate tests');
-    if(!choice||signal?.aborted||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||root()!==folder)throw new Error('Candidate validation declined or expired.');
+    if(choice!=='Run candidate tests'||signal?.aborted||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||!vscode.workspace.isTrusted||root()!==folder)throw new Error('Candidate validation declined or expired.');
     if(!isDeepStrictEqual(snapshot(),overlays))throw new Error('Reviewed files changed during confirmation. Request validation again.');
+    if(!isDeepStrictEqual(fixtureSetting(),fixtures))throw new Error('Pinned fixtures changed during approval. Request validation again.');
     if(commandAbort)throw new Error('Another verification process is already active.');
     const controller=new AbortController();commandAbort=controller;
     const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
-    try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal);emit(result);return result;}
+    try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal,fixtures);emit(result);return result;}
     finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
    },command:async(command,args,signal)=>{
     const allowed=(command==='pytest'&&args.every(a=>a==='-q'||/^tests\/[\w/.-]+\.py(?:::[\w]+)*$/.test(a)))||(command==='git'&&['status --short','diff --stat','diff'].includes(args.join(' ')))||(command==='flask'&&args.join(' ')==='--help');

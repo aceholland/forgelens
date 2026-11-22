@@ -5,6 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { confinedPath, listWorkspace } from './workspace';
 import { isSafeContextPath } from './context';
+import { copyPinnedFixtures, type FixturePins } from './candidateFixtures';
 
 const execute = promisify(execFile);
 export interface CandidateFile { path: string; original: string; content: string; isNew?: boolean }
@@ -13,7 +14,7 @@ export function candidateTestArgs(tests: string[]): string[] {
 }
 
 /** A clean copy protects the user's working tree. Pytest still runs trusted project code with local user permissions. */
-export async function validateCandidate(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal): Promise<string> {
+export async function validateCandidate(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}): Promise<string> {
   if (!overlays.length) throw new Error('Stage a candidate edit before validating it.');
   if (tests.length > 20 || tests.some(test => {
     const [file, ...nodes] = test.split('::');
@@ -59,6 +60,7 @@ export async function validateCandidate(root: string, overlays: CandidateFile[],
         await writeFile(target, bom + file.content);
       }
     }
+    await copyPinnedFixtures(root,scratch,fixturePins,signal);
     for (const test of tests) await lstat(path.join(scratch, test.split('::')[0]!));
     signal?.throwIfAborted();
     const env: NodeJS.ProcessEnv = {};

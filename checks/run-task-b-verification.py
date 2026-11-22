@@ -44,13 +44,23 @@ def test_nodes(root, env):
     return {line.strip() for line in result.stdout.splitlines() if line.startswith("tests/") and "::" in line}
 
 
+def pytest_summary(result):
+    for line in reversed(result.stdout.splitlines()):
+        if re.search(r"\b(?:passed|failed|error|skipped)\b", line):
+            return line.strip()[-220:]
+    return ""
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("flask", type=Path, help="Local clone containing the official commit")
     parser.add_argument("evidence", type=Path, help="Directory containing the harness proposals.json")
     parser.add_argument("--patch", type=Path, help="Grade a retained Git patch instead of proposals.json")
     args = parser.parse_args()
+    source = args.flask.resolve()
     evidence = args.evidence.resolve()
+    if evidence.is_relative_to(source):
+        parser.error("Choose an evidence directory outside the target Flask checkout")
     evidence.mkdir(parents=True, exist_ok=True)
     env = {name: value for name, value in os.environ.items() if name.upper() in {
         "PATH", "SYSTEMROOT", "WINDIR", "PATHEXT", "COMSPEC", "TMP", "TEMP", "TMPDIR", "LANG", "LC_ALL"
@@ -60,7 +70,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="forgelens-grade-") as tmp:
         scratch = Path(tmp)
         root = scratch / "flask"
-        git(scratch, env, "clone", "--local", "--no-hardlinks", "--no-checkout", str(args.flask.resolve()), str(root))
+        git(scratch, env, "clone", "--local", "--no-hardlinks", "--no-checkout", str(source), str(root))
         git(root, env, "checkout", "--detach", FLASK_COMMIT)
         if git(root, env, "rev-parse", "HEAD").strip() != FLASK_COMMIT:
             raise ValueError("Unexpected upstream commit")
@@ -103,7 +113,7 @@ def main():
         if new_tests:
             # Check that at least one added test actually detects the missing feature.
             baseline = scratch / "baseline"
-            git(scratch, env, "clone", "--local", "--no-hardlinks", "--no-checkout", str(args.flask.resolve()), str(baseline))
+            git(scratch, env, "clone", "--local", "--no-hardlinks", "--no-checkout", str(source), str(baseline))
             git(baseline, env, "checkout", "--detach", FLASK_COMMIT)
             for name in proposals:
                 if name.startswith("tests/"):
@@ -138,12 +148,11 @@ def main():
             "flaskCliTestsPass": cli_tests.returncode == 0,
             "fullFlaskSuitePasses": all_tests.returncode == 0,
         }
-        summary = lambda result: next((line.strip() for line in reversed(result.stdout.splitlines()) if re.search(r"\b(?:passed|failed|error|skipped)\b", line)), "")[-220:]
         report = {"flaskCommit": FLASK_COMMIT, "python": sys.version.split()[0],
                   "upstreamTestsCollected": len(before), "candidateTestsCollected": len(after),
                   "proposedFiles": sorted(proposals), "addedTests": new_tests,
-                  "sensitiveKeysChecked": len(values), "cliTests": summary(cli_tests),
-                  "fullTests": summary(all_tests), "checks": checks, "passed": all(checks.values())}
+                  "sensitiveKeysChecked": len(values), "cliTests": pytest_summary(cli_tests),
+                  "fullTests": pytest_summary(all_tests), "checks": checks, "passed": all(checks.values())}
         (evidence / "candidate-verification.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf8")
         print(json.dumps(report, indent=2))
         return 0 if report["passed"] else 1

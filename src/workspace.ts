@@ -46,6 +46,11 @@ function excluded(relative: string, paths: string[]): boolean {
   return paths.some(entry => key === entry || key.startsWith(entry + '/'));
 }
 
+/** Consult literal .forgelensignore rules without reading the named workspace file. */
+export async function excludedByWorkspaceIgnore(root:string, relative:string):Promise<boolean> {
+  return excluded(relative,await exclusions(await realpath(root)));
+}
+
 /** One read-only Git process, with bounded output/time; no per-file commands. */
 async function gitFiles(base: string, paths: string[], requireComplete: boolean): Promise<string[] | undefined> {
   return new Promise((resolve, reject) => {

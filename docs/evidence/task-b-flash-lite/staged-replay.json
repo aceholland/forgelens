@@ -1,0 +1,162 @@
+{
+  "scope": "Replay of the archived Task B patch using compact MCP, programmatic hunk acceptance and staged candidate validation.",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "archivedPatchSha256": "d77e5833a13d0414f3260c22cf6a082b38c2812382899c423f622a2ad50ae2ca",
+  "pythonVersion": "3.12.14",
+  "source": "Archived model output. No model or TrueForge turn was started for this replay.",
+  "transport": "Authenticated local MCP over HTTP",
+  "toolCalls": [
+    "propose_changes (default full suite)",
+    "validate_candidate (added test)",
+    "validate_candidate (pinned fixture CLI suite)",
+    "validate_candidate (pinned fixture full suite)"
+  ],
+  "consent": "The replay driver accepted every hunk and requested the full suite. No interactive editor approvals were recorded.",
+  "accepted": [
+    {
+      "path": "docs/api.rst",
+      "hunks": 1
+    },
+    {
+      "path": "docs/cli.rst",
+      "hunks": 1
+    },
+    {
+      "path": "src/flask/cli.py",
+      "hunks": 2
+    },
+    {
+      "path": "tests/test_cli.py",
+      "hunks": 1
+    }
+  ],
+  "checksRun": [
+    {
+      "targets": [],
+      "commandArguments": [
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--"
+      ],
+      "fixturePins": {},
+      "elapsedMs": 11409,
+      "result": {
+        "exitCode": 1,
+        "summary": "1 failed, 490 passed in 7.37s",
+        "failedTests": [
+          "tests/test_cli.py::test_load_dotenv"
+        ]
+      }
+    },
+    {
+      "targets": [
+        "tests/test_cli.py::TestConfig::test_config"
+      ],
+      "commandArguments": [
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--",
+        "tests/test_cli.py::TestConfig::test_config"
+      ],
+      "fixturePins": {},
+      "elapsedMs": 3932,
+      "result": {
+        "exitCode": 0,
+        "summary": "1 passed in 0.22s",
+        "failedTests": []
+      }
+    },
+    {
+      "targets": [
+        "tests/test_cli.py"
+      ],
+      "commandArguments": [
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--",
+        "tests/test_cli.py"
+      ],
+      "fixturePins": {
+        "tests/test_apps/.env": "0890b615f109a3685a820c8948d74f4fab6c96c0"
+      },
+      "elapsedMs": 4282,
+      "result": {
+        "exitCode": 0,
+        "summary": "59 passed in 0.66s",
+        "failedTests": []
+      }
+    },
+    {
+      "targets": [],
+      "commandArguments": [
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--"
+      ],
+      "fixturePins": {
+        "tests/test_apps/.env": "0890b615f109a3685a820c8948d74f4fab6c96c0"
+      },
+      "elapsedMs": 21446,
+      "result": {
+        "exitCode": 0,
+        "summary": "491 passed in 13.43s",
+        "failedTests": []
+      }
+    }
+  ],
+  "unchangedFlaskControl": {
+    "exitCode": 1,
+    "summary": "1 failed, 489 passed in 7.82s",
+    "failedTests": [
+      "tests/test_cli.py::test_load_dotenv"
+    ]
+  },
+  "defaultFixturePaths": [
+    {
+      "path": "tests/test_apps/.env",
+      "tracked": true,
+      "inCandidateCopy": false
+    },
+    {
+      "path": "tests/test_apps/.flaskenv",
+      "tracked": true,
+      "inCandidateCopy": true
+    }
+  ],
+  "checkpoints": {
+    "before": {
+      "files": 235,
+      "sha256": "3298256b2f2f59f8f212bcb1f537dfd2ad6bff0acaff77a3f5834736b8a85ecc"
+    },
+    "beforeTests": {
+      "files": 235,
+      "sha256": "3298256b2f2f59f8f212bcb1f537dfd2ad6bff0acaff77a3f5834736b8a85ecc"
+    },
+    "afterTests": {
+      "files": 235,
+      "sha256": "3298256b2f2f59f8f212bcb1f537dfd2ad6bff0acaff77a3f5834736b8a85ecc"
+    },
+    "afterControl": {
+      "files": 235,
+      "sha256": "3298256b2f2f59f8f212bcb1f537dfd2ad6bff0acaff77a3f5834736b8a85ecc"
+    },
+    "afterPinnedTests": {
+      "files": 235,
+      "sha256": "3298256b2f2f59f8f212bcb1f537dfd2ad6bff0acaff77a3f5834736b8a85ecc"
+    }
+  },
+  "cleanGitStatus": true,
+  "appliedWorkspaceChanges": false
+}

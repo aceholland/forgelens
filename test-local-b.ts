@@ -42,6 +42,7 @@ async function main() {
  const python=process.env.FORGELENS_PYTHON;
  const budget=Number(process.env.CONTEXT_BUDGET??6000);
  const compact=process.env.FORGELENS_COMPACT_REQUESTS==='true';
+ const operatorQuestions=process.env.GITHUB_ACTIONS!=='true'&&process.env.FORGELENS_UNATTENDED!=='true';
  const preloadTools=compact||process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
  const store=new ReviewStore(); let active=true,modelSwitching=false;
@@ -74,7 +75,7 @@ async function main() {
    modelCallTimeoutMs:Number(process.env.MODEL_CALL_TIMEOUT_MS??120000),onModelCallTimeout:()=>{metadata.modelTimeouts++;modelSwitching=true;},onFallback:()=>{metadata.fallback();mcp!.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>metadata.calls,
    onEvent:e=>{if(e.type==='client.status'&&e.message.startsWith('Run time limit reached.'))active=false;const safe=metadata.add(e);if(e.type!=='model.message.delta')console.log(JSON.stringify(safe));},
-   onQuestion:async q=>{
+   onQuestion:operatorQuestions?async q=>{
     metadata.events.push({type:'operator.question',toolCallId:q.toolCallId});
     await writeFile(path.join(out,'pending-question.json'),JSON.stringify({toolCallId:q.toolCallId,sessionId:q.sessionId,instructions:'Inspect the question in TrueForge. Raw question text is excluded from this evidence.'},null,2));
     console.log(JSON.stringify({type:'operator.question',toolCallId:q.toolCallId}));
@@ -89,7 +90,7 @@ async function main() {
       await new Promise(r=>setTimeout(r,1000));
     }
     return undefined;
-   },
+   }:undefined,
    onApproval:async d=>{
     if(d.name==='propose_changes')return process.env.FORGELENS_COMPACT_REQUESTS==='true'&&Array.isArray(d.arguments.files);
     const file=d.arguments.path;
@@ -114,7 +115,7 @@ async function main() {
  finally {
   active=false;
   if(mcp)try{await mcp.close();}catch{failure??={category:'mcp_cleanup_failure'};status='error';}
-  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,preloadTools,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
+  const result={status,requestedModel:modelId(model)??null,requestedFallbackModel:modelId(process.env.TRUEFORGE_FALLBACK_MODEL)??null,preloadTools,operatorQuestions,sessionId:sessionId||null,phase,startedAt,finishedAt:new Date().toISOString(),elapsedMs:Math.round(performance.now()-started),...metadata.summary(),proposalCount:store.list().length,paths:store.list().map(p=>p.path),targetFilesApplied:false,benchmarkStatus:store.list().length?(status==='done'?'staged_candidate_unvalidated':'interrupted_with_staged_candidate'):'no_candidate',officialTaskBPass:false,...(failure?{failure}:{})};
   await writeFile(path.join(out,'events.json'),JSON.stringify(metadata.events,null,2));
   await writeFile(path.join(out,'result.json'),JSON.stringify(result,null,2));
   console.log(JSON.stringify(result));

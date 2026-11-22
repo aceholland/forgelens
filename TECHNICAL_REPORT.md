@@ -1,6 +1,6 @@
 # Historical ForgeLens 0.1.9: Task B evaluation checkpoint
 
-This is the earlier release's historical report. See [the current Windows checkpoint](docs/STATUS.md) for the newly measured Windows results and outstanding official evaluation work.
+This report preserves the earlier release checkpoint. See the [Round 1 Windows results](docs/STATUS.md), the [independently verified real-model Task B patch](docs/evidence/task-b-flash-lite/README.md) and the [current editor workflow](README.md) for later results.
 
 **Status: the local IPv6/MCP integration passed. The official Gemini Task B run is not verified.** This package contains a focused ForgeLens source patch and a Windows runbook. It does not contain generated Flask changes, a claimed pass, or a demo recording.
 
