@@ -67,7 +67,7 @@ async function main() {
  const selected=compact?await compactContext(root,prompt,budget,3200,()=>!active):undefined;
  if(draftFromContext&&!selected?.items.length)throw new Error('Drafting requires retrieved workspace evidence.');
  if(selected)metadata.paths('discovery',selected.items.map(item=>item.path));
- mcp=await startMcp({root,budget,draftFromContext,compactContext:selected,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
+ mcp=await startMcp({root,budget,draftFromContext,compactContext:selected,task:prompt,requireDiscovery:true,autoValidateReviewedTests:validateStaged,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
   propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const current=store.get(p);const original=current?.original??await readWorkspace(root,p); if(current)store.revise(p,original,c);else store.stage(p,original,c);await persistProposals();return `Staged ${p}; not applied. Continue any remaining requested work.`;},
   create:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);store.stage(p,'',c,'create');await persistProposals();return `Staged new file ${p}; not applied.`;},
   validate:validateStaged?async (tests,signal)=>{
@@ -85,7 +85,7 @@ async function main() {
   phase='agent_run';
   let instructions=instructionsForTools(preloadTools);
   if(selected?.items.length)instructions=draftFromContext?draftInstructions:compactInstructions;
-  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,draftFromContext,sourceEvidence:selected?.items.length?compactEvidence(selected):undefined,instructions,runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:draftFromContext||process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
+  const runner=new ForgeRunner({baseUrl,model,fallbackModel:process.env.TRUEFORGE_FALLBACK_MODEL||undefined,mcpName,draftFromContext,sourceEvidence:selected?.items.length?compactEvidence(selected,draftFromContext):undefined,instructions,runTimeoutMs:Number(process.env.RUN_TIMEOUT_MS??300000),streamIdleTimeoutMs:Number(process.env.STREAM_IDLE_TIMEOUT_MS??900000),preloadTools,dynamicSubAgents:draftFromContext||process.env.DYNAMIC_SUB_AGENTS==='false'?false:undefined,reasoningEffort:process.env.REASONING_EFFORT||undefined,
    modelCallTimeoutMs:Number(process.env.MODEL_CALL_TIMEOUT_MS??120000),onModelCallTimeout:()=>{metadata.modelTimeouts++;modelSwitching=true;},onFallback:()=>{metadata.fallback();mcp!.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length,getRecentToolCalls:()=>metadata.calls,
    onEvent:e=>{if(e.type==='client.status'&&e.message.startsWith('Run time limit reached.'))active=false;const safe=metadata.add(e);if(e.type!=='model.message.delta')console.log(JSON.stringify(safe));},

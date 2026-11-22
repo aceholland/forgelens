@@ -3,7 +3,15 @@ import { fitExcerpt } from './tokenBudget';
 
 export interface ContextFile { path: string; content: string; symbols?: string[] }
 export interface ContextItem extends ContextFile { reason: string; score: number; truncated: boolean; startLine?: number; endLine?: number }
-export interface ContextSelection { items: ContextItem[]; usedChars: number; budgetChars: number; usedTokens:number; budgetTokens:number; encoding:'o200k_base' }
+export interface ContextSelection {
+  items: ContextItem[];
+  usedChars: number;
+  budgetChars: number;
+  usedTokens: number;
+  budgetTokens: number;
+  encoding: 'o200k_base';
+  draftFiles?: ReadonlyMap<string, { hash: string; lineCount: number; lastLineLength: number }>;
+}
 
 export function isSafeContextPath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return false;

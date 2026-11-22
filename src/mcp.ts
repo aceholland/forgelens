@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { confinedPath, listWorkspace, readWorkspace } from './workspace';
 import { isSafeContextPath, selectContext, type ContextSelection } from './context';
 import { AnchorMismatch, resolveAgentProposal } from './patch';
-import { anchorExcerpt } from './compactContext';
+import { anchorExcerpt, draftInsertionOffsets } from './compactContext';
 
 export interface EditorBridge {
  root:string; budget:number; tokenBudget?:number; task?:string; requireDiscovery?:boolean; active():boolean;
@@ -19,6 +19,8 @@ export interface EditorBridge {
  /** Actual local discovery supplied to the model as structured source excerpts. */
  compactContext?:ContextSelection;
  draftFromContext?:boolean;
+ /** The host can offer pytest for newly reviewed test changes. Deferred review leaves this disabled. */
+ autoValidateReviewedTests?:boolean;
  pending?(path:string):string|undefined;
  propose(path:string, content:string, expectedBase?:string, signal?:AbortSignal):Promise<string>;
  create?(path:string,content:string,signal?:AbortSignal):Promise<string>;
@@ -197,7 +199,11 @@ export async function startMcp(bridge: EditorBridge) {
   if(preselected)mcp.registerTool('propose_changes',{
    description:'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
    inputSchema:{files:z.array(z.object({path:draftPaths?z.enum([...draftPaths],{error:'Drafts can edit only retrieved files. Use Run agent for additional paths.'}):z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
-    edits:z.array(z.object({oldText:z.string().min(1).max(250000),newText:z.string().max(250000)})).min(1).max(20)})).min(1).max(12),
+    edits:z.array(draftPaths ? z.object({
+      beforeLine:z.union([z.number().int().positive(),z.literal('end')]).optional().describe('Insert before this displayed line, or append at a displayed file end. Use this or oldText.'),
+      oldText:z.string().min(1).max(250000).optional().describe('Exact unique text to replace. Use this or beforeLine.'),
+      newText:z.string().max(250000).describe('Literal insertion or replacement, including the required newlines.')
+    }) : z.object({oldText:z.string().min(1).max(250000),newText:z.string().max(250000)})).min(1).max(20)})).min(1).max(12),
     tests:z.array(z.string().min(1).max(400)).max(20).optional()}
   },async({files,tests},extra)=>{
    guard();
@@ -205,6 +211,7 @@ export async function startMcp(bridge: EditorBridge) {
    if(draftPaths&&tests?.some(test=>!draftPaths.has(test.split('::')[0]!)))throw new Error('Choose a retrieved test path, request the full suite with [], or use Run agent.');
    const targets=new Set<string>();
    const prepared=[];
+   const problems:string[]=[];
    for(const file of files){
     if(draftPaths&&!draftPaths.has(file.path))throw new Error('Use Run agent to edit additional paths.');
     const target=await confinedPath(bridge.root,file.path);
@@ -213,18 +220,31 @@ export async function startMcp(bridge: EditorBridge) {
     if(targets.has(key))throw new Error('Combine all edits for each file into one entry.');
     targets.add(key);
     const base=await readView(file.path);
-    try{prepared.push({path:file.path,base,content:resolveAgentProposal(base,file)});}
+    try{
+     const offsets = draftPaths && file.edits.some(edit=>'beforeLine' in edit)
+      ? draftInsertionOffsets(bridge.compactContext!,file.path,base) : undefined;
+     prepared.push({path:file.path,base,content:resolveAgentProposal(base,file,offsets)});
+    }
     catch(error){
      guard();extra.signal.throwIfAborted();
      if(draftPaths&&error instanceof AnchorMismatch){
       const first=bridge.compactContext!.items.find(item=>item.path===file.path);
       const excerpt=anchorExcerpt(base,error.anchor,first?.startLine??1);
-      throw new Error(`${file.path}: oldText must match exactly once. Retry with a unique anchor from the current view. Untrusted source excerpt: ${JSON.stringify(excerpt)}`);
-     }
-     throw new Error(file.path+': '+(error instanceof Error?error.message:'Invalid edit anchor'));
+      problems.push(`${file.path}: oldText must match exactly once. Retry with a unique anchor from the current view. Untrusted source excerpt: ${JSON.stringify(excerpt)}`);
+     } else if(draftPaths && file.edits.some(edit=>'beforeLine' in edit)){
+      const insertion=file.edits.find(edit=>'beforeLine' in edit);
+      const position=insertion && 'beforeLine' in insertion ? insertion.beforeLine : undefined;
+      const windows=bridge.compactContext!.items.filter(item=>item.path===file.path);
+      const line=position==='end' ? Math.max(...windows.map(item=>item.endLine??1)) :
+       typeof position==='number' && windows.some(item=>position>=(item.startLine??1)&&position<=(item.endLine??1)) ? position : windows[0]?.startLine??1;
+      const excerpt=anchorExcerpt(base,'',line);
+      problems.push(file.path+': '+(error instanceof Error?error.message:'Invalid draft insertion')+
+        ' For a revision, use exact oldText from this untrusted current excerpt: '+JSON.stringify(excerpt));
+     } else problems.push(file.path+': '+(error instanceof Error?error.message:'Invalid edit anchor'));
     }
    }
    guard();extra.signal.throwIfAborted();
+   if(problems.length)throw new Error('No file in this batch was staged.\n'+problems.join('\n'));
    bridge.onPlan?.(files.map(({path,reason})=>({path,reason})));
    report('propose_changes','',prepared.length+' files');
    const results:string[]=[];
@@ -241,8 +261,14 @@ export async function startMcp(bridge: EditorBridge) {
     }
    }
    guard();extra.signal.throwIfAborted();
-   if(tests) {
-    try { results.push(await bridge.validate!(tests,extra.signal)); }
+   const reviewedTests = tests===undefined && draftPaths && bridge.autoValidateReviewedTests && bridge.validate
+    ? prepared.filter(file=>{
+       const overlay=bridge.pending?.(file.path);
+       return overlay!==undefined && overlay!==file.base && /^(?:test_.*|.*_test)\.py$/.test(path.posix.basename(file.path));
+      }).map(file=>file.path) : [];
+   const testsToRun = tests ?? (reviewedTests.length ? reviewedTests : undefined);
+   if(testsToRun) {
+    try { results.push(await bridge.validate!(testsToRun,extra.signal)); }
     catch(error) { results.push('Candidate validation did not finish: '+(error instanceof Error?error.message:'unknown error')); }
    }
    guard();return show(results.join('\n'));

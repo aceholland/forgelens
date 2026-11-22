@@ -2,7 +2,7 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "forgelens-team",
   "repository": {
     "type": "git",

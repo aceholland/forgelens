@@ -5,8 +5,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { anchorExcerpt } from '../src/compactContext';
-import { selectContext } from '../src/context';
+import { anchorExcerpt, compactContext, compactEvidence, draftInsertionOffsets } from '../src/compactContext';
+import { resolveAgentProposal } from '../src/patch';
 import { startMcp } from '../src/mcp';
 
 test('a context draft requires retrieved source before opening an editing endpoint', async () => {
@@ -22,17 +22,38 @@ test('anchor recovery preserves the matching line when nearby lines exceed the w
   assert.ok(excerpt.content.length<=1200);
 });
 
+test('draft insertions use the immutable retrieved line, reject ambiguity and retain original CRLF bytes', async t => {
+  const root=await mkdtemp(path.join(tmpdir(),'forgelens-position-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const file='widget.py';
+  const saved='first\r\nrepeat\r\nrepeat\r\nlast\r\n';
+  await writeFile(path.join(root,file),saved);
+  const selection=(await compactContext(root,'@file:widget.py',8000,2000,()=>false))!;
+  assert.match(compactEvidence(selection,true),/3\| repeat/);
+  assert.match(compactEvidence(selection,true),/end of file/);
+  const offsets=draftInsertionOffsets(selection,file,saved);
+  const resolve=(edits:unknown[])=>resolveAgentProposal(saved,{edits},offsets);
+  assert.equal(resolve([{beforeLine:3,newText:'inserted\n'},{beforeLine:'end',newText:'final\n'},
+    {oldText:'first',newText:'updated'}]),'updated\r\nrepeat\r\ninserted\r\nrepeat\r\nlast\r\nfinal\r\n');
+  assert.throws(()=>resolve([{beforeLine:3,oldText:'repeat',newText:'inserted'}]),/beforeLine and nonempty newText only/);
+  assert.throws(()=>resolve([{beforeLine:3,newText:'one'},{beforeLine:3,newText:'two'}]),/overlap/);
+  assert.throws(()=>draftInsertionOffsets(selection,file,saved.replace('first','changed')),/stale/);
+  const clipped={...selection,items:[{...selection.items[0]!,startLine:2,endLine:3,content:'repeat\r\nrep'}]};
+  assert.deepEqual([...draftInsertionOffsets(clipped,file,saved).keys()],[2]);
+  assert.doesNotMatch(compactEvidence(clipped,true),/end of file/);
+});
+
 test('draft offers one scoped tool, preflights the entire batch and repairs from the current overlay', async t => {
   const root=await mkdtemp(path.join(tmpdir(),'forgelens-draft-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const saved={'widget.py':'def widget(value):\n    return value\n','test_widget.py':'def test_widget():\n    assert widget(2) == 2\n'};
   for(const [name,body] of Object.entries(saved)) await writeFile(path.join(root,name),body);
+  const selection=(await compactContext(root,'widget tests',8000,2000,()=>false))!;
   await writeFile(path.join(root,'unselected.py'),'UNSELECTED_SENTINEL');
-  const selection=selectContext(Object.entries(saved).map(([path,content])=>({path,content})), 'widget tests', 8000,undefined,2000);
   const overlay=new Map([['widget.py','def widget(staged_value):\n    return staged_value\n']]);
   const calls:string[]=[],validated:string[][]=[];
   const bridge=await startMcp({root,budget:8000,draftFromContext:true,compactContext:selection,requireDiscovery:true,
-    active:()=>true,pending:name=>overlay.get(name),context:()=>calls.push('context'),command:async()=>{calls.push('command');return '';},
+    active:()=>true,pending:name=>overlay.get(name),autoValidateReviewedTests:true,context:()=>calls.push('context'),command:async()=>{calls.push('command');return '';},
     onPlan:()=>calls.push('plan'),propose:async(name,content)=>{calls.push('review '+name);overlay.set(name,content);return 'accepted hunk-1';},
     validate:async paths=>{validated.push(paths);return 'Candidate pytest exited 0';}});
   t.after(()=>bridge.close());
@@ -63,6 +84,15 @@ test('draft offers one scoped tool, preflights the entire batch and repairs from
   assert.match(JSON.stringify(failure),/def widget\(staged_value\)/);
   assert.deepEqual(calls,[]);
   assert.deepEqual(validated,[]);
+  const both=await propose([edit('widget.py','not-there','new'),edit('test_widget.py','also-missing','new')]);
+  assert.equal(both.isError,true);
+  assert.match(JSON.stringify(both),/widget\.py: oldText.*test_widget\.py: oldText/);
+  assert.deepEqual(calls,[]);
+  const stale=await client.callTool({name:'propose_changes',arguments:{files:[{path:'widget.py',reason:'Update widget',
+    edits:[{beforeLine:2,newText:'    assert value\n'}]}]}});
+  assert.equal(stale.isError,true);
+  assert.match(JSON.stringify(stale),/stale.*staged_value/);
+  assert.deepEqual(calls,[]);
   const success=await propose([source,check],['test_widget.py::test_widget']);
   assert.ok(!success.isError);
   assert.match(JSON.stringify(success),/accepted hunk-1.*Candidate pytest exited 0/);
@@ -71,5 +101,17 @@ test('draft offers one scoped tool, preflights the entire batch and repairs from
   const fullSuite=await propose([edit('widget.py','staged_value * 2','2 * staged_value')],[]);
   assert.ok(!fullSuite.isError);
   assert.deepEqual(validated.at(-1),[]);
+  const tested=await propose([edit('test_widget.py','widget(2) == 4','widget(3) == 6')]);
+  assert.ok(!tested.isError);
+  assert.deepEqual(validated.at(-1),['test_widget.py']);
+  const unchanged=await propose([edit('test_widget.py','widget(3) == 6','widget(3) == 6')]);
+  assert.ok(!unchanged.isError);
+  assert.equal(validated.length,3);
+  overlay.delete('test_widget.py');
+  const inserted=await client.callTool({name:'propose_changes',arguments:{files:[{path:'test_widget.py',reason:'Add coverage',
+    edits:[{beforeLine:'end',newText:'\ndef test_ready():\n    assert True\n'}]}]}});
+  assert.ok(!inserted.isError,JSON.stringify(inserted));
+  assert.equal(overlay.get('test_widget.py'),saved['test_widget.py']+'\ndef test_ready():\n    assert True\n');
+  assert.deepEqual(validated.at(-1),['test_widget.py']);
   assert.equal(await readFile(path.join(root,'widget.py'),'utf8'),saved['widget.py']);
 });

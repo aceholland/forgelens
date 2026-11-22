@@ -359,7 +359,7 @@ export async function activate(context:vscode.ExtensionContext) {
    bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
-   },pending:currentOverlay,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
+   },pending:currentOverlay,autoValidateReviewedTests:liveMode,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
    propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:async(tests,signal)=>{
     const snapshot=()=>reviewedCandidate(store.list(),liveMode,live.list().length>0);
     const overlays=snapshot();
@@ -425,7 +425,7 @@ export async function activate(context:vscode.ExtensionContext) {
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
    mcpName,instructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
-   sourceEvidence:compact&&selected.items.length?compactEvidence(selected):undefined,onEvent:event=>{
+   sourceEvidence:compact&&selected.items.length?compactEvidence(selected,draftFromContext):undefined,onEvent:event=>{
     if(cancellation)return;
     if(event.type==='model.message.delta')emitDelta(String(event.content||''));
     else if(event.type==='client.status'){
