@@ -27,7 +27,7 @@ Version 0.3.0 is a post-deadline release. The original competition recording, wr
 | **Test before applying** | Approve a pytest request to run against a temporary copy containing the staged candidate. A failure and its output go back to the agent so it can revise the proposal in the same turn. |
 | **Apply, export or undo** | Export the accepted hunks as a Git patch, or confirm Apply. Existing-file edits go into an unsaved buffer. New files require a separate creation confirmation. Undo checks for intervening changes. |
 | **Verify saved changes** | Choose Git status, Git diff checks, or Flask CLI tests from the native picker. The task terminal shows the output. The panel reports exit status and duration. |
-| **Stop or recover** | Escape in the panel stops the run and clears pending proposals. The panel reports cancellation time. Two bounded retries precede a configured fallback after qualifying early failures. Once an edit may have been staged, the runner avoids automatic replay. |
+| **Stop or recover** | Escape in the panel stops the run and clears pending proposals. The panel reports cancellation time. For qualifying early failures, the runner retries after 0.8 and 1.6 seconds or waits longer when the provider specifies a retry interval. A configured fallback can then take over. Once an edit may have been staged, the runner avoids automatic replay. |
 
 <details>
 <summary>Earlier context-preview walkthrough</summary>
@@ -119,20 +119,15 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-Use **current desktop VS Code with a local folder**. The 0.2.0 preview passed **137 Windows suite tests**, TypeScript checking and compilation. [Four real desktop checks](https://github.com/aceholland/forgelens/actions/runs/44948081092) also activated the extension, registered all eight commands and opened the panel:
+The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. [Installation workflow](.github/workflows/desktop-preview.yml) · [Verified source-build matrix](https://github.com/aceholland/forgelens/actions/runs/45000547014)
 
-| Platform | Actual VS Code | Extension-host Node | Verified workflow |
-| --- | --- | --- | --- |
-| Windows x64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
-| macOS arm64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
-| Linux x64 | Stable 1.147.0 | 24.22.1 | Local context preview and exclusions |
-| Linux x64 | Minimum 1.101.0 | 22.15.1 | Local context preview and exclusions |
+| Editor host | Coverage |
+| --- | --- |
+| Windows x64 stable | Context preview, native picker, recorded live review and staged pytest repair |
+| macOS arm64 stable | Context preview and native picker |
+| Linux x64 stable and 1.101.0 | Context preview and native picker |
 
-All four selected allowed and tracked fixture files, excluded ignored and protected paths even when explicitly mentioned, and left the fixture unchanged. A trap endpoint recorded **zero TrueForge/provider requests**. These checks verify provider-free context preview; they do not establish a full model-driven edit on each platform.
-
-The original Windows v0.1.13 recording follows real model requests through the A/B/C workflow. That release passed **112 extension tests**; a later diagnostic check passed **113**. Its reviewed Flask Task B checkout also passed **59 CLI tests** again on 22 November. Separate [v0.1.13 desktop launch checks](https://github.com/aceholland/forgelens/actions/runs/44943796900) opened the panel on Windows, macOS, Linux, Linux Insiders and Linux 1.96.0. The older 1.96 editor embeds Node 20; the preview requires **VS Code 1.101+** because the TrueForge SDK specifies Node 22 or newer.
-
-Browser-only editors such as `vscode.dev` cannot host this Node extension. Remote SSH, WSL, Dev Containers, Codespaces, Cursor and VSCodium have no verified full run. [Round 1 feature evidence](docs/FEATURES.txt) · [Preview desktop test workflow](.github/workflows/desktop-preview.yml)
+The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot run this build. Full model-driven runs on Remote SSH, WSL, Dev Containers, Codespaces and editor forks remain unverified. [Windows review and repair](docs/live-review-check.md)
 
 ## Build from a clean clone
 

@@ -62,14 +62,20 @@ async function main() {
   fs.copyFileSync(vsix, path.join(storage, 'bundle.vsix'));
   // The Windows CLI is a .cmd shim. Its package and profile arguments are
   // fixed relative names so they work even when the temporary path has spaces.
-  const runCli = args => execFileSync(process.platform === 'win32' ? `"${cli}"` : cli,
-    ['--user-data-dir', 'user-data', '--extensions-dir', 'extensions', ...args],
+  execFileSync(process.platform === 'win32' ? `"${cli}"` : cli,
+    ['--user-data-dir', 'user-data', '--extensions-dir', 'extensions', '--install-extension', 'bundle.vsix', '--force'],
     { cwd: storage, shell: process.platform === 'win32', windowsHide: true, encoding: 'utf8', timeout: 90000 });
-  runCli(['--install-extension', 'bundle.vsix', '--force']);
   const manifest = require('../package.json');
   const expectedId = `${manifest.publisher}.${manifest.name}@${manifest.version}`;
-  assert.ok(runCli(['--list-extensions', '--show-versions']).trim().split(/\r?\n/).includes(expectedId),
-    `VS Code did not report the installed extension ${expectedId}`);
+  // Validate the installed files directly. On Linux 1.101.0 a second CLI
+  // process can hang during shutdown after printing the extension inventory.
+  const installed = fs.readdirSync(extensionsDir, { withFileTypes: true }).filter(entry => {
+    const file = path.join(extensionsDir, entry.name, 'package.json');
+    if (!entry.isDirectory() || !fs.existsSync(file)) return false;
+    const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return `${pkg.publisher}.${pkg.name}@${pkg.version}` === expectedId;
+  });
+  assert.equal(installed.length, 1, `The CLI must install exactly one copy of ${expectedId}`);
   console.log('FORGELENS_VSIX_INSTALLED', expectedId, sha256);
   // Test Electron requires a development extension. Give it a separate, inert
   // test driver, so ForgeLens itself can load only from the installed VSIX.

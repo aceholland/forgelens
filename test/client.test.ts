@@ -507,6 +507,80 @@ test('confirmed rejected generations retry twice with measured backoff before sw
  assert.match(messages[4],/fallback/);
 });
 
+test('honors Google fractional retry seconds without posting an early turn',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const f=fixture();
+ const message='HTTP 429 Too Many Requests. Please retry in 19.703844321s.';
+ let attempts=0,scheduled!:()=>void;
+ const ready=new Promise<void>(resolve=>scheduled=resolve);
+ const logs:string[]=[];
+ f.options.onEvent=e=>{if(e.type==='client.status'){logs.push(e.message);if(e.message.includes('Retry 1/2 in'))scheduled();}};
+ f.sessions.createTurnStream=async()=>stream(++attempts===1?[created,{...busy,state:{...busy.state,message}}]:[created,answer,done]) as any;
+ const run=new ForgeRunner(f.options).run('task');await ready;
+ assert.match(logs[0]!,/19\.704 s.*provider/);
+ t.mock.timers.tick(19703);await new Promise(resolve=>setImmediate(resolve));assert.equal(attempts,1);
+ t.mock.timers.tick(1);assert.equal((await run).status,'done');assert.equal(attempts,2);
+});
+
+test('structured millisecond hints and the ordinary backoff act as lower bounds on separate attempts',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const f=fixture();
+ let attempts=0,notify!:()=>void;
+ const waiting=()=>new Promise<void>(resolve=>notify=resolve);
+ const first=waiting();
+ f.options.onEvent=e=>{if(e.type==='client.status' && /Retry [12]\/2 in/.test(e.message))notify();};
+ const errors=['HTTP 503 {"retryDelay":"1125ms"}','HTTP 503 retry after 10 milliseconds'];
+ f.sessions.createTurnStream=async()=>{
+  const message=errors[attempts++];
+  return stream(message?[created,{...busy,state:{...busy.state,message}}]:[created,answer,done]) as any;
+ };
+ const run=new ForgeRunner(f.options).run('task');await first;
+ const second=waiting();
+ t.mock.timers.tick(1124);await new Promise(resolve=>setImmediate(resolve));assert.equal(attempts,1);
+ t.mock.timers.tick(1);await second;
+ t.mock.timers.tick(1599);await new Promise(resolve=>setImmediate(resolve));assert.equal(attempts,2);
+ t.mock.timers.tick(1);assert.equal((await run).status,'done');assert.equal(attempts,3);
+});
+
+test('session creation reads Retry-After delta seconds and HTTP-date from SDK raw response headers',async t=>{
+ const start=Date.UTC(2026,0,1);
+ t.mock.timers.enable({apis:['setTimeout','Date'],now:start});
+ for(const header of ['7',new Date(start+14000).toUTCString()]){
+  const f=fixture();let tries=0,scheduled!:()=>void;
+  const ready=new Promise<void>(resolve=>scheduled=resolve);
+  f.options.onEvent=e=>{if(e.type==='client.status' && e.message.includes('Retry 1/2 in'))scheduled();};
+  const create=f.sessions.create;
+  f.sessions.create=async(...args:any[])=>{
+   if(++tries===1)throw Object.assign(new Error('retry in 900 ms'),{statusCode:503,rawResponse:{headers:new Headers({'retry-after':header})}});
+   return create(...args);
+  };
+  const run=new ForgeRunner(f.options).run('task');await ready;
+  t.mock.timers.tick(6999);await new Promise(resolve=>setImmediate(resolve));assert.equal(tries,1,header);
+  t.mock.timers.tick(1);assert.equal((await run).status,'done');assert.equal(tries,2);
+ }
+});
+
+test('provider waits beyond the deadline stop safely without another model, overflow or fallback',async()=>{
+ for(const message of ['429 please retry in 61s','503 Retry after 9999999999999 seconds']){
+  const f=fixture([created,{...busy,state:{...busy.state,message}}]);
+  f.options.runTimeoutMs=60000;f.options.fallbackModel='test/backup';
+  assert.equal((await new ForgeRunner(f.options).run('task')).status,'error');
+  assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+  assert.ok(f.events.some((e:any)=>e.type==='client.status' && /retry wait exceeds/.test(e.message)));
+ }
+});
+
+test('a retry hint grants no retry for permanent errors or previously billed work',async()=>{
+ for(const message of ['HTTP 429 {"quotaValue":"0"}; retry in 3s','HTTP 503: invalid API key; retry in 4s']){
+  const f=fixture([created,{...busy,state:{...busy.state,message}}]);
+  assert.equal((await new ForgeRunner(f.options).run('task')).status,'error');
+  assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+ }
+ const f=fixture([created,answer,{...busy,state:{...busy.state,message:'HTTP 429 retry in 1s'}}]);
+ f.options.fallbackModel='test/backup';
+ assert.equal((await new ForgeRunner(f.options).run('task')).status,'error');assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+});
+
 test('cancellation during retry backoff never starts another paid turn',async()=>{
  const f=fixture([created,busy]);
  let ready!:()=>void;const scheduled=new Promise<void>(resolve=>ready=resolve);

@@ -39,7 +39,32 @@ const READ_TOOLS = ['find_relevant_files','select_context','read_file','search_w
 const APPROVAL_TOOLS = ['propose_edit','propose_write','propose_changes','create_file','validate_candidate','run_command'];
 const RETRY_DELAYS_MS = [800,1600];
 class ModelCallTimeout extends Error {}
+class RetryExceedsDeadline extends Error {}
 export interface RunResult { sessionId: string; status: 'done' | 'cancelled' | 'error' }
+
+function isPermanentRejection(message:string):boolean {
+  return /insufficient.quota|quota.exhausted|(?:limit|quotaValue)["'\\\s:=]+0\b|credit balance|invalid (?:api[ _-]?key|credentials)|api[ _-]?key[ _-]?invalid|unauthenticated|unauthorized|forbidden/i.test(message);
+}
+
+/** TrueForge relays provider RetryInfo as terminal error text. SDK HTTP errors can also expose Retry-After. */
+function requestedRetryMs(message:string, retryAfter?:string|null):number {
+  let delay=0;
+  const header=retryAfter?.trim();
+  if(header){
+    if(/^\d+(?:\.\d+)?$/.test(header))delay=Number(header)*1000;
+    else if(/^[a-z]{3}.*\d\d:\d\d:\d\d/i.test(header)){
+      const date=Date.parse(header);
+      if(Number.isFinite(date))delay=Math.max(0,date-Date.now());
+    }
+  }
+  const durations=/\b(?:retry\s+(?:in|after)\s+|retry[_ -]?delay["'\\\s]*:["'\\\s]*)(\d+(?:\.\d+)?)\s*(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b/gi;
+  for(const match of message.matchAll(durations)){
+    const unit=match[2]!.toLowerCase();
+    const multiplier=/^(?:ms|msec|millisecond)/.test(unit)?1:unit.startsWith('s')?1000:unit.startsWith('h')?3600000:60000;
+    delay=Math.max(delay,Number(match[1])*multiplier);
+  }
+  return Math.ceil(delay);
+}
 
 function textContent(message: {content?: unknown} | null | undefined): string {
   if(typeof message?.content==='string')return message.content;
@@ -86,7 +111,9 @@ export class ForgeRunner {
   private cancellationRequest?: Promise<void>;
   private running = false;
   private scoutNotes?: string;
-  private retryableRejection = false;
+  /** Undefined for ineligible failures, zero when no provider delay was supplied. */
+  private retryWaitMs?:number;
+  private deadlineAt=0;
   private usedTools = false;
   private producedOutput = false;
   private transport: ReturnType<typeof createForgeTransport>;
@@ -116,6 +143,7 @@ export class ForgeRunner {
     const modelTimeout=this.options.modelCallTimeoutMs ?? DEFAULT_MODEL_CALL_TIMEOUT_MS;
     if (!Number.isSafeInteger(modelTimeout) || modelTimeout<=0) {this.running=false;throw new Error('Model call timeout must be positive.');}
     if (!Number.isSafeInteger(runTimeoutMs) || runTimeoutMs <= 0) { this.running = false; throw new Error('Run timeout must be positive.'); }
+    this.deadlineAt=performance.now()+runTimeoutMs;
     const deadline = setTimeout(() => {
       timedOut = true;
       this.options.onEvent({type:'client.status',message:'Run time limit reached. Local tools stopped; no automatic replay. Check the TrueForge session before retrying.'});
@@ -156,14 +184,15 @@ export class ForgeRunner {
       for (let index = 0; index < models.length; index++) {
         try {
           let result = await this.runModelWithDeadline(prompt, models[index]);
-          for(let retry=0; result.status==='error' && this.retryableRejection && !this.usedTools &&
+          for(let retry=0; result.status==='error' && this.retryWaitMs!==undefined && !this.usedTools &&
               !this.cancelled && (this.options.getStagedProposalCount?.()??0)===0 && retry<RETRY_DELAYS_MS.length; retry++){
-            await this.backoff(retry,'provider request');
+            await this.backoff(retry,'provider request',this.retryWaitMs);
             result=await this.runModelWithDeadline(prompt,models[index]);
           }
           if (result.status !== 'error' || index === models.length - 1 || this.cancelled || this.usedTools || this.producedOutput || (this.options.getStagedProposalCount?.()??0)>0 || (this.terminalModelTimeout&&this.options.getStagedProposalCount?.()!==0)) return result;
         } catch (error) {
           if (this.cancelled) return { sessionId: this.sessionId, status: 'cancelled' };
+          if (error instanceof RetryExceedsDeadline)return {sessionId:this.sessionId,status:'error'};
           // Do not replay ambiguous interrupted turns: they might still be running remotely.
           if (error instanceof ModelCallTimeout) {
             const stopped=await this.confirmTimeoutCancellation();
@@ -180,11 +209,19 @@ export class ForgeRunner {
       return { sessionId: this.sessionId, status: 'error' };
   }
 
-  private async backoff(retry:number,operation:string):Promise<void> {
-    const ms=RETRY_DELAYS_MS[retry];
-    this.options.onEvent({type:'client.status',message:`TrueForge rejected the ${operation}. Retry ${retry+1}/${RETRY_DELAYS_MS.length} in ${(ms/1000).toFixed(1)} s.`});
+  private async backoff(retry:number,operation:string,requestedMs:number):Promise<void> {
+    const ms=Math.max(RETRY_DELAYS_MS[retry]!,requestedMs);
+    if(ms>=this.deadlineAt-performance.now() || ms>2147483647){
+      this.options.onEvent({type:'client.status',message:'The retry wait exceeds the remaining run time. Stopping before another request.'});
+      throw new RetryExceedsDeadline();
+    }
+    const seconds=(ms/1000).toFixed(ms%100===0?1:3);
+    const reason=requestedMs>0?' The wait honors the provider’s retry interval.':'';
+    this.options.onEvent({type:'client.status',message:`TrueForge rejected the ${operation}. Retry ${retry+1}/${RETRY_DELAYS_MS.length} in ${seconds} s.${reason}`});
     const start=performance.now();
     await this.delay(ms);
+    this.controller.signal.throwIfAborted();
+    if(performance.now()>=this.deadlineAt)throw new RetryExceedsDeadline();
     this.options.onEvent({type:'client.status',message:`Retry ${retry+1}/${RETRY_DELAYS_MS.length} started after ${Math.round(performance.now()-start)} ms.`});
   }
 
@@ -197,7 +234,8 @@ export class ForgeRunner {
       const result=await this.runModelWithDeadline(prompt,this.options.model,true);
       if(result.status==='cancelled'){this.cancelled=true;return false;}
       if(result.status!=='done')this.options.onEvent({type:'client.status',message:'Read-only scout did not complete. The parent will perform its own discovery.'});
-    } catch {
+    } catch(error) {
+      if(error instanceof RetryExceedsDeadline)return false;
       controller.abort();
       // A failed stream may still be running. Do not overlap a parent with it.
       if(!this.cancelled&&this.sessionId)safe=await this.confirmTimeoutCancellation();
@@ -260,7 +298,7 @@ export class ForgeRunner {
   }
 
   private async runModel(prompt: string, model: string, observe:(event:TrueForgeApi.TurnStreamingEvent)=>void, attemptSignal:AbortSignal,scout=false): Promise<RunResult> {
-    this.sessionId = '';this.turnId='';this.terminalModelTimeout=false;this.retryableRejection=false;this.usedTools=false;this.producedOutput=false;
+    this.sessionId = '';this.turnId='';this.terminalModelTimeout=false;this.retryWaitMs=undefined;this.usedTools=false;this.producedOutput=false;
     const native=this.options.contextScout?.mode==='native';
     const readConnector:TrueForgeApi.McpServer={name:this.options.contextScout?.mcpName??'',preload:scout,
       enableTools:READ_TOOLS,requireApprovalForTools:[]};
@@ -282,10 +320,11 @@ export class ForgeRunner {
     for (let attempt = 0; !session; attempt++) {
       try { session = await create(); }
       catch (error) {
-        const status = (error as { statusCode?: number }).statusCode;
+        const rejected = error as { statusCode?: number; message?: string; rawResponse?: {headers:Headers} };
+        const message=rejected.message??'';
         // Only explicit rejected requests are retryable. Never replay a turn POST.
-        if (this.cancelled || attempt >= 2 || (status !== 429 && status !== 503)) throw error;
-        await this.backoff(attempt,'session request');
+        if (this.cancelled || attempt>=RETRY_DELAYS_MS.length || (rejected.statusCode!==429 && rejected.statusCode!==503) || isPermanentRejection(message))throw error;
+        await this.backoff(attempt,'session request',requestedRetryMs(message,rejected.rawResponse?.headers.get('retry-after')));
       }
     }
     const sessionId=session.data.id;
@@ -351,9 +390,10 @@ export class ForgeRunner {
           if(event.state.status==='error'){
             this.terminalModelTimeout=/time[ -]?out|timed out/i.test(event.state.message);
             this.producedOutput ||= Object.values(event.state.metrics??{}).some(value=>typeof value==='number' && value>0);
-            this.retryableRejection=!this.producedOutput && !this.usedTools &&
-              /\b(?:429|503|ECONNREFUSED)\b|too many requests|service (?:temporarily )?unavailable/i.test(event.state.message) &&
-              !/insufficient.quota|quota.exhausted|limit[\s:=]+0\b|credit balance/i.test(event.state.message);
+            if(!this.producedOutput && !this.usedTools && !isPermanentRejection(event.state.message) &&
+              /\b(?:429|503|ECONNREFUSED)\b|too many requests|service (?:temporarily )?unavailable/i.test(event.state.message)){
+              this.retryWaitMs=requestedRetryMs(event.state.message);
+            }
           }
           return { sessionId: sessionId, status: event.state.status };
         }
