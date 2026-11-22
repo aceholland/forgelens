@@ -104,7 +104,7 @@ async function main() {
       'forgelens.model': 'fixture/primary', 'forgelens.fallbackModels': ['fixture/first-fallback', 'fixture/scripted'],
       'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
       'forgelens.pythonPath': process.env.FORGELENS_QA_PYTHON || 'python',
-      'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom' }));
+      'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom', 'files.simpleDialog.enable': true }));
     // VS Code's extension-test mode rejects native consent dialogs. Activate a
     // small driver in a normal workbench using this same isolated VSIX installation.
     const driver = path.join(storage, 'live-driver');

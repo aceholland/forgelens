@@ -59,7 +59,7 @@ export function reviewedFailureContext(overlays: CandidateFile[], selected: Read
 }
 
 /** A clean copy protects the user's working tree. Pytest still runs trusted project code with local user permissions. */
-export async function validateCandidate(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}, draftPaths?:ReadonlySet<string>): Promise<string> {
+export async function runCandidateTests(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}, draftPaths?:ReadonlySet<string>) {
   if (!overlays.length) throw new Error('Stage a candidate edit before validating it.');
   if (tests.length > 20 || tests.some(test => {
     const [file, ...nodes] = test.split('::');
@@ -129,8 +129,12 @@ export async function validateCandidate(root: string, overlays: CandidateFile[],
     }
     const diagnostics=output.slice(-12000);
     const repair=code!==0 && draftPaths ? reviewedFailureContext(overlays,draftPaths,diagnostics) : '';
-    return `Candidate pytest exited ${code}; ${overlays.length} staged file(s) in a temporary copy.\n${diagnostics}${repair}`;
+    return {exitCode: code, feedback: `Candidate pytest exited ${code}; ${overlays.length} staged file(s) in a temporary copy.\n${diagnostics}${repair}`};
   } finally {
     await rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }
+}
+
+export async function validateCandidate(...args: Parameters<typeof runCandidateTests>): Promise<string> {
+  return (await runCandidateTests(...args)).feedback;
 }

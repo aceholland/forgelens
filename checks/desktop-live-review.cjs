@@ -32,6 +32,32 @@ exports.run = async () => {
   const panel = await until(async () => {
     for (const frame of page.frames()) if (await frame.locator('#task').isVisible()) return frame;
   }, 'ForgeLens panel');
+  const captureDir = process.env.FORGELENS_QA_CAPTURE_DIR;
+  if(captureDir) {
+    await vscode.commands.executeCommand('workbench.action.closeSidebar');
+    await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
+  }
+  const markers = {};
+  const captureStart = Date.now();
+  const capture = async name => {
+    if (captureDir) {
+      await delay(500);
+      await page.screenshot({path:path.join(captureDir,name+'.png')});
+      markers[name]=(Date.now()-captureStart)/1000;
+    }
+  };
+  let recording = Boolean(captureDir);
+  const frames = [];
+  const recordFrames = async () => {
+    while (recording) {
+      const file='frame-'+String(frames.length).padStart(4,'0')+'.jpg';
+      const time=(Date.now()-captureStart)/1000;
+      await page.screenshot({path:path.join(captureDir,file),type:'jpeg',quality:86});
+      frames.push({file,time});
+      await delay(250);
+    }
+  };
+  const captureDone=recordFrames().catch(error=>{recording=false;return error;});
 
   async function consent(label, expected) {
     const button = page.getByRole('button', {name:label, exact:true});
@@ -41,38 +67,67 @@ exports.run = async () => {
     assert.deepEqual(snapshot(folder), original);
     await button.click();
   }
-  async function decide(file, labels) {
-    const lenses = await until(async () => {
-      const after = vscode.workspace.textDocuments.find(d=>d.uri.scheme==='forgelens' && d.uri.path.startsWith('/after/') && d.uri.path.endsWith('/'+file));
-      if (!after) return;
-      const items = await vscode.commands.executeCommand('vscode.executeCodeLensProvider', after.uri);
-      if (items?.some(lens=>lens.command?.command==='forgelens.decideHunk')) return items;
-    }, 'native diff CodeLens for '+file);
-    for (const label of labels) {
-      const command = lenses.find(lens=>lens.command?.title===label)?.command;
-      assert.ok(command, 'Missing ' + label);
-      await vscode.commands.executeCommand(command.command,...command.arguments);
-    }
+  const visits = [];
+  async function visit(file, id, expectedLine, decision) {
+    await panel.getByRole('heading',{name:file,exact:true}).waitFor();
+    await panel.getByRole('button',{name:'Next pending hunk',exact:true}).click();
+    const lens = await until(async () => {
+      const tab = vscode.window.tabGroups.all.map(group=>group.activeTab)
+        .find(tab=>tab?.label.startsWith(file+' · '+id+' ·') && tab.input instanceof vscode.TabInputTextDiff);
+      if (!tab) return;
+      const items = await vscode.commands.executeCommand('vscode.executeCodeLensProvider',tab.input.modified);
+      return items?.find(item=>item.command?.title===(decision || 'Accept')+' '+id);
+    }, 'targeted diff for '+file+' '+id);
+    assert.equal(lens.range.start.line+1, expectedLine);
+    visits.push({file,hunk:id,line:expectedLine});
+    await capture('next-'+visits.length);
+    if (decision) await vscode.commands.executeCommand(lens.command.command,...lens.command.arguments);
     assert.deepEqual(snapshot(folder), original);
   }
   try {
     await panel.locator('#task').fill('Change double so it doubles the number. Update the regression test.');
     await panel.getByRole('button', {name:'Draft from context', exact:true}).click();
     await consent('Review files', files);
-    await decide(files[0], ['Accept hunk-1','Reject hunk-2']);
-    await decide(files[1], ['Accept hunk-1']);
+    await visit(files[0],'hunk-1',2);
+    await visit(files[0],'hunk-2',5,'Reject');
+    await visit(files[0],'hunk-1',2,'Accept');
+    await visit(files[1],'hunk-1',4,'Accept');
     await consent('Run candidate tests', [...files, '-m pytest -q -p no:cacheprovider -- tests/test_doubles.py']);
     await until(async () => (await panel.locator('#phase').innerText())==='Review ready', 'completed TrueForge turn');
     const output = await panel.locator('#events').innerText();
     assert.match(output, /Candidate pytest exited 0/);
     assert.match(output, /2 passed/);
     assert.deepEqual(snapshot(folder), original);
+    const destination=path.join(path.dirname(folder),'forgelens-review.json');
+    await panel.getByRole('button',{name:'Export review summary…',exact:true}).click();
+    const saveInput=page.locator('.quick-input-widget:visible input:visible').first();
+    await saveInput.fill(destination);
+    await saveInput.press('Enter');
+    const report=await until(()=>fs.existsSync(destination) && JSON.parse(fs.readFileSync(destination,'utf8')), 'exported JSON review summary');
+    assert.deepEqual(report.files,[
+      {path:files[0],accepted:1,rejected:1,pending:0},
+      {path:files[1],accepted:1,rejected:0,pending:0},
+    ]);
+    assert.equal(report.latestStagedPytest.exitCode,0);
+    assert.equal(report.latestStagedPytest.reviewChangedSinceTest,false);
+    assert.ok(Number.isFinite(Date.parse(report.latestStagedPytest.completedAt)));
+    if (captureDir) {
+      await vscode.commands.executeCommand('workbench.action.editorLayoutSingle');
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(destination),{viewColumn:vscode.ViewColumn.One});
+      await capture('exported-review');
+    }
+    assert.deepEqual(snapshot(folder),original);
     assert.ok(!vscode.workspace.textDocuments.some(d=>d.uri.scheme==='file' && d.isDirty));
     return {editor:vscode.version, os:process.platform,
       arch:process.arch, vsix:process.env.FORGELENS_VSIX_SHA256, provider:'deterministic loopback',
-      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true};
+      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true, pendingHunkVisits:visits, exportedReview:report};
   } catch (error) {
     const diagnostic = await panel.locator('body').innerText({timeout:5000}).catch(()=>'(unavailable)');
     throw Error(String(error)+'\nFixture panel:\n'+diagnostic.slice(-3000));
+  } finally {
+    recording=false;
+    const captureError=await captureDone;
+    if(captureError)throw captureError;
+    if(captureDir)fs.writeFileSync(path.join(captureDir,'frames.json'),JSON.stringify({markers,frames}));
   }
 };

@@ -93,6 +93,21 @@ test('plan paths and reasons render as text nodes',()=>{
   assert.deepEqual(row!.children.map(c=>c.textContent),['<img>',': <script>']);
   ui.receive({type:'plan',files:[]});assert.equal(ui.nodes.plan!.hidden,true);
 });
+
+test('next hunk uses the visible review version and summary export sends no task or source',()=>{
+  const ui=load();
+  ui.nodes.task!.value='private request';
+  ui.receive({type:'state',canExportSummary:true});
+  assert.equal(ui.nodes.exportSummary!.disabled,false);
+  ui.nodes.exportSummary!.onclick!();
+  assert.deepEqual({...ui.sent.at(-1)},{type:'exportSummary'});
+  ui.receive({type:'queue',version:9,editable:true,files:[{path:'sample.py',hunks:[{id:'hunk-2',status:'pending'}]}]});
+  assert.equal(ui.nodes.nextHunk!.disabled,false);
+  ui.nodes.nextHunk!.onclick!();
+  assert.deepEqual({...ui.sent.at(-1)},{type:'nextHunk',version:9});
+  ui.receive({type:'queue',version:10,editable:true,files:[{path:'sample.py',hunks:[{id:'hunk-2',status:'rejected'}]}]});
+  assert.equal(ui.nodes.nextHunk!.disabled,true);
+});
 test('live queue exposes new files, file and group controls, and the token meter uses its own limit',()=>{
   const ui=load();
   ui.receive({type:'queue',editable:true,version:17,files:[{path:'fresh.py',kind:'create',editable:true,hunks:[{id:'h1',status:'pending'}]}]});

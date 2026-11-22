@@ -14,7 +14,8 @@ import { compactContext, compactEvidence, compactInstructions, draftInstructions
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, batchForReview, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
-import { candidateTestArgs, validateCandidate } from './candidateValidation';
+import { candidateTestArgs, runCandidateTests } from './candidateValidation';
+import { nextPendingHunk, ReviewSummary } from './reviewSummary';
 import { userFixturePins } from './candidateFixtures';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
@@ -40,12 +41,14 @@ export async function activate(context:vscode.ExtensionContext) {
  let phase='Ready',runningPhase='Running';
  let reviewVersion=0;
  let reviewEpoch=0;
+ let summary = new ReviewSummary();
+ let lastVisitedHunk: {path: string; id: string} | undefined;
  const reviewFiles=()=>[...store.list().filter(file=>!live.get(file.path)),...live.list()];
  const currentOverlay=(file:string)=>{const proposal=store.get(file);return proposal ? liveMode?renderProposal(proposal):proposal.proposed : undefined;};
  const updateState=()=>{
   const files=reviewFiles();
   void panel?.webview.postMessage({type:'state',phase,active,pending:files.length>0,canUndo:undo.length>0,
-   canExport:files.some(f=>f.hunks.some(h=>h.status==='accepted'))});
+   canExport:files.some(f=>f.hunks.some(h=>h.status==='accepted')),canExportSummary:summary.available});
   void panel?.webview.postMessage({type:'queue',version:++reviewVersion,editable:!reviewing&&(!active||live.list().length>0),
    files:files.map(f=>({path:f.path,kind:f.kind,editable:!reviewing&&(!active||!!live.get(f.path)),hunks:f.hunks.map(h=>({id:h.id,status:h.status}))}))});
   lensesChanged.fire();
@@ -81,6 +84,7 @@ export async function activate(context:vscode.ExtensionContext) {
   const next=vscode.workspace.workspaceFolders?.[0]?.uri.toString();
   if(next===workspaceKey)return;
   workspaceKey=next;
+  summary=new ReviewSummary();lastVisitedHunk=undefined;
   ++previewGeneration;lastContext=undefined;undo.length=0;
   void cancel();store.cancel();virtual.clear();lenses.clear();
   void panel?.webview.postMessage({type:'reset'});
@@ -135,12 +139,7 @@ export async function activate(context:vscode.ExtensionContext) {
    defaultUri:vscode.Uri.file(path.join(root(),'forgelens-accepted.patch')),filters:{'Git patch':['patch','diff']}});
   if(!destination)return;
   if(destination.scheme!=='file'||!(/\.(patch|diff)$/i).test(destination.fsPath))throw new Error('Choose a local .patch or .diff file.');
-  const exportTarget=await realpath(destination.fsPath).catch(async(error:NodeJS.ErrnoException)=>{
-   if(error.code!=='ENOENT')throw error;
-   const info=await lstat(destination.fsPath).catch((err:NodeJS.ErrnoException)=>{if(err.code!=='ENOENT')throw err;return undefined;});
-   if(info?.isSymbolicLink())throw new Error('Choose a patch destination without a broken symbolic link.');
-   return path.join(await realpath(path.dirname(destination.fsPath)),path.basename(destination.fsPath));
-  });
+  const exportTarget=await resolvedExportPath(destination.fsPath);
   for(const file of store.list()){
    if(!path.relative(await confinedPath(folder,file.path),exportTarget))throw new Error('Choose a patch destination separate from the reviewed files.');
    if(files.includes(file)&&await originalText(file.path,file.kind==='create')!==file.original)throw new Error(`The workspace changed at ${file.path}. Refresh the proposal before exporting.`);
@@ -149,6 +148,28 @@ export async function activate(context:vscode.ExtensionContext) {
   const patch=exportAcceptedPatch(store);
   await vscode.workspace.fs.writeFile(destination,Buffer.from(patch,'utf8'));
   emit(`Exported accepted hunks to ${path.basename(destination.fsPath)}.`);
+ }
+ async function resolvedExportPath(filename:string){
+  return realpath(filename).catch(async(error:NodeJS.ErrnoException)=>{
+   if(error.code!=='ENOENT')throw error;
+   const info=await lstat(filename).catch((err:NodeJS.ErrnoException)=>{if(err.code!=='ENOENT')throw err;return undefined;});
+   if(info?.isSymbolicLink())throw new Error('Choose an export destination without a broken symbolic link.');
+   return path.join(await realpath(path.dirname(filename)),path.basename(filename));
+  });
+ }
+ async function exportSummary(){
+  if(!summary.available)return;
+  const folder=root(), current=summary, snapshot=summary.snapshot();
+  const destination=await vscode.window.showSaveDialog({title:'Export review summary',defaultUri:vscode.Uri.file(path.join(folder,'forgelens-review.json')),filters:{'JSON':['json']}});
+  if(!destination)return;
+  if(destination.scheme!=='file'||!destination.fsPath.toLowerCase().endsWith('.json'))throw new Error('Choose a local JSON file.');
+  const target=await resolvedExportPath(destination.fsPath);
+  for(const file of snapshot.files){
+   if(!path.relative(await confinedPath(folder,file.path),target))throw new Error('Choose a summary destination separate from the reviewed files.');
+  }
+  if(folder!==root()||current!==summary||!isDeepStrictEqual(snapshot,summary.snapshot()))throw new Error('The review changed. Export again with the current results.');
+  await vscode.workspace.fs.writeFile(destination,Buffer.from(JSON.stringify(snapshot,null,2)+'\n','utf8'));
+  emit(`Exported review summary to ${path.basename(destination.fsPath)}.`);
  }
  async function preview(p:FileProposal, hunkId?:string,controls=true,sourceTab=false){
   const suffix=randomBytes(8).toString('hex');
@@ -173,7 +194,9 @@ export async function activate(context:vscode.ExtensionContext) {
    virtual.delete(before.toString());
    await vscode.window.showTextDocument(after,{viewColumn,preview:true});
   }else{
-   await vscode.commands.executeCommand('vscode.diff',before,after,`${p.path}${hunkId?' · '+hunkId:''} · Proposed (not saved)`,{preview:true,viewColumn});
+   const position=hunkId && chosen.hunks[0] ? (await vscode.workspace.openTextDocument(after)).positionAt(chosen.hunks[0].startOffset) : undefined;
+   await vscode.commands.executeCommand('vscode.diff',before,after,`${p.path}${hunkId?' · '+hunkId:''} · Proposed (not saved)`,
+    {preview:true,viewColumn,selection:position?new vscode.Range(position,position):undefined});
   }}catch(error){virtual.delete(before.toString());virtual.delete(after.toString());lenses.delete(after.toString());throw error;}
  }
  function decide(file:string,id:string|undefined,decision:Decision) {
@@ -185,6 +208,8 @@ export async function activate(context:vscode.ExtensionContext) {
    if(!proposal)return;
    for(const hunk of proposal.hunks)if(id?hunk.id===id:hunk.status==='pending')store.decide(file,hunk.id,decision);
   }
+  const updated=request?.proposal??store.get(file);
+  if(updated)summary.observe(updated);
   updateState();
  }
  context.subscriptions.push(vscode.commands.registerCommand('forgelens.decideHunk',(key:unknown,id:unknown,status:unknown)=>{
@@ -210,12 +235,13 @@ export async function activate(context:vscode.ExtensionContext) {
   if(inlineScope && (created || file!==inlineScope.file || !isWithinSelection(original,content,inlineScope.start,inlineScope.end)))throw new Error('Inline proposal changed text outside the selected region. Rejected without writes.');
   if(!liveMode){
    const p=existing?store.revise(file,original,content):store.stage(file,original,content,created?'create':undefined);
-   updateState();emit(`Staged ${file}: ${p.hunks.length} hunks. No disk writes.`);
+   summary.observe(p);updateState();emit(`Staged ${file}: ${p.hunks.length} hunks. No disk writes.`);
    await preview(p);return `Staged ${p.hunks.length} hunks for ${file}; not applied. User reviews using Review hunks.`;
   }
   const delta=createProposal(file,base,content);
   if(created)delta.kind='create';
   const request=live.begin(delta);
+  summary.observe(delta);
   const abort=()=>{request.fail(new Error('TrueForge cancelled this proposal.'));live.end(request);};
   signal?.addEventListener('abort',abort,{once:true});
   phase='Review requested';updateState();
@@ -243,7 +269,7 @@ export async function activate(context:vscode.ExtensionContext) {
    for(const h of p.hunks){
     if(h.status!=='pending')continue; await preview(p,h.id);
     const answer=await vscode.window.showInformationMessage(`${p.path} · ${h.id}: review the diff, then choose.`,{modal:true},'Accept hunk','Reject hunk');
-    if(!answer||root()!==folder||!store.get(p.path))return;store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected');
+    if(!answer||root()!==folder||!store.get(p.path))return;summary.observe(store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected'));
    }
    const created=p.kind==='create';
    const edit=store.prepare(p.path,await originalText(p.path,created));
@@ -271,6 +297,7 @@ export async function activate(context:vscode.ExtensionContext) {
   if(active&&cancellation)return;
   const start=performance.now();
   ++reviewEpoch;cancellation=true;commandAbort?.abort();live.cancel('Run cancelled during hunk review.');store.cancel();
+  summary=new ReviewSummary();lastVisitedHunk=undefined;
   const elapsed=(performance.now()-start).toFixed(1);
   phase=active?'Stopping':'Ready';
   emit(`Local edit gate closed and pending proposals cleared in ${elapsed} ms. Server cancellation is separate.`);
@@ -307,6 +334,16 @@ export async function activate(context:vscode.ExtensionContext) {
      }
      case 'verify': await verifySavedWorkspace(emit); break;
      case 'export': await exportPatch(); break;
+     case 'exportSummary': await exportSummary(); break;
+     case 'nextHunk': {
+      if(reviewing||message.version!==reviewVersion)break;
+      const next=nextPendingHunk(active?live.list():store.list(),lastVisitedHunk);
+      if(next){
+       lastVisitedHunk={path:next.file.path,id:next.hunk.id};
+       await preview(next.file,next.hunk.id);
+      }
+      break;
+     }
      case 'stop': await cancel(); break;
      case 'review': await review(); break;
      case 'undo': await undoLast(); break;
@@ -345,6 +382,7 @@ export async function activate(context:vscode.ExtensionContext) {
   const sequentialDraft=draftFromContext && config.get<boolean>('sequentialDraft',false) ? new SequentialDraft() : undefined;
   const folder=root();
   runningPhase=draftFromContext?'Drafting from context':'Running';
+  summary=new ReviewSummary();lastVisitedHunk=undefined;
   ++previewGeneration;++reviewEpoch;active=true;cancellation=false;liveMode=!!sequentialDraft||config.get<boolean>('liveReview',true);inlineScope=scope;phase=runningPhase;openPanel();updateState();
   void vscode.commands.executeCommand('setContext','forgelens.running',true);
   void panel?.webview.postMessage({type:'plan',files:[]});
@@ -385,7 +423,12 @@ export async function activate(context:vscode.ExtensionContext) {
     const controller=new AbortController();commandAbort=controller;
     const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
     const repairPaths=draftFromContext?new Set(selected.items.map(item=>item.path)):undefined;
-    try{const result=await validateCandidate(folder,overlays,tests,python,controller.signal,fixtures,repairPaths);emit(result);return result;}
+    const testedSummary=summary, testedRevision=summary.revision;
+    try{
+     const result=await runCandidateTests(folder,overlays,tests,python,controller.signal,fixtures,repairPaths);
+     if(summary===testedSummary)summary.recordTest(result.exitCode,testedRevision);
+     emit(result.feedback);return result.feedback;
+    }
     finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
    },command:async(command,args,signal)=>{
     const allowed=(command==='pytest'&&args.every(a=>a==='-q'||/^tests\/[\w/.-]+\.py(?:::[\w]+)*$/.test(a)))||(command==='git'&&['status --short','diff --stat','diff'].includes(args.join(' ')))||(command==='flask'&&args.join(' ')==='--help');
