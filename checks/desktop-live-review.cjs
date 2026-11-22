@@ -33,8 +33,12 @@ exports.run = async () => {
   const panel = await until(async () => {
     for (const frame of page.frames()) if (await frame.locator('#task').isVisible()) return frame;
   }, 'ForgeLens panel');
+  const panelGroup=await until(()=>vscode.window.tabGroups.all.find(group=>group.tabs.some(
+    tab=>tab.label==='ForgeLens' && tab.input instanceof vscode.TabInputWebview)), 'ForgeLens editor group');
+  const evidenceColumn=panelGroup.viewColumn===vscode.ViewColumn.One?vscode.ViewColumn.Two:vscode.ViewColumn.One;
   const captureDir = process.env.FORGELENS_QA_CAPTURE_DIR;
   if(captureDir) {
+    await vscode.workspace.getConfiguration('breadcrumbs').update('enabled',false,vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand('workbench.action.closeSidebar');
     await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
   }
@@ -117,7 +121,7 @@ exports.run = async () => {
     assert.doesNotMatch(patch,/experimental|tests\/test_doubles/);
     execFileSync('git',['apply','--check',patchPath],{cwd:folder});
     if(captureDir){
-      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(patchPath),{viewColumn:vscode.ViewColumn.One});
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(patchPath),{viewColumn:evidenceColumn});
       await capture('one-file-patch');
     }
     await panel.getByLabel('Filter files').fill('');
@@ -128,7 +132,7 @@ exports.run = async () => {
     await until(async()=>(await reportText.innerText()).includes('Checked 2 accepted files. No conflicts found.'),'clean preflight');
     const editedDoc=await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(folder,files[1])));
     const originalText=editedDoc.getText();
-    const editor=await vscode.window.showTextDocument(editedDoc,{viewColumn:vscode.ViewColumn.One});
+    const editor=await vscode.window.showTextDocument(editedDoc,{viewColumn:evidenceColumn});
     assert.ok(await editor.edit(edit=>edit.insert(new vscode.Position(0,0),'# unsaved change\n')));
     await check.click();
     await until(async()=>(await reportText.innerText()).includes(files[1]+' · Contents changed since review began.'),'unsaved conflict');
@@ -138,7 +142,7 @@ exports.run = async () => {
     const otherDoc=await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(folder,files[0])));
     assert.equal(otherDoc.isDirty,false);
     assert.deepEqual(snapshot(folder),original);
-    await vscode.window.showTextDocument(editedDoc,{viewColumn:vscode.ViewColumn.One});
+    await vscode.window.showTextDocument(editedDoc,{viewColumn:evidenceColumn});
     await vscode.commands.executeCommand('undo');
     await until(()=>!editedDoc.isDirty && editedDoc.getText()===originalText,'original buffer restored');
     await check.click();

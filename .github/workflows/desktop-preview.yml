@@ -4,6 +4,13 @@ on:
   push:
     branches: [main, codex/task-b-workflow-20261122]
   workflow_dispatch:
+    inputs:
+      installer_run:
+        description: 'Optional prior ForgeLens run whose exact installer should be retested'
+        type: string
+      installer_sha256:
+        description: 'Expected SHA-256 of that prior installer'
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +23,9 @@ jobs:
   build-package:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
     outputs:
       sha256: ${{ steps.package.outputs.sha256 }}
     steps:
@@ -26,11 +36,25 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --no-audit --no-fund
+      - if: inputs.installer_run != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.installer_run }}
+          name: forgelens-desktop-vsix
+          path: ${{ runner.temp }}/prior-installer
       - id: package
         name: Build and identify the shared VSIX
         shell: bash
+        env:
+          PRIOR_RUN: ${{ inputs.installer_run }}
+          PRIOR_SHA: ${{ inputs.installer_sha256 }}
         run: |
           npm run package -- --out "$RUNNER_TEMP/forgelens.vsix"
+          if [[ -n "$PRIOR_RUN" || -n "$PRIOR_SHA" ]]; then
+            python checks/verify-prior-installer.py "$RUNNER_TEMP/forgelens.vsix" "$RUNNER_TEMP/prior-installer/forgelens.vsix" "$PRIOR_SHA"
+            cp "$RUNNER_TEMP/prior-installer/forgelens.vsix" "$RUNNER_TEMP/forgelens.vsix"
+          fi
           echo "sha256=$(sha256sum "$RUNNER_TEMP/forgelens.vsix" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
