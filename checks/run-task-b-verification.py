@@ -39,9 +39,8 @@ def git(cwd, env, *args):
 def test_nodes(root, env):
     result = run([sys.executable, "-m", "pytest", "--collect-only", "-q",
                   "-p", "no:cacheprovider", "tests"], root, env)
-    if result.returncode:
-        raise RuntimeError("pytest could not collect Flask's tests")
-    return {line.strip() for line in result.stdout.splitlines() if line.startswith("tests/") and "::" in line}
+    nodes = {line.strip() for line in result.stdout.splitlines() if line.startswith("tests/") and "::" in line}
+    return nodes, result.returncode == 0
 
 
 def pytest_summary(result):
@@ -75,7 +74,9 @@ def main():
         if git(root, env, "rev-parse", "HEAD").strip() != FLASK_COMMIT:
             raise ValueError("Unexpected upstream commit")
         env["PYTHONPATH"] = os.pathsep.join([str(root / "src"), str(scratch)])
-        before = test_nodes(root, env)
+        before, upstream_collected = test_nodes(root, env)
+        if not upstream_collected:
+            raise RuntimeError("pytest could not collect the untouched upstream tests")
         if args.patch:
             git(root, env, "apply", "--index", str(args.patch.resolve()))
             changed = git(root, env, "diff", "--cached", "--name-only", "-z", "HEAD").strip("\0").split("\0")
@@ -104,7 +105,7 @@ def main():
         git(root, env, "add", "--intent-to-add", "--", *proposals)
         patch = git(root, env, "diff", "--binary", "--no-ext-diff", "HEAD")
         (evidence / "candidate.patch").write_bytes(patch.encode("utf8"))
-        after = test_nodes(root, env)
+        after, candidate_collected = test_nodes(root, env)
         new_tests = sorted(after - before)
         all_tests = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"], root, env)
         cli_tests = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_cli.py"], root, env)
@@ -145,6 +146,7 @@ def main():
             "addedTestsExecuted": bool(new_tests and additional_tests and additional_tests.returncode == 0 and re.search(r"\b[1-9]\d* passed\b", additional_tests.stdout)),
             "addedTestsFailAgainstUnchangedFlask": bool(control and control.returncode == 1 and re.search(r"\b[1-9]\d* failed\b", control.stdout)),
             "existingTestNodesRetained": bool(before) and before <= after,
+            "candidateTestCollectionSucceeds": candidate_collected,
             "flaskCliTestsPass": cli_tests.returncode == 0,
             "fullFlaskSuitePasses": all_tests.returncode == 0,
         }
@@ -152,7 +154,8 @@ def main():
                   "upstreamTestsCollected": len(before), "candidateTestsCollected": len(after),
                   "proposedFiles": sorted(proposals), "addedTests": new_tests,
                   "sensitiveKeysChecked": len(values), "cliTests": pytest_summary(cli_tests),
-                  "fullTests": pytest_summary(all_tests), "checks": checks, "passed": all(checks.values())}
+                  "cliExitCode": cli_tests.returncode, "fullTests": pytest_summary(all_tests),
+                  "fullExitCode": all_tests.returncode, "checks": checks, "passed": all(checks.values())}
         (evidence / "candidate-verification.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf8")
         print(json.dumps(report, indent=2))
         return 0 if report["passed"] else 1

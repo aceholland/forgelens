@@ -1,0 +1,428 @@
+{
+  "generationDate": "2026-11-20",
+  "generationForgeLensCommit": null,
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "promptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+  "graderPython": "3.12.14",
+  "graderSha256": "5fac72488d746b21427bfc3979f6836545a921215e30e95d49fd3f7582edb4a9",
+  "commonProvenance": {
+    "turns": 1,
+    "trueForgeInitialUserMessages": 0,
+    "originalUserMessagesInTurn": 1,
+    "additionalOperatorAnswers": 0,
+    "clarificationRequests": 0
+  },
+  "sessions": [
+    {
+      "sessionId": "01m7vqvjykd8tyj45hy4qjrns2",
+      "startedAtUtc": "2026-11-20T05:46:19.004Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-1-flash-lite",
+      "trueForgeEvents": 36,
+      "modelMessages": 11,
+      "successfullyStagedFiles": [
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "e622bd9b7867484088d602eaeeb110da149fba8b1b8c1b40c175a9c87560df4f",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": false,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vrmm8vse3c9sv3650tqhw7",
+      "startedAtUtc": "2026-11-20T05:59:59.551Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-1-flash-lite",
+      "trueForgeEvents": 42,
+      "modelMessages": 12,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "bc5ccd572decb351a12a471ef336887e0f422d3b506b48a5218e9e95b4b29d3f",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vrr87kzgw2ejrqybkdjbdz",
+      "startedAtUtc": "2026-11-20T06:01:58.292Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 57,
+      "modelMessages": 15,
+      "successfullyStagedFiles": [
+        "src/flask/cli.py"
+      ],
+      "archiveSha256": "c938a1da862bbdcdaf4ef2d86dbaa9d0bff047590a8206cbfdeb1d08dccff546",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": false,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vsn3hexh0yvh8s9m9fhjwm",
+      "startedAtUtc": "2026-11-20T06:17:43.747Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 63,
+      "modelMessages": 18,
+      "successfullyStagedFiles": [
+        "src/flask/cli.py"
+      ],
+      "archiveSha256": "88669343403b8ab61399a47464ccb28e4d4c1984e264ce7a1bf22491a13265f2",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": false,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vss9fj46wgknaa168zabcb",
+      "startedAtUtc": "2026-11-20T06:20:00.899Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 69,
+      "modelMessages": 17,
+      "successfullyStagedFiles": [
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "06042c46b556c9c95841445bb19bd5a7caf738e70ff1d3674733601a76fdab08",
+      "pytestCollectionSucceeded": true,
+      "cli": {
+        "exit": 1,
+        "summary": "13 failed, 45 passed, 1 error in 1.96s"
+      },
+      "full": {
+        "exit": 1,
+        "summary": "13 failed, 477 passed, 1 error in 16.21s"
+      },
+      "checks": {
+        "appearsInGlobalHelp": true,
+        "printsJSONObject": true,
+        "masksAll16SyntheticKeys": true,
+        "preservesOrdinaryTypesAndValues": true,
+        "includesFlaskDefaults": true,
+        "documentedAlongsideBuiltins": false,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": true,
+        "candidateTestCollectionSucceeds": true,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vxe1588x6njzse7ewvne51",
+      "startedAtUtc": "2026-11-20T07:23:46.261Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-1-flash-lite",
+      "trueForgeEvents": 42,
+      "modelMessages": 12,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "01e46564f24e16b5b76c2ca1bbd2a67e4564acf192ec38fde4ac45034cc79a4a",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vz1zc4mcww52c7vht7ejam",
+      "startedAtUtc": "2026-11-20T07:52:08.343Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-1-flash-lite",
+      "trueForgeEvents": 46,
+      "modelMessages": 16,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "a70a03be17bd75b99a42dd459ef3adf0aac6d3d760fa27f48d1358a9b3768d46",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vzab2xzs9w01wazpdm390r",
+      "startedAtUtc": "2026-11-20T07:56:42.478Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-1-flash-lite",
+      "trueForgeEvents": 112,
+      "modelMessages": 27,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "4771aabd58e7f7f419561eb18881676811470e9e51f0a5c66597d77e09b66d73",
+      "pytestCollectionSucceeded": false,
+      "cli": {
+        "exit": 4,
+        "summary": null
+      },
+      "full": {
+        "exit": 4,
+        "summary": null
+      },
+      "checks": {
+        "appearsInGlobalHelp": false,
+        "printsJSONObject": false,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": false,
+        "includesFlaskDefaults": false,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": false,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": false,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7vze174k43f1bvmt15vrf6e",
+      "startedAtUtc": "2026-11-20T07:58:43.445Z",
+      "surface": "Windows headless diagnostic",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 75,
+      "modelMessages": 30,
+      "successfullyStagedFiles": [
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "6b4220d0cf3e6aba57644fc8a8c2f49e029799229166fa86b64902248cfa86ed",
+      "pytestCollectionSucceeded": true,
+      "cli": {
+        "exit": 0,
+        "summary": "59 passed in 0.57s"
+      },
+      "full": {
+        "exit": 0,
+        "summary": "491 passed in 10.94s"
+      },
+      "checks": {
+        "appearsInGlobalHelp": true,
+        "printsJSONObject": true,
+        "masksAll16SyntheticKeys": true,
+        "preservesOrdinaryTypesAndValues": true,
+        "includesFlaskDefaults": true,
+        "documentedAlongsideBuiltins": false,
+        "addedTestsExecuted": true,
+        "addedTestsFailAgainstUnchangedFlask": true,
+        "existingTestNodesRetained": false,
+        "candidateTestCollectionSucceeds": true,
+        "flaskCliTestsPass": true,
+        "fullFlaskSuitePasses": true
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7w68fbv936dxh37rrkpx9vw",
+      "startedAtUtc": "2026-11-20T09:58:01.373Z",
+      "surface": "Windows VS Code",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 98,
+      "modelMessages": 34,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "026ce43a6e97c78a2c98f8707b57628667ef65f85ae21252a45d8b5243d9e780",
+      "pytestCollectionSucceeded": true,
+      "cli": {
+        "exit": 1,
+        "summary": "1 failed, 58 passed in 1.11s"
+      },
+      "full": {
+        "exit": 1,
+        "summary": "1 failed, 490 passed in 9.11s"
+      },
+      "checks": {
+        "appearsInGlobalHelp": true,
+        "printsJSONObject": true,
+        "masksAll16SyntheticKeys": true,
+        "preservesOrdinaryTypesAndValues": true,
+        "includesFlaskDefaults": true,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": true,
+        "existingTestNodesRetained": true,
+        "candidateTestCollectionSucceeds": true,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    },
+    {
+      "sessionId": "01m7wbnt6spw8ebkx8zgqg896v",
+      "startedAtUtc": "2026-11-20T11:32:41.335Z",
+      "surface": "Windows VS Code",
+      "model": "google-gemini/gemini-3-5-flash-lite",
+      "trueForgeEvents": 113,
+      "modelMessages": 40,
+      "successfullyStagedFiles": [
+        "docs/cli.rst",
+        "src/flask/cli.py",
+        "tests/test_cli.py"
+      ],
+      "archiveSha256": "ae0e9f666cc7b5af90f897a388e4643d77013646ee87c8021808e3469e8f30fc",
+      "pytestCollectionSucceeded": true,
+      "cli": {
+        "exit": 1,
+        "summary": "1 failed, 58 passed in 1.03s"
+      },
+      "full": {
+        "exit": 1,
+        "summary": "1 failed, 490 passed in 9.17s"
+      },
+      "checks": {
+        "appearsInGlobalHelp": true,
+        "printsJSONObject": true,
+        "masksAll16SyntheticKeys": false,
+        "preservesOrdinaryTypesAndValues": true,
+        "includesFlaskDefaults": true,
+        "documentedAlongsideBuiltins": true,
+        "addedTestsExecuted": false,
+        "addedTestsFailAgainstUnchangedFlask": true,
+        "existingTestNodesRetained": true,
+        "candidateTestCollectionSucceeds": true,
+        "flaskCliTestsPass": false,
+        "fullFlaskSuitePasses": false
+      },
+      "passed": false
+    }
+  ]
+}

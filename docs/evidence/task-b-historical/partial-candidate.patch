@@ -1,0 +1,92 @@
+diff --git a/src/flask/cli.py b/src/flask/cli.py
+index ed11f25..b6d48cd 100644
+--- a/src/flask/cli.py
++++ b/src/flask/cli.py
+@@ -594,6 +594,7 @@ class FlaskGroup(AppGroup):
+             self.add_command(run_command)
+             self.add_command(shell_command)
+             self.add_command(routes_command)
++            self.add_command(config_command)
+ 
+         self._loaded_plugin_commands = False
+ 
+@@ -1115,6 +1116,40 @@ def routes_command(sort: str, all_methods: bool) -> None:
+         click.echo(template.format(*row))
+ 
+ 
++@click.command("config", short_help="Show the config for the app.")
++@click.option(
++    "--key",
++    "-k",
++    help="Show only a single key instead of the full config.",
++)
++@with_appcontext
++def config_command(key: str | None) -> None:
++    """Show the application's configuration as JSON."""
++    import json
++
++    config = current_app.config
++    data = {}
++
++    for k, v in config.items():
++        if any(token in k.upper() for token in ("SECRET", "PASSWORD", "TOKEN", "KEY")):
++            data[k] = "***"
++        else:
++            try:
++                json.dumps(v)
++                data[k] = v
++            except (TypeError, ValueError):
++                data[k] = str(v)
++
++    if key is not None:
++        if key in data:
++            click.echo(json.dumps({key: data[key]}, indent=2))
++        else:
++            click.echo(f"Error: Key '{key}' not found in configuration.", err=True)
++            raise click.Abort()
++    else:
++        click.echo(json.dumps(data, indent=2))
++
++
+ cli = FlaskGroup(
+     name="flask",
+     help="""\
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index e254c1d..03daa5b 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -492,6 +492,34 @@ class TestRoutes:
+         output = invoke(["routes", "--all-methods"]).output
+         assert "GET, HEAD, OPTIONS, POST" in output
+ 
++
++class TestConfig:
++    @pytest.fixture
++    def app(self):
++        app = Flask(__name__)
++        app.config["SECRET_KEY"] = "super-secret"
++        app.config["DATABASE_PASSWORD"] = "secret-pass"
++        app.config["API_TOKEN"] = "token123"
++        app.config["CUSTOM_KEY"] = "key456"
++        app.config["NORMAL_CONFIG"] = "hello"
++        return app
++
++    @pytest.fixture
++    def invoke(self, app, runner):
++        cli = FlaskGroup(create_app=lambda: app)
++        return partial(runner.invoke, cli)
++
++    def test_config(self, invoke):
++        result = invoke(["config"])
++        assert result.exit_code == 0
++        import json
++        data = json.loads(result.output)
++        assert data["SECRET_KEY"] == "***"
++        assert data["DATABASE_PASSWORD"] == "***"
++        assert data["API_TOKEN"] == "***"
++        assert data["CUSTOM_KEY"] == "***"
++        assert data["NORMAL_CONFIG"] == "hello"
++
+     def test_no_routes(self, runner):
+         app = Flask(__name__, static_folder=None)
+         cli = FlaskGroup(create_app=lambda: app)
