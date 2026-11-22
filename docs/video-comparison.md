@@ -13,3 +13,7 @@ Both projects run TrueForge against the same Flask revision. Countersign’s vid
 | Cancel a running task with Escape and inspect the clean workspace, 3m 45s | Escape cancels in the ForgeLens panel and reports elapsed local cancellation time. The original recording shows cancellation and verifies the workspace hashes. [Windows verification](STATUS.md) |
 
 ForgeLens also lets you export only the accepted hunks as a Git patch, preview context without a provider, and request pytest against a temporary copy. A second Windows fixture delivered an actual assertion failure to the running model, reviewed the repair, and passed pytest in the same turn. [Recording and results](live-review-check.md)
+
+In installed copies of ForgeLens on Linux and macOS, the editor accepted a calculation change and its test while rejecting an unrelated change to a tag. Two tests passed in the staged copy. The provider received the decisions and the result, and both files kept their original on-disk hashes. These reproducible checks use a scripted model. [Linux run](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134701) · [macOS run](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134793)
+
+For unassisted Task B performance, the real model results include unsuccessful attempts and the files each model actually staged. [Free CPU trials](evidence/task-b-open-models/README.md) · [Historical runs without an operator answer](evidence/task-b-historical/README.md)

@@ -1,0 +1,303 @@
+{
+  "benchmark": "Original Flask Task B",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "userRequestSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+  "host": "Public GitHub-hosted ubuntu-24.04 standard CPU; model and TrueForge on the same runner",
+  "runs": [
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/44999850567",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/44999850567/artifacts/14744994073",
+      "artifactSha256": "b9a7afa5e7432d2ada38d23d26e39e96eff4a1d1d9ceb0c75f6f54eeca189fb3",
+      "forgeLensCommit": "0f17c3beb1dcd2c4097ab4f75f28ab9eaf9fabf4",
+      "mode": "interactive tools",
+      "trueForge": "0.185.1",
+      "model": "gpt-oss-20b",
+      "modelSha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+      "ggufFileBytes": 12109566624,
+      "sessionId": "01m813q4ve1frmsrh52wnj5pjh",
+      "startedAt": "2026-11-22T07:49:48.440Z",
+      "endedAt": "2026-11-22T07:58:58.062Z",
+      "elapsedMs": 549611,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 13,
+      "toolApprovalEvents": 0,
+      "recentToolCalls": [
+        "search_workspace",
+        "read_file",
+        "search_workspace",
+        "read_file",
+        "search_workspace",
+        "read_file",
+        "search_workspace",
+        "search_workspace"
+      ],
+      "streamedDeltas": 845,
+      "providerReportedUsage": {
+        "inputTokens": 69069,
+        "outputTokens": 1025,
+        "reportedModelMessages": 13
+      },
+      "streamDeltaTypes": null,
+      "outputTokensPerElapsedSecond": 1.86,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "server_error",
+        "no_proposals"
+      ]
+    },
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/45000895044",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/45000895044/artifacts/14746740937",
+      "artifactSha256": "216939d0ba0f4865c349e60350ca4f86cc4a552aae2c356c4e95160b6a00975e",
+      "forgeLensCommit": "affe685cca7e4f2a5900088db4e633fac227c8ec",
+      "mode": "compact context",
+      "trueForge": "0.185.1",
+      "model": "gpt-oss-20b",
+      "modelSha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+      "ggufFileBytes": 12109566624,
+      "sessionId": "01m814gy0pwaq5tfct2eqx2jjs",
+      "startedAt": "2026-11-22T08:03:53.167Z",
+      "endedAt": "2026-11-22T08:18:53.680Z",
+      "elapsedMs": 900504,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 0,
+      "toolApprovalEvents": 0,
+      "recentToolCalls": [],
+      "streamedDeltas": 2815,
+      "providerReportedUsage": null,
+      "streamDeltaTypes": null,
+      "outputTokensPerElapsedSecond": null,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "model_timeout",
+        "fallback_blocked",
+        "no_proposals"
+      ]
+    },
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/45001057328",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/45001057328/artifacts/14746177630",
+      "artifactSha256": "c3ac9f2457b2a32010aab18a87992dd109b774f2ccedaece530ae789851a27f1",
+      "forgeLensCommit": "5120bbdd41a59bd4d75c986db7e76bae8a4cced4",
+      "mode": "compact context",
+      "trueForge": "0.185.1",
+      "model": "qwen3-coder-30b-a3b",
+      "modelSha256": "d6b85d2b6633c55be3751848acc74fab40d28d93b27dabacd96ceabe10962057",
+      "ggufFileBytes": 12848766112,
+      "sessionId": "01m814z0bqjc2ppm66jmypv77g",
+      "startedAt": "2026-11-22T08:11:34.273Z",
+      "endedAt": "2026-11-22T08:26:34.913Z",
+      "elapsedMs": 900639,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 0,
+      "toolApprovalEvents": 0,
+      "recentToolCalls": [],
+      "streamedDeltas": 0,
+      "providerReportedUsage": null,
+      "streamDeltaTypes": null,
+      "outputTokensPerElapsedSecond": null,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "model_timeout",
+        "fallback_blocked",
+        "no_proposals"
+      ],
+      "contextLength": 16384,
+      "maxOutputTokens": 4096
+    },
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/45002825312",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/45002825312/artifacts/14746693741",
+      "artifactSha256": "5f9aad2c640ca18f7705089e0e78955ab3d56b135026a5ce6b9981354f94c8a6",
+      "forgeLensCommit": "90565a94c4fa44581989dfb7e865e1b7de99dac7",
+      "mode": "draft from retrieved context",
+      "trueForge": "0.185.1",
+      "model": "gpt-oss-20b",
+      "modelSha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901",
+      "ggufFileBytes": 12109566624,
+      "sessionId": "01m8165p620c8gkbfb9c6m2ejk",
+      "startedAt": "2026-11-22T08:32:41.841Z",
+      "endedAt": "2026-11-22T08:49:31.992Z",
+      "elapsedMs": 1010141,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 3,
+      "toolApprovalEvents": 3,
+      "recentToolCalls": [
+        "propose_changes",
+        "propose_changes",
+        "propose_changes"
+      ],
+      "streamedDeltas": 2746,
+      "providerReportedUsage": {
+        "inputTokens": 26903,
+        "outputTokens": 3136,
+        "reportedModelMessages": 4
+      },
+      "streamDeltaTypes": {
+        "total": 2746,
+        "text": 56,
+        "reasoning": 191,
+        "toolCalls": 2495
+      },
+      "outputTokensPerElapsedSecond": 3.1,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "no_proposals"
+      ],
+      "contextLength": 24576,
+      "maxOutputTokens": 4096,
+      "modelFlags": [
+        "--reasoning-effort",
+        "low",
+        "--reasoning-budget",
+        "256"
+      ],
+      "modelCallLimitSeconds": 1800,
+      "taskLimitSeconds": 4800,
+      "draftFromContext": true
+    },
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/45003204334",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/45003204334/artifacts/14746733956",
+      "artifactSha256": "5204bd1354572d322d210a33814470b61ba31b7a9f0ce43ab0a49d8aa5acb2fa",
+      "forgeLensCommit": "91033626b1eb4fecc45518eadb0938d06d273231",
+      "mode": "draft from retrieved context",
+      "trueForge": "0.185.1",
+      "model": "qwen2-5-coder-7b",
+      "modelSha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+      "ggufFileBytes": 4683073536,
+      "sessionId": "01m8165nsgz6wyrmee86a8kgty",
+      "startedAt": "2026-11-22T08:32:41.501Z",
+      "endedAt": "2026-11-22T08:39:46.165Z",
+      "elapsedMs": 424664,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 0,
+      "toolApprovalEvents": 0,
+      "recentToolCalls": [],
+      "streamedDeltas": 849,
+      "providerReportedUsage": {
+        "inputTokens": 4849,
+        "outputTokens": 849,
+        "reportedModelMessages": 1
+      },
+      "streamDeltaTypes": {
+        "total": 849,
+        "text": 848,
+        "reasoning": 0,
+        "toolCalls": 0
+      },
+      "outputTokensPerElapsedSecond": 2.0,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "no_proposals"
+      ],
+      "contextLength": 16384,
+      "maxOutputTokens": 4096,
+      "modelFlags": [],
+      "modelCallLimitSeconds": 1800,
+      "taskLimitSeconds": 4800,
+      "draftFromContext": true
+    },
+    {
+      "run": "https://github.com/aceholland/forgelens/actions/runs/45004450903",
+      "artifact": "https://github.com/aceholland/forgelens/actions/runs/45004450903/artifacts/14747913983",
+      "artifactSha256": "ab6f4052abce92c04ec1f3bb1af2f34b163b1d957411f04330773588f14849f7",
+      "forgeLensCommit": "44e9cb4547730a6c009ee4024104f8f7a6516812",
+      "mode": "draft with first native edit tool required",
+      "trueForge": "0.185.1",
+      "model": "qwen2-5-coder-7b",
+      "modelSha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c",
+      "ggufFileBytes": 4683073536,
+      "sessionId": "01m8172v9611wk4pw8d7dye8nw",
+      "startedAt": "2026-11-22T08:48:37.444Z",
+      "endedAt": "2026-11-22T09:16:06.666Z",
+      "elapsedMs": 1649222,
+      "userTurns": 1,
+      "operatorAnswers": 0,
+      "toolCalls": 0,
+      "toolApprovalEvents": 0,
+      "recentToolCalls": [],
+      "streamedDeltas": 4097,
+      "providerReportedUsage": {
+        "inputTokens": 4781,
+        "outputTokens": 4096,
+        "reportedModelMessages": 1
+      },
+      "streamDeltaTypes": {
+        "total": 4097,
+        "text": 4096,
+        "reasoning": 0,
+        "toolCalls": 0
+      },
+      "outputTokensPerElapsedSecond": 2.48,
+      "proposalCount": 0,
+      "discoveredPaths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "stagedPaths": [],
+      "status": "no_candidate",
+      "terminalCategories": [
+        "server_error",
+        "no_proposals"
+      ],
+      "contextLength": 16384,
+      "maxOutputTokens": 4096,
+      "modelFlags": [],
+      "modelCallLimitSeconds": 1800,
+      "taskLimitSeconds": 4800,
+      "draftFromContext": true,
+      "requestFirstDraftTool": true,
+      "providerAudit": {
+        "requests": [
+          {
+            "request": 1,
+            "forcedProposalToolChoice": true
+          }
+        ],
+        "selectedRequests": 1
+      }
+    }
+  ]
+}

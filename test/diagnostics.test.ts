@@ -63,7 +63,10 @@ test('registration failure persists diagnostic result and events without raw sec
  const port=(server.address() as {port:number}).port;const out=path.join(base,'evidence');
  let stdout='';const child=spawn(process.execPath,['--import','tsx','test-local-b.ts'],{cwd:process.cwd(),env:{...process.env,FORGELENS_UNATTENDED:'true',TRUEFORGE_MODEL:'test-fixture/not-a-provider',TRUEFORGE_URL:`http://127.0.0.1:${port}`,FLASK_ROOT:target,EVIDENCE_DIR:out}});
  child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stdout+=b);
- const timer=setTimeout(()=>child.kill(),20000);const code=await new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});clearTimeout(timer);
+ // This guard includes starting a fresh TypeScript process on busy CI machines.
+ const timer=setTimeout(()=>child.kill(),60000);
+ const code=await new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+ clearTimeout(timer);
  assert.equal(code,1);const result=JSON.parse(await readFile(path.join(out,'result.json'),'utf8'));
  assert.equal(result.operatorQuestions,false);
  assert.equal(result.phase,'mcp_registration');assert.equal(result.status,'error');assert.equal(result.mcpInitialized,false);assert.equal(result.toolCalls,0);assert.equal(result.tokenUsage,null);
