@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process';
-import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { diffLines } from 'diff';
 import { confinedPath, listWorkspace } from './workspace';
 import { isSafeContextPath } from './context';
+import { compareTestRuns, describeComparison, readOutcomes, type TestRunner, type TestRun } from './testComparison';
 import { copyPinnedFixtures, type FixturePins } from './candidateFixtures';
 
 const execute = promisify(execFile);
@@ -58,17 +60,72 @@ export function reviewedFailureContext(overlays: CandidateFile[], selected: Read
   return '\nCurrent reviewed source from the failed test snapshot (untrusted). Use its literal content as exact oldText for repairs. These line numbers describe the tested overlay. beforeLine still requires the original retrieved snapshot.\n'+excerpts.join('\n');
 }
 
-/** A clean copy protects the user's working tree. Pytest still runs trusted project code with local user permissions. */
-export async function runCandidateTests(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}, draftPaths?:ReadonlySet<string>) {
-  if (!overlays.length) throw new Error('Stage a candidate edit before validating it.');
+export function isNodeTarget(file:string) { return /\.(?:[mc]?[jt]s)$/i.test(file); }
+export function isTestTarget(file:string) {
+  const name=path.posix.basename(file);
+  return /^(?:test_.*|.*_test)\.py$/i.test(name) ||
+    (isNodeTarget(file) && (/(?:^|[.-])(?:test|spec)\./i.test(name) || /(?:^|\/)(?:tests?|__tests__)\//i.test(file)));
+}
+
+export function chooseTestRunner(tests:string[]):TestRunner {
   if (tests.length > 20 || tests.some(test => {
     const [file, ...nodes] = test.split('::');
-    return !file || !/^[\w][\w./-]*$/.test(file) || !isSafeContextPath(file)
-      || file.split('/').some(part => !part) || nodes.some(node => !/^[\w.-]+$/.test(node));
-  })) throw new Error('Choose workspace-relative test paths or pytest node IDs.');
+    return !file || !/^[\w][\w./ -]*$/.test(file) || !isSafeContextPath(file)
+      || file.split('/').some(part => !part || part==='.' || part==='..') || nodes.some(node => !/^[\w.-]+$/.test(node));
+  })) throw new Error('Choose workspace-relative test paths or pytest node IDs (up to 20).');
+  if (tests.some(test=>isNodeTarget(test.split('::')[0]!))) {
+    if(tests.some(test=>!isNodeTarget(test) || test.includes('::')))throw new Error('Choose Node test files and pytest targets in separate runs.');
+    return 'node:test';
+  }
+  return 'pytest';
+}
+
+export function testCommand(tests:string[], python:string) {
+  const runner=chooseTestRunner(tests);
+  if (runner==='pytest') return {runner, executable:python, args:candidateTestArgs(tests)};
+  const args = tests.some(file=>/\.[mc]?ts$/i.test(file)) ? ['--experimental-strip-types'] : [];
+  return {runner, executable:'node', args:[...args,'--test','--',...tests]};
+}
+
+async function executeTests(cwd:string, tests:string[], python:string, report:string, signal?:AbortSignal):Promise<TestRun> {
+  const {runner,executable,args}=testCommand(tests,python);
+  const support=path.resolve(__dirname,'..','runners');
+  const env:NodeJS.ProcessEnv={};
+  for(const name of ['PATH','SystemRoot','WINDIR','PATHEXT','COMSPEC','LANG','LC_ALL','TMPDIR','TMP','TEMP']){
+    if(process.env[name])env[name]=process.env[name];
+  }
+  if(runner==='pytest'){
+    env.PYTHONPATH=[support,path.join(cwd,'src'),cwd].join(path.delimiter);
+    env.PYTHONDONTWRITEBYTECODE='1'; env.PYTHONIOENCODING='utf-8';
+    env.PYTEST_PLUGINS='forgelens_pytest_report'; env.FORGELENS_TEST_REPORT=report;
+  }else{
+    args.splice(args.indexOf('--'),0,'--test-reporter=tap','--test-reporter-destination=stdout',
+      '--test-reporter='+pathToFileURL(path.join(support,'node-result-reporter.cjs')).href,
+      '--test-reporter-destination='+report);
+  }
+  signal?.throwIfAborted();
+  let exitCode=0,output='';
+  try{
+    const result=await execute(executable,args,{cwd,env,signal,timeout:120000,maxBuffer:2*1024*1024,windowsHide:true});
+    output=result.stdout+result.stderr;
+  }catch(error){
+    signal?.throwIfAborted();
+    const failure=error as Error & {code?:number|string;killed?:boolean;stdout?:string;stderr?:string};
+    if(typeof failure.code!=='number' || failure.killed)throw new Error('Candidate tests could not finish: '+failure.message);
+    exitCode=failure.code;output=(failure.stdout??'')+(failure.stderr??'');
+  }
+  return {exitCode,output,cases:await readOutcomes(report)};
+}
+
+/** Run trusted test code in separate copies of the same saved workspace snapshot. */
+export async function runCandidateTests(root: string, overlays: CandidateFile[], tests: string[], python: string, signal?: AbortSignal, fixturePins:FixturePins={}, draftPaths?:ReadonlySet<string>) {
+  if (!overlays.length) throw new Error('Stage a candidate edit before validating it.');
+  const runner=chooseTestRunner(tests);
   signal?.throwIfAborted();
   const scratch = await mkdtemp(path.join(tmpdir(), 'forgelens-candidate-'));
+  const baselineDir=path.join(scratch,'baseline'), candidateDir=path.join(scratch,'candidate');
   try {
+    await mkdir(baselineDir);
     const names = new Set(await listWorkspace(root, true));
     let bytes = 0;
     for (const name of names) {
@@ -79,10 +136,12 @@ export async function runCandidateTests(root: string, overlays: CandidateFile[],
       if (!info.isFile() || info.size > 16 * 1024 * 1024 || bytes > 128 * 1024 * 1024) {
         throw new Error('Candidate validation requires ordinary files and a workspace under 128 MiB (16 MiB per file).');
       }
-      const target = path.join(scratch, name);
+      const target = path.join(baselineDir, name);
       await mkdir(path.dirname(target), { recursive: true });
       await copyFile(source, target);
     }
+    await copyPinnedFixtures(root,baselineDir,fixturePins,signal);
+    await cp(baselineDir,candidateDir,{recursive:true,filter:()=>{signal?.throwIfAborted();return true;}});
     const seen = new Set<string>();
     for (const file of overlays) {
       signal?.throwIfAborted();
@@ -91,7 +150,7 @@ export async function runCandidateTests(root: string, overlays: CandidateFile[],
       seen.add(key);
       if (file.content.includes('\0') || file.content.length > 250000) throw new Error('Candidate must be a bounded text file.');
       const source = await confinedPath(root, file.path);
-      const target = path.join(scratch, file.path);
+      const target = path.join(candidateDir, file.path);
       if (file.isNew) {
         try { await lstat(source); throw new Error(`New file already exists: ${file.path}`); }
         catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -105,31 +164,16 @@ export async function runCandidateTests(root: string, overlays: CandidateFile[],
         await writeFile(target, bom + file.content);
       }
     }
-    await copyPinnedFixtures(root,scratch,fixturePins,signal);
-    for (const test of tests) await lstat(path.join(scratch, test.split('::')[0]!));
-    signal?.throwIfAborted();
-    const env: NodeJS.ProcessEnv = {};
-    for (const name of ['PATH','SystemRoot','WINDIR','PATHEXT','COMSPEC','LANG','LC_ALL','TMPDIR','TMP','TEMP']) {
-      if (process.env[name]) env[name] = process.env[name];
-    }
-    env.PYTHONPATH = [path.join(scratch, 'src'), scratch].join(path.delimiter);
-    env.PYTHONDONTWRITEBYTECODE = '1';
-    env.PYTHONIOENCODING = 'utf-8';
-    const args = candidateTestArgs(tests);
-    let code = 0, output = '';
-    try {
-      const result = await execute(python, args, { cwd: scratch, env, signal, timeout: 120000, maxBuffer: 512 * 1024, windowsHide: true });
-      output = result.stdout + result.stderr;
-    } catch (error) {
-      signal?.throwIfAborted();
-      const failure = error as Error & {code?: number|string; killed?: boolean; stdout?: string; stderr?: string};
-      if (typeof failure.code !== 'number' || failure.killed) throw new Error('Candidate tests could not finish: ' + failure.message);
-      code = failure.code;
-      output = (failure.stdout ?? '') + (failure.stderr ?? '');
-    }
-    const diagnostics=output.slice(-12000);
-    const repair=code!==0 && draftPaths ? reviewedFailureContext(overlays,draftPaths,diagnostics) : '';
-    return {exitCode: code, feedback: `Candidate pytest exited ${code}; ${overlays.length} staged file(s) in a temporary copy.\n${diagnostics}${repair}`};
+    for (const test of tests) await lstat(path.join(candidateDir,test.split('::')[0]!));
+    const newTargets=new Set(overlays.filter(file=>file.isNew).map(file=>file.path));
+    const originalTests=tests.filter(test=>!newTargets.has(test.split('::')[0]!));
+    const baseline=!tests.length || originalTests.length ? await executeTests(baselineDir,originalTests,python,path.join(scratch,'before.jsonl'),signal) : undefined;
+    const candidate=await executeTests(candidateDir,tests,python,path.join(scratch,'after.jsonl'),signal);
+    const comparison=compareTestRuns(runner,baseline,candidate);
+    const diagnostics=candidate.output.slice(-12000);
+    const repair=candidate.exitCode!==0 && draftPaths ? reviewedFailureContext(overlays,draftPaths,diagnostics) : '';
+    return {exitCode:candidate.exitCode,comparison,
+      feedback:`Candidate ${runner} exited ${candidate.exitCode}; ${overlays.length} staged file(s) in a temporary copy.\n${describeComparison(comparison)}\n${diagnostics}${repair}`};
   } finally {
     await rm(scratch, { recursive: true, force: true, maxRetries: 3 });
   }

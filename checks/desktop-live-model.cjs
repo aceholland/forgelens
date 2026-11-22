@@ -6,6 +6,14 @@ const { spawn } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 
 const files = {
+  'support/review-state.cjs': "const fs=require('node:fs');\nexports.changed=fs.readFileSync('src/doubles.py','utf8').includes('return n * 2');\n",
+  'tests/comparison.test.mts': [
+    "import {test} from 'node:test';", "import assert from 'node:assert/strict';",
+    "import state from '../support/review-state.cjs';", "const changed: boolean=state.changed;",
+    "test('old contract',()=>assert.equal(changed,false));",
+    "test('existing failure',()=>assert.fail('known failure'));",
+    "test('new contract',()=>assert.equal(changed,true));", "",
+  ].join('\n'),
   'src/doubles.py': 'def double(n):\n    return n\n\n\nTAG = "stable"\n',
   'tests/test_doubles.py': 'from doubles import double, TAG\n\ndef test_double():\n    assert double(2) == 2\n\ndef test_tag():\n    assert TAG == "stable"\n',
 };
@@ -52,7 +60,7 @@ async function start(storage, temp) {
         delta = {role:'assistant', tool_calls:[{index:0, id:'review-fixture', type:'function', function:{name:'propose_changes', arguments:JSON.stringify(proposal)}}]};
       } else {
         const feedback = JSON.stringify(input.messages.filter(m => m.role === 'tool').at(-1)?.content);
-        for (const observed of ['accepted', 'rejected', 'originalStart', 'Candidate pytest exited 0', '2 passed', '2 staged file(s)']) {
+        for (const observed of ['accepted', 'rejected', 'originalStart', 'Candidate pytest exited 0', 'Baseline exit 0 · Candidate exit 0', '2 passed', '2 staged file(s)']) {
           assert.ok(feedback?.includes(observed), 'Missing model feedback: ' + observed);
         }
         delta = {role:'assistant', content:'Reviewed the two files and observed two passing candidate tests.'};

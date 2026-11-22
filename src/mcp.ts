@@ -1,3 +1,4 @@
+import { isTestTarget } from './candidateValidation';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isJSONRPCErrorResponse, isJSONRPCRequest, isJSONRPCResultResponse } from '@modelcontextprotocol/sdk/types.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
@@ -332,7 +333,7 @@ export async function startMcp(bridge: EditorBridge) {
    const reviewedTests = tests===undefined && draftPaths && bridge.autoValidateReviewedTests && bridge.validate
     ? prepared.filter(file=>{
        const overlay=bridge.pending?.(file.path);
-       return overlay!==undefined && overlay!==file.base && /^(?:test_.*|.*_test)\.py$/.test(path.posix.basename(file.path));
+       return overlay!==undefined && overlay!==file.base && isTestTarget(file.path);
       }).map(file=>file.path) : [];
    const requestedTests = tests ?? (reviewedTests.length ? reviewedTests : undefined);
    sequential?.requestTests(requestedTests);
@@ -372,7 +373,7 @@ export async function startMcp(bridge: EditorBridge) {
    guard();report('create_file',safeLabel(path));const result=await bridge.create!(path,content,extra.signal);guard();if(bridge.pending?.(path)!==undefined)hasProposed=true;return show(result);
   });
   }
-  if(bridge.validate)mcp.registerTool('validate_candidate',{description:'Request approval to test staged edits in a temporary copy using pytest and return its actual exit and output. Use failures to repair the current overlay in this turn.',inputSchema:{tests:z.array(z.string().min(1).max(400)).max(20).describe('Workspace-relative pytest paths or node IDs, or [] for the full suite.')}},async({tests},extra)=>{
+  if(bridge.validate)mcp.registerTool('validate_candidate',{description:'Request approval to test staged edits in separate baseline and candidate copies using pytest or the Node test runner. Returns test changes, exit and output. Use failures to repair the current overlay in this turn.',inputSchema:{tests:z.array(z.string().min(1).max(400)).max(20).describe('Workspace-relative pytest paths or node IDs, [] for full pytest discovery, or named JavaScript/TypeScript Node test files. Choose one runner per request.')}},async({tests},extra)=>{
    guard();report('validate_candidate');const result=await bridge.validate!(tests,extra.signal);guard();return show(result);
   });
   mcp.registerTool('run_command',{description:'Request an explicitly approved validation command. Restricted to pytest, git status/diff, and flask --help; no shell.',inputSchema:{command:z.string(),args:z.array(z.string()).max(20)}},async({command,args},extra)=>{

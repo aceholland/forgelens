@@ -116,7 +116,10 @@ async function main() {
     fs.writeFileSync(path.join(driver, 'driver.cjs'), `
       exports.activate = () => setImmediate(async () => {
         let result;
-        try { result = { evidence:await require(${JSON.stringify(path.join(__dirname,'desktop-live-review.cjs'))}).run() }; }
+        try {
+          const suite=process.env.FORGELENS_RESUME_CHECK==='1' ? 'desktop-review-resume.cjs' : 'desktop-live-review.cjs';
+          result = { evidence:await require(require('node:path').join(${JSON.stringify(__dirname)},suite)).run(), hostPid:process.pid };
+        }
         catch (error) { result = { error:String(error.stack || error) }; }
         require('node:fs').writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify(result));
         await require('vscode').commands.executeCommand('workbench.action.quit');
@@ -126,9 +129,10 @@ async function main() {
     if (process.platform==='linux' && process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted') {
       launchArgs.push('--no-sandbox');
     }
+    async function runHost(resume){
     const host = spawn(editor, ['--new-window','--no-first-run','--disable-renderer-backgrounding',
       '--extensionDevelopmentPath='+driver, ...launchArgs],
-      { env:{...process.env,...extensionTestsEnv}, stdio:'inherit', windowsHide:true });
+      { env:{...process.env,...extensionTestsEnv,FORGELENS_RESUME_CHECK:resume?'1':'0'}, stdio:'inherit', windowsHide:true });
     let timer;
     try {
       await new Promise((resolve,reject) => {
@@ -139,8 +143,14 @@ async function main() {
     } finally { clearTimeout(timer); if (host.exitCode===null && host.signalCode===null) host.kill(); }
     const result = JSON.parse(fs.readFileSync(resultPath,'utf8'));
     assert.ok(result.evidence, result.error || 'The live editor driver did not finish');
+    return result;
+    }
+    const result=await runHost(false);
+    fs.unlinkSync(resultPath);
+    const resumed=await runHost(true);
+    assert.notEqual(result.hostPid,resumed.hostPid,'Recovery must run in a fresh extension host');
     const modelRequests = live.assertComplete();
-    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS '+JSON.stringify({...result.evidence, modelRequests}));
+    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS '+JSON.stringify({...result.evidence,...resumed.evidence, modelRequests}));
   } finally { await live.close(); }
 }
 

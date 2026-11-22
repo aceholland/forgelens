@@ -105,6 +105,15 @@ export class ReviewStore {
     else this.proposals.delete(delta.path);
   }
   get(path: string): FileProposal | undefined { return this.proposals.get(path); }
+  restore(proposal:FileProposal):void {
+    if(this.get(proposal.path))throw Error('This path is already being reviewed.');
+    this.proposals.set(proposal.path,proposal);
+  }
+  replaceResolved(previous:FileProposal,resolved:FileProposal):void {
+    if(previous.path!==resolved.path || this.get(previous.path)!==previous)throw Error('Review changed while resolving the conflict.');
+    if(resolved.hunks.length)this.proposals.set(resolved.path,resolved);
+    else this.remove(resolved.path);
+  }
   list(): FileProposal[] { return [...this.proposals.values()]; }
   decide(path: string, id: string, decision: 'accepted' | 'rejected'): FileProposal {
     const proposal = this.require(path);

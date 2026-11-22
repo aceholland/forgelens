@@ -52,7 +52,7 @@ export class SequentialDraft {
 
   validation(result:string) {
     this.validationPending = false;
-    const exitCode = /^Candidate pytest exited (\d+);/.exec(result)?.[1];
+    const exitCode = /^Candidate (?:pytest|node:test) exited (\d+);/.exec(result)?.[1];
     if (exitCode === undefined) {
       this.stopped = 'Candidate validation did not return a pytest exit code. The tests will not be requested again.';
       return;

@@ -20,7 +20,7 @@ exports.run = async () => {
   const folder = process.env.FORGELENS_PREVIEW_FIXTURE;
   const original = snapshot(folder);
   const files = ['src/doubles.py','tests/test_doubles.py'];
-  assert.deepEqual(Object.keys(original).sort(), files);
+  assert.deepEqual(Object.keys(original).sort(), [...files,'support/review-state.cjs','tests/comparison.test.mts'].sort());
   assert.equal(path.relative(fs.realpathSync(vscode.workspace.workspaceFolders[0].uri.fsPath), fs.realpathSync(folder)), '');
   assert.ok(vscode.workspace.isTrusted);
   const extension = vscode.extensions.getExtension('forgelens-team.forgelens');
@@ -90,6 +90,8 @@ exports.run = async () => {
     assert.deepEqual(snapshot(folder), original);
   }
   try {
+    await panel.getByLabel('Keep reviews on restart').check();
+    await until(async()=>(await panel.locator('#events').innerText()).includes('Review recovery is on for this workspace.'),'local checkpoint flush');
     await panel.locator('#task').fill('Change double so it doubles the number. Update the regression test.');
     await panel.getByRole('button', {name:'Draft from context', exact:true}).click();
     await consent('Review files', files);
@@ -102,6 +104,9 @@ exports.run = async () => {
     const output = await panel.locator('#events').innerText();
     assert.match(output, /Candidate pytest exited 0/);
     assert.match(output, /2 passed/);
+    assert.match(await panel.locator('#testComparison').innerText(),/Baseline exit 0 · Candidate exit 0/);
+    await panel.locator('#testComparison').scrollIntoViewIfNeeded();
+    await capture('baseline-comparison');
     assert.deepEqual(snapshot(folder), original);
     await panel.getByLabel('Filter files').fill('SRC/');
     await panel.getByLabel('Decision',{exact:true}).selectOption('rejected');
@@ -162,6 +167,24 @@ exports.run = async () => {
     assert.equal(report.latestStagedPytest.exitCode,0);
     assert.equal(report.latestStagedPytest.reviewChangedSinceTest,false);
     assert.ok(Number.isFinite(Date.parse(report.latestStagedPytest.completedAt)));
+    const baselineComparison={runner:report.latestStagedTest.runner,baselineExitCode:report.latestStagedTest.baselineExitCode,candidateExitCode:report.latestStagedTest.candidateExitCode};
+    assert.deepEqual(baselineComparison,{runner:'pytest',baselineExitCode:0,candidateExitCode:0});
+    await panel.getByRole('button',{name:'Test accepted changes…',exact:true}).click();
+    const picker=page.locator('.quick-input-widget:visible');
+    await picker.locator('input').fill('comparison.test.mts');
+    await picker.getByText('tests/comparison.test.mts',{exact:true}).click();
+    await consent('Run candidate tests',['node','--experimental-strip-types','--test -- tests/comparison.test.mts','two separate temporary workspace copies']);
+    const displayed=await until(async()=>{
+      const text=await panel.locator('#testComparison').innerText();
+      return text.includes('Baseline exit 1 · Candidate exit 1') && text;
+    },'Node staged test comparison');
+    for(const [label,name] of [['Newly failing','old contract'],['Already failing','existing failure'],['Now passing','new contract']]){
+      assert.ok(displayed.includes(label+' (1)\n  tests/comparison.test.mts::'+name),displayed);
+    }
+    await panel.locator('#testComparison').scrollIntoViewIfNeeded();
+    await capture('staged-javascript-typescript');
+    assert.deepEqual(snapshot(folder),original);
+    const stagedNodeComparison={runner:'node:test',baselineExitCode:1,candidateExitCode:1,newlyFailing:1,alreadyFailing:1,nowPassing:1};
     if (captureDir) {
       await vscode.commands.executeCommand('workbench.action.editorLayoutSingle');
       await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(destination),{viewColumn:vscode.ViewColumn.One});
@@ -171,7 +194,7 @@ exports.run = async () => {
     assert.ok(!vscode.workspace.textDocuments.some(d=>d.uri.scheme==='file' && d.isDirty));
     return {editor:vscode.version, os:process.platform,
       arch:process.arch, vsix:process.env.FORGELENS_VSIX_SHA256, provider:'deterministic loopback',
-      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true, pendingHunkVisits:visits, exportedReview:report,
+      accepted:2, rejected:1, pytestPassed:2, originalsUnchanged:true, baselineComparison,stagedNodeComparison, pendingHunkVisits:visits, exportedReview:report,
       reviewFilters:{file:'SRC/',decision:'rejected',visibleHunk:'hunk-2'},filePatch:{path:files[0],gitApplyCheck:true},
       conflictCheck:{checked:2,unsavedConflict:files[1],batchApplyBlocked:true,cleanAfterUndo:true}};
   } catch (error) {

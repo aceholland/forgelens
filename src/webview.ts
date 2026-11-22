@@ -12,15 +12,21 @@ button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-vis
 #run{color:var(--vscode-button-foreground);background:var(--vscode-button-background)}button:disabled{opacity:.6;cursor:default}.bar{margin:8px 0}section,details{border-top:1px solid var(--vscode-panel-border);margin-top:14px;padding-top:11px}
 #phase,#budget,.reason,.range{color:var(--vscode-descriptionForeground)}#context[hidden]{display:none}progress{width:100%;height:7px;accent-color:var(--vscode-progressBar-background)}.files{padding:0;list-style:none}.files li{margin:8px 0}.file{padding:0;text-align:left;color:var(--vscode-textLink-foreground);background:transparent;overflow-wrap:anywhere}.range{margin-left:6px}.reason{display:block;margin-top:2px}
 summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--vscode-editor-font-size,13px)/1.4 var(--vscode-editor-font-family,monospace)}
+.merge-versions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:8px}.merge-versions pre{max-height:18rem;overflow:auto;padding:6px;background:var(--vscode-textCodeBlock-background)}#mergeText{min-height:12rem;font-family:var(--vscode-editor-font-family,monospace)}
 </style></head><body>
 <header><h1>ForgeLens</h1><span id="phase" role="status">Ready</span></header>
 <label for="task">What would you like to change?</label><textarea id="task" placeholder="Describe the change, or include @file:path or @symbol:name."></textarea>
 <div class="bar"><button id="run">Run agent</button><button id="draft" title="Propose edits to the retrieved files in this task">Draft from context</button><button id="inspect">Preview context</button><button id="stop">Stop</button></div>
-<section><h2>Review &amp; verify</h2><div class="bar"><button id="review">Review hunks</button><button id="undo">Undo last</button><button id="verify">Verify saved changes</button><button id="exportSummary" disabled>Export review summary…</button></div></section>
+<section><h2>Review &amp; verify</h2><div class="bar"><button id="review">Review hunks</button><button id="undo">Undo last</button><button id="testAccepted" disabled>Test accepted changes…</button><button id="verify">Verify saved changes</button><button id="exportSummary" disabled>Export review summary…</button></div><pre id="testComparison" aria-live="polite" hidden></pre></section>
 <section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2>
 <div class="bar"><label for="fileFilter">Filter files</label><input type="search" id="fileFilter"><label for="decisionFilter">Decision</label><select id="decisionFilter"><option value="all">All decisions</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select></div>
 <div class="bar"><button id="nextHunk" disabled>Next pending hunk</button><button id="accept-all">Accept all pending hunks</button><button id="reject-all">Reject all pending hunks</button></div><div id="hunks"></div>
 <div class="bar"><button id="export">Export accepted patch</button><button id="checkConflicts" disabled>Check workspace conflicts</button></div><div id="conflictResult" role="status"></div></section>
+<section id="mergeBox" hidden><h2 id="mergeTitle">Resolve conflict</h2>
+<div class="merge-versions"><div><h3>Original</h3><pre id="mergeBase"></pre></div><div><h3>Current workspace</h3><pre id="mergeLocal"></pre></div><div><h3>Accepted proposal</h3><pre id="mergeProposal"></pre></div></div>
+<label for="mergeText">Merged result</label><textarea id="mergeText" aria-describedby="mergeHelp" spellcheck="false"></textarea><p id="mergeHelp" role="status"></p>
+<div class="bar"><button id="stageMerge">Stage merged result</button><button id="closeMerge">Cancel resolution</button></div></section>
+<div class="bar"><label title="Store proposed text and hunk decisions locally in this VS Code workspace"><input id="keepReviews" type="checkbox"> Keep reviews on restart</label><button id="resumeSaved" hidden>Resume saved review</button><button id="discardSaved" hidden>Discard saved review</button></div>
 <section id="context" hidden><div class="context-head"><h2 id="context-title">Context preview</h2><span id="budget"></span></div><progress id="meter" aria-label="Source excerpt budget"></progress><ul class="files" id="files"></ul></section>
 <section id="plan" aria-label="Agent file plan" hidden></section>
 <details open><summary>Run output</summary><pre id="events" role="log">Ready.</pre></details>
@@ -30,6 +36,12 @@ const el = id => document.getElementById(id);
 let streaming = false;
 let running = false;
 let queueVersion = 0;
+let mergeId;
+el('keepReviews').onchange=()=>api.postMessage({type:'keepReviews',enabled:el('keepReviews').checked});
+el('resumeSaved').onclick=()=>api.postMessage({type:'resumeSaved'});
+el('discardSaved').onclick=()=>api.postMessage({type:'discardSaved'});
+el('stageMerge').onclick=()=>api.postMessage({type:'stageMerge',id:mergeId,result:el('mergeText').value});
+el('closeMerge').onclick=()=>api.postMessage({type:'closeMerge',id:mergeId});
 for (const type of ['run','draft','inspect','stop','review','undo','verify','export']) {
   el(type).onclick = () => api.postMessage({type, prompt: el('task').value});
 }
@@ -55,8 +67,14 @@ window.addEventListener('message', ({data}) => {
     el('review').disabled = running || !data.pending;
     el('undo').disabled = running || !data.canUndo;
     el('export').disabled = running || !data.canExport;
+    el('testComparison').textContent=data.testComparison||'';
+    el('testComparison').hidden=!data.testComparison;
     el('exportSummary').disabled = !data.canExportSummary;
+    el('keepReviews').checked=!!data.recoveryEnabled;
+    el('keepReviews').disabled=!!data.recoveryAvailable;
+    for(const id of ['resumeSaved','discardSaved']){el(id).hidden=!data.recoveryAvailable;el(id).disabled=!!data.recoveryBusy;}
   } else if (data.type === 'reset') {
+    el('mergeBox').hidden=true;el('mergeText').value='';mergeId=undefined;
     el('context').hidden = true;
     el('files').replaceChildren();
     el('plan').hidden = true;
@@ -66,6 +84,8 @@ window.addEventListener('message', ({data}) => {
   } else if (data.type === 'queue') {
     queueVersion=data.version;
     el('conflictResult').replaceChildren();
+    el('testAccepted').disabled=!data.canCheck || data.files.some(file=>file.hunks.some(h=>h.status==='pending')) || !data.files.some(file=>file.hunks.some(h=>h.status==='accepted'));
+    el('testAccepted').onclick=()=>api.postMessage({type:'testAccepted',version:data.version});
     el('checkConflicts').disabled=!data.canCheck || !data.files.some(file=>file.hunks.some(h=>h.status==='accepted'));
     el('checkConflicts').onclick=()=>api.postMessage({type:'checkConflicts',version:data.version});
     const renderQueue=()=>{
@@ -140,10 +160,22 @@ window.addEventListener('message', ({data}) => {
       for(const file of data.conflicts){
         const row=document.createElement('li');
         row.textContent=file.path+' · '+file.reason;
+        const resolve=document.createElement('button');resolve.textContent='Resolve in review';
+        resolve.onclick=()=>api.postMessage({type:'openMerge',path:file.path,version:data.version});row.appendChild(resolve);
         list.appendChild(row);
       }
       result.appendChild(list);
     }
+  } else if (data.type === 'merge') {
+    mergeId=data.id;el('mergeTitle').textContent='Resolve conflict · '+data.path;
+    el('mergeBase').textContent=data.base;el('mergeLocal').textContent=data.local;el('mergeProposal').textContent=data.proposed;
+    el('mergeText').value=data.result;el('mergeBox').hidden=false;
+    el('mergeHelp').textContent=data.conflicts?'Edit the overlapping changes and remove their marker lines.':'The independent changes were combined. Review the result before staging.';
+    el('mergeText').focus();
+  } else if (data.type === 'mergeError' && data.id===mergeId) {
+    el('mergeHelp').textContent=data.message;
+  } else if (data.type === 'mergeClosed') {
+    mergeId=undefined;el('mergeBox').hidden=true;el('mergeText').value='';
   } else if (data.type === 'context') {
     const {items,usedChars,budgetChars,usedTokens,budgetTokens,encoding} = data.preview;
     el('context').hidden = false;

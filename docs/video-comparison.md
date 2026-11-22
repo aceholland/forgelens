@@ -1,5 +1,11 @@
 # ForgeLens and the Countersign demo
 
+### What changed in ForgeLens 0.5.0
+
+ForgeLens now checks local model connectivity, compares baseline and candidate test outcomes by name, and can run JavaScript and TypeScript tests against accepted changes. You can reopen a saved review after an editor restart, or resolve conflicting edits by comparing the original file, current buffer and proposed change. [Installation and review controls](../README.md)
+
+Countersign demonstrates a one-turn Flask CLI change with 25 tool calls and 61 passing CLI tests. The projects add different tests, and their recordings use different models and hardware. Comparing their speed or success rate would require running both on the same model, machine and starting checkout across repeated trials. [Countersign’s published demonstration](https://github.com/kinnuworks/countersign)
+
 The comparison below uses Countersign’s published demo and the ForgeLens **v0.3.1** Task B recording. Countersign shows a native scout and 25 tool calls. In ForgeLens, Baidu ERNIE 5.5 Flash Preview received the original request once in Windows VS Code. Its saved changes passed 59 CLI tests and all 491 Flask tests. Each project added its own tests. For the later v0.4.0 replay and the v0.4.1 review controls, see the versioned evidence. [Countersign demo notes](https://github.com/kinnuworks/countersign#countersign) · [v0.3.1 independent checks](evidence/task-b-editor-one-go/README.md) · [v0.4.0 and v0.4.1 evidence](evidence/v040-abc/README.md)
 
 | What the Countersign recording demonstrates | What you can inspect in ForgeLens |

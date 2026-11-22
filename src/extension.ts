@@ -9,24 +9,30 @@ import { startMcp } from './mcp';
 import { confinedPath } from './workspace';
 import { ReviewStore, checkAcceptedFiles, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
 import type { ContextSelection } from './context';
-import { describeContext, previewWorkspace } from './contextPreview';
+import { relatedTests } from './contextInspection';
+import { describeContext, previewWorkspace, readContextFiles } from './contextPreview';
 import { compactContext, compactEvidence, compactInstructions, draftInstructions, sequentialDraftInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, batchForReview, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
-import { candidateTestArgs, runCandidateTests } from './candidateValidation';
+import { isTestTarget, runCandidateTests, testCommand } from './candidateValidation';
 import { nextPendingHunk, ReviewSummary } from './reviewSummary';
 import { userFixturePins } from './candidateFixtures';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
 import { registerContextTools } from './editorContextTools';
+import { registerSetupCheck } from './setupCommand';
+import {ReviewJournal,restoreReview} from './reviewRecovery';
+import {prepareMerge,resolveMerge} from './reviewMerge';
 
 import { instructionsForTools } from './instructions';
 import { InlineSelection, inlineInstructions } from './inlineSelection';
 import { SequentialDraft } from './sequentialDraft';
 
+let finishRecoveryWrites:(()=>Promise<void>)|undefined;
 export async function activate(context:vscode.ExtensionContext) {
  registerContextTools(context);
+ registerSetupCheck(context);
  const store=new ReviewStore(); const undo:(AppliedEdit & {identity?:string})[]=[]; const virtual=new Map<string,string>();
  const live=new LiveReviews();
  const lensesChanged=new vscode.EventEmitter<void>();
@@ -45,13 +51,20 @@ export async function activate(context:vscode.ExtensionContext) {
  let reviewVersion=0;
  let reviewEpoch=0;
  let summary = new ReviewSummary();
+ let workspaceKey=vscode.workspace.workspaceFolders?.[0]?.uri.toString();
+ const journal=new ReviewJournal(context.workspaceState,error=>{output.appendLine('Could not save local review recovery: '+String(error));void vscode.window.showWarningMessage('ForgeLens could not save this review for restart.');});
+ let savedAwaiting=!!(workspaceKey && journal.get(workspaceKey)?.checkpoint), suspending=false;
+ let merging:{file:FileProposal;folder:string;id:string;draft:ReturnType<typeof prepareMerge>;eol:vscode.EndOfLine}|undefined;
+ finishRecoveryWrites=()=>{suspending=true;return journal.flush();};
  let lastVisitedHunk: {path: string; id: string} | undefined;
  const reviewFiles=()=>[...store.list().filter(file=>!live.get(file.path)),...live.list()];
  const currentOverlay=(file:string)=>{const proposal=store.get(file);return proposal ? liveMode?renderProposal(proposal):proposal.proposed : undefined;};
  const updateState=()=>{
   const files=reviewFiles();
+  if(!savedAwaiting&&!suspending&&workspaceKey&&vscode.workspace.isTrusted)journal.capture(workspaceKey,store.list(),live.list());
   void panel?.webview.postMessage({type:'state',phase,active,pending:files.length>0,canUndo:undo.length>0,
-   canExport:files.some(f=>f.hunks.some(h=>h.status==='accepted')),canExportSummary:summary.available});
+   canExport:files.some(f=>f.hunks.some(h=>h.status==='accepted')),canExportSummary:summary.available,testComparison:summary.comparisonText(),
+   recoveryEnabled:!!(workspaceKey&&journal.get(workspaceKey)),recoveryAvailable:savedAwaiting,recoveryBusy:active||reviewing});
   void panel?.webview.postMessage({type:'queue',version:++reviewVersion,canCheck:!active&&!reviewing,editable:!reviewing&&(!active||live.list().length>0),
    files:files.map(f=>({path:f.path,kind:f.kind,editable:!reviewing&&(!active||!!live.get(f.path)),hunks:f.hunks.map(h=>({id:h.id,status:h.status}))}))});
   lensesChanged.fire();
@@ -82,14 +95,15 @@ export async function activate(context:vscode.ExtensionContext) {
  }));
  context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc=>{if(doc.uri.scheme==='forgelens'){virtual.delete(doc.uri.toString());lenses.delete(doc.uri.toString());}}));
  const root=()=>{const uri=vscode.workspace.workspaceFolders?.[0]?.uri;if(!uri||uri.scheme!=='file')throw new Error('Open a local workspace first.');return uri.fsPath;};
- let workspaceKey=vscode.workspace.workspaceFolders?.[0]?.uri.toString();
  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(()=>{
   const next=vscode.workspace.workspaceFolders?.[0]?.uri.toString();
   if(next===workspaceKey)return;
-  workspaceKey=next;
+  suspending=true;
+  merging=undefined;
   summary=new ReviewSummary();lastVisitedHunk=undefined;
   ++previewGeneration;lastContext=undefined;undo.length=0;
   void cancel();store.cancel();virtual.clear();lenses.clear();
+  workspaceKey=next;savedAwaiting=!!(next&&journal.get(next)?.checkpoint);suspending=false;
   void panel?.webview.postMessage({type:'reset'});
   updateState();
  }));
@@ -104,6 +118,61 @@ export async function activate(context:vscode.ExtensionContext) {
  async function originalText(file:string,created:boolean){
   if(created){await newFileUri(file);return '';}
   return (await getDoc(file)).getText();
+ }
+ async function resumeSaved(){
+  if(active||reviewing||undoing||!vscode.workspace.isTrusted||!workspaceKey||!savedAwaiting||reviewFiles().length)return;
+  const key=workspaceKey,record=journal.get(key)?.checkpoint;
+  if(!record)return;
+  const epoch=reviewEpoch;
+  const restored=await restoreReview(record,async file=>{
+   if(file.kind==='create')return originalText(file.path,true);
+   const target=await confinedPath(root(),file.path);
+   if(!(await lstat(target)).isFile())throw Error('Saved review path is no longer a regular file.');
+   return (await vscode.workspace.openTextDocument(vscode.Uri.file(target))).getText();
+  });
+  if(workspaceKey!==key || !vscode.workspace.isTrusted || epoch!==reviewEpoch || record!==journal.get(key)?.checkpoint || reviewFiles().length || active)throw Error('Review changed while resuming. Try again.');
+  ++reviewEpoch;summary=new ReviewSummary();savedAwaiting=false;lastVisitedHunk=undefined;
+  for(const file of restored.staged){store.restore(file);summary.observe(file);}
+  for(const delta of restored.live){
+   const previous=store.get(delta.path);
+   if(!previous){store.restore(delta);summary.observe(delta);continue;}
+   if(delta.hunks.every(h=>h.status!=='pending')){store.commitReviewed(previous.original,previous,delta);summary.observe(store.get(delta.path)??delta);continue;}
+   const req=live.begin(delta);summary.observe(delta);
+   void req.result.then(done=>{
+    if(live.get(delta.path)!==req)return;
+    store.commitReviewed(previous.original,previous,done);
+    summary.observe(store.get(delta.path)??done);
+   }).catch(error=>output.appendLine(String(error))).finally(()=>{live.end(req);updateState();});
+  }
+  phase='Review ready';liveMode=true;updateState();emit('Resumed saved review with its hunk decisions. Original contents verified.');
+ }
+ async function showMerge(file:string){
+  if(active||reviewing||undoing||!vscode.workspace.isTrusted||live.list().length)return;
+  const proposal=store.get(file);
+  if(!proposal?.hunks.some(h=>h.status==='accepted'))return;
+  const folder=root(),local=await confinedPath(folder,file);
+  if(!(await lstat(local)).isFile())throw Error('Resolve the path to a regular workspace file before merging.');
+  const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(local));
+  if(root()!==folder||proposal!==store.get(file)||active||reviewing)return;
+  const current=doc.getText();
+  if(!proposal.kind&&current===proposal.original)throw Error('The current contents already match the review base.');
+  const id=randomBytes(8).toString('hex'),draft=prepareMerge(proposal,current,id);
+  merging={file:proposal,folder,id,draft,eol:doc.eol};
+  void panel?.webview.postMessage({type:'merge',id,path:file,base:draft.base,local:draft.local,proposed:draft.proposed,result:draft.merged,conflicts:draft.conflicts});
+ }
+ async function stageMerge(id:unknown,result:unknown){
+  const session=merging;
+  if(!session||session.id!==id||typeof result!=='string'||active||reviewing||!vscode.workspace.isTrusted)return;
+  if(root()!==session.folder||store.get(session.file.path)!==session.file)throw Error('The review changed. Open the conflict again.');
+  const target=await confinedPath(session.folder,session.file.path);
+  if(!(await lstat(target)).isFile())throw Error('The conflict path changed. Open the conflict again.');
+  const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(target));
+  if(merging!==session||root()!==session.folder||active||reviewing||!vscode.workspace.isTrusted)return;
+  // Textarea.value uses LF. Preserve the editor's line ending when converting back to a staged document.
+  const text=session.eol===vscode.EndOfLine.CRLF?result.replace(/\r?\n/g,'\r\n'):result;
+  const resolved=resolveMerge(session.file,session.draft,doc.getText(),text);
+  store.replaceResolved(session.file,resolved);summary.observe(resolved);
+  merging=undefined;void panel?.webview.postMessage({type:'mergeClosed'});updateState();emit('Staged merged result for '+resolved.path+'. Workspace contents are unchanged.');
  }
  function showContext(result:ContextSelection,label:string,folder:string) {
   const preview=describeContext(result);
@@ -279,6 +348,7 @@ export async function activate(context:vscode.ExtensionContext) {
  async function review(){
   if(reviewing||undoing)return;
   if(active){void vscode.window.showInformationMessage('Finish or cancel the run before applying staged edits.');return;}
+  if(live.list().length)throw Error('Finish decisions on the resumed proposal in Staged changes before applying.');
   const folder=root();
   reviewing=true;updateState();
   try {
@@ -286,14 +356,14 @@ export async function activate(context:vscode.ExtensionContext) {
     for(const h of p.hunks){
      if(h.status!=='pending')continue; await preview(p,h.id);
      const answer=await vscode.window.showInformationMessage(`${p.path} · ${h.id}: review the diff, then choose.`,{modal:true},'Accept hunk','Reject hunk');
-     if(!answer||root()!==folder||!store.get(p.path))return;summary.observe(store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected'));
+     if(!answer||root()!==folder||!store.get(p.path))return;summary.observe(store.decide(p.path,h.id,answer==='Accept hunk'?'accepted':'rejected'));updateState();
     }
    }
    const {conflicts}=await inspectAcceptedFiles();
    if(conflicts.length)throw new Error('Resolve workspace conflicts before applying: '+conflicts.map(file=>file.path).join(', '));
    for(const p of store.list()){
    if(!p.hunks.some(h=>h.status==='accepted')){
-    store.remove(p.path);
+    store.remove(p.path);updateState();
     continue;
    }
    const created=p.kind==='create';
@@ -313,15 +383,16 @@ export async function activate(context:vscode.ExtensionContext) {
     const identity=created?await fileIdentity(await confinedPath(folder,p.path)).catch(()=>undefined):undefined;
     undo.push({...edit,identity});emit(created?`Created ${p.path}. Undo available.`:`Applied reviewed hunks to ${p.path}. Buffer is unsaved; Save when ready. Undo available.`);
    }
-   store.remove(p.path);
+   store.remove(p.path);updateState();
   }}finally{reviewing=false;phase=store.list().length?'Review ready':'Ready';updateState();}
  }
  async function cancel(){
   if(reviewing)return;
-  if(!active&&!store.list().length)return;
+  if(!active&&!reviewFiles().length)return;
   if(active&&cancellation)return;
   const start=performance.now();
-  ++reviewEpoch;cancellation=true;commandAbort?.abort();live.cancel('Run cancelled during hunk review.');store.cancel();
+  ++reviewEpoch;cancellation=true;commandAbort?.abort();live.cancel('Run cancelled during hunk review.');store.cancel();merging=undefined;
+  void panel?.webview.postMessage({type:'mergeClosed'});
   summary=new ReviewSummary();lastVisitedHunk=undefined;
   const elapsed=(performance.now()-start).toFixed(1);
   phase=active?'Stopping':'Ready';
@@ -334,11 +405,30 @@ export async function activate(context:vscode.ExtensionContext) {
   panel=vscode.window.createWebviewPanel('forgelens','ForgeLens',vscode.ViewColumn.Beside,{enableScripts:true,retainContextWhenHidden:true});
   const nonce=randomBytes(16).toString('hex');
   panel.webview.html=renderWebview(nonce);
-  panel.onDidDispose(()=>{panel=undefined;if(active)void cancel();});
+  panel.onDidDispose(()=>{panel=undefined;merging=undefined;if(active){if(workspaceKey&&journal.get(workspaceKey)?.checkpoint)savedAwaiting=true;void cancel();}});
   panel.webview.onDidReceiveMessage(async(message)=>{
    try {
     switch(message?.type) {
      case 'ready': updateState(); if(lastContext&&lastContext.root===vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)void panel?.webview.postMessage(lastContext); break;
+     case 'keepReviews':
+      if(workspaceKey&&vscode.workspace.isTrusted&&typeof message.enabled==='boolean'&&message.enabled!==!!journal.get(workspaceKey)){
+       if(!message.enabled && savedAwaiting)throw Error('Resume or discard the saved review before turning recovery off.');
+       journal.enable(workspaceKey,message.enabled);updateState();await journal.flush();
+       emit(message.enabled?'Review recovery is on for this workspace.':'Review recovery is off for this workspace.');
+      }
+      break;
+     case 'resumeSaved': await resumeSaved(); break;
+     case 'discardSaved': {
+      if(!savedAwaiting||active||reviewing||!workspaceKey)break;
+      const key=workspaceKey,record=journal.get(key)?.checkpoint;
+      if(await vscode.window.showWarningMessage('Discard the saved ForgeLens review?',{modal:true},'Discard saved review')==='Discard saved review'&&key===workspaceKey&&record===journal.get(key)?.checkpoint&&savedAwaiting){
+       journal.enable(key,true);savedAwaiting=false;updateState();
+      }
+      break;
+     }
+     case 'openMerge': if(message.version===reviewVersion&&typeof message.path==='string')await showMerge(message.path); break;
+     case 'stageMerge': await stageMerge(message.id,message.result);break;
+     case 'closeMerge': if(merging?.id===message.id){merging=undefined;void panel?.webview.postMessage({type:'mergeClosed'});}break;
      case 'run': case 'draft': if(typeof message.prompt==='string')await run(message.prompt,undefined,message.type==='draft'); break;
      case 'inspect': if(typeof message.prompt==='string')await inspectContext(message.prompt); break;
      case 'openContext': await openExcerpt(message.id,message.index); break;
@@ -361,6 +451,7 @@ export async function activate(context:vscode.ExtensionContext) {
       }
       break;
      }
+     case 'testAccepted': if(!active&&!reviewing&&message.version===reviewVersion)await chooseAcceptedTests(); break;
      case 'verify': await verifySavedWorkspace(emit); break;
      case 'export': await exportPatch(); break;
      case 'exportFile': if(message.version===reviewVersion&&typeof message.path==='string'&&store.get(message.path))await exportPatch(message.path); break;
@@ -381,7 +472,9 @@ export async function activate(context:vscode.ExtensionContext) {
      case 'review': await review(); break;
      case 'undo': await undoLast(); break;
     }
-   }catch(error){emit(error instanceof Error?error.message:'Operation failed.');}
+   }catch(error){const reason=error instanceof Error?error.message:'Operation failed.';emit(reason);
+    if(message?.type==='stageMerge')void panel?.webview.postMessage({type:'mergeError',id:message.id,message:reason});
+   }
   },undefined,context.subscriptions);
  }
  async function undoLast(){
@@ -404,11 +497,58 @@ export async function activate(context:vscode.ExtensionContext) {
   if(root()===folder&&undo.at(-1)===previous&&await vscode.workspace.applyEdit(change)){if(undo.at(-1)===previous)undo.pop();emit(`Undid ${previous.path}.`);updateState();}
   }finally{undoing=false;}
  }
+ async function chooseAcceptedTests(){
+  const folder=root(),epoch=reviewEpoch;
+  const allowed=()=>vscode.workspace.isTrusted&&!active&&!reviewing&&epoch===reviewEpoch&&folder===root();
+  if(!allowed())return;
+  const overlays=reviewedCandidate(store.list(),true,live.list().length>0);
+  if(!overlays.length)return;
+  const files=await readContextFiles(folder,()=>!allowed());
+  if(!files||!allowed())return;
+  const related=new Set(overlays.flatMap(file=>relatedTests(files,file.path).map(test=>test.path)));
+  const targets=[...new Set([...overlays,...files].map(file=>file.path).filter(isTestTarget))];
+  targets.sort((a,b)=>Number(related.has(b))-Number(related.has(a))||a.localeCompare(b));
+  const items=targets.map(file=>({label:file,description:related.has(file)?'Related to a staged edit':'',tests:[file]}));
+  if([...files,...overlays].some(file=>file.path.endsWith('.py')))items.push({label:'All pytest tests',description:'Discover the Python suite',tests:[]});
+  if(!items.length){void vscode.window.showInformationMessage('No pytest or Node test files found in this workspace.');return;}
+  const selected=await vscode.window.showQuickPick(items,{title:'Test accepted changes',placeHolder:'Choose a pytest or Node test target'});
+  if(selected&&allowed())await testReviewedChanges(folder,selected.tests,allowed);
+ }
+ async function testReviewedChanges(folder:string,tests:string[],allowed:()=>boolean,signal?:AbortSignal,repairPaths?:ReadonlySet<string>){
+    if(!allowed()||!vscode.workspace.isTrusted||signal?.aborted)throw new Error('Candidate validation expired.');
+    const snapshot=()=>reviewedCandidate(store.list(),!active||liveMode,live.list().length>0);
+    const overlays=snapshot();
+    if(!overlays.length)throw new Error('There are no staged changes to test.');
+    const python=vscode.workspace.getConfiguration('forgelens').get<string>('pythonPath','python');
+    const fixtureSetting=()=>userFixturePins(vscode.workspace.getConfiguration('forgelens').inspect('candidateTestFixtures'));
+    const fixtures=fixtureSetting();
+    const pinned=Object.entries(fixtures).map(([file,hash])=>file+'  '+hash);
+    const fixtureDetail=pinned.length?'\nPinned Git test fixtures (committed bytes):\n'+pinned.join('\n'):'';
+    const epoch=reviewEpoch;
+    const {executable,args}=testCommand(tests,python);
+    const choice=await vscode.window.showWarningMessage('Run tests against the saved baseline and accepted changes?',{
+     modal:true,detail:`Run in two separate temporary workspace copies.\nCommand: ${[executable,...args].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}${fixtureDetail}\nTests execute project code with your user permissions.`
+    },'Run candidate tests');
+    if(choice!=='Run candidate tests'||signal?.aborted||!allowed()||epoch!==reviewEpoch||!vscode.workspace.isTrusted||root()!==folder)throw new Error('Candidate validation declined or expired.');
+    if(!isDeepStrictEqual(snapshot(),overlays))throw new Error('Reviewed files changed during confirmation. Request validation again.');
+    if(!isDeepStrictEqual(fixtureSetting(),fixtures))throw new Error('Pinned fixtures changed during approval. Request validation again.');
+    if(commandAbort)throw new Error('Another verification process is already active.');
+    const controller=new AbortController();commandAbort=controller;
+    const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
+    const testedSummary=summary, testedRevision=summary.revision;
+    try{
+     const result=await runCandidateTests(folder,overlays,tests,python,controller.signal,fixtures,repairPaths);
+     if(summary===testedSummary)summary.recordTest(result.exitCode,testedRevision,result.comparison);
+     emit(result.feedback);updateState();return result.feedback;
+    }
+    finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
+ }
  async function run(prompt:string,scope?:InlineSelection,draftFromContext=false){
   if(reviewing||undoing)throw new Error('Finish the active edit operation first.');
   if(active)throw new Error('A run is active. Stop it first.');if(!prompt.trim())return;
   if(!vscode.workspace.isTrusted)throw new Error('Trust this workspace before enabling agent tools.');
-  if(store.list().length)throw new Error('Review pending proposals or Stop to discard them before starting another run.');
+  if(savedAwaiting)throw Error('Resume or discard the saved review before starting a new run.');
+  if(reviewFiles().length)throw new Error('Review pending proposals or Stop to discard them before starting another run.');
   const config=vscode.workspace.getConfiguration('forgelens');const model=config.get<string>('model','');if(!model)throw new Error('Configure a model in local TrueForge, then set ForgeLens: Model to its ID. No provider key belongs in extension settings.');
   const baseUrl=config.get<string>('baseUrl','http://127.0.0.1:8790');const parsed=new URL(baseUrl);if(!['127.0.0.1','localhost','[::1]'].includes(parsed.hostname))throw new Error('This build supports local TrueForge only.');
   const recentToolCalls:string[]=[];let modelSwitching=false;runExpired=false;
@@ -437,34 +577,7 @@ export async function activate(context:vscode.ExtensionContext) {
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
    },pending:currentOverlay,autoValidateReviewedTests:liveMode,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
-   propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:async(tests,signal)=>{
-    const snapshot=()=>reviewedCandidate(store.list(),liveMode,live.list().length>0);
-    const overlays=snapshot();
-    if(!overlays.length)throw new Error('There are no staged changes to test.');
-    const python=config.get<string>('pythonPath','python');
-    const fixtureSetting=()=>userFixturePins(vscode.workspace.getConfiguration('forgelens').inspect('candidateTestFixtures'));
-    const fixtures=fixtureSetting();
-    const pinned=Object.entries(fixtures).map(([file,hash])=>file+'  '+hash);
-    const fixtureDetail=pinned.length?'\nPinned Git test fixtures (committed bytes):\n'+pinned.join('\n'):'';
-    const epoch=reviewEpoch;
-    const choice=await vscode.window.showWarningMessage('Run the staged changes in an isolated workspace copy?',{
-     modal:true,detail:`Command: ${[python,...candidateTestArgs(tests)].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}${fixtureDetail}\nTests execute project code with your user permissions.`
-    },'Run candidate tests');
-    if(choice!=='Run candidate tests'||signal?.aborted||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||!vscode.workspace.isTrusted||root()!==folder)throw new Error('Candidate validation declined or expired.');
-    if(!isDeepStrictEqual(snapshot(),overlays))throw new Error('Reviewed files changed during confirmation. Request validation again.');
-    if(!isDeepStrictEqual(fixtureSetting(),fixtures))throw new Error('Pinned fixtures changed during approval. Request validation again.');
-    if(commandAbort)throw new Error('Another verification process is already active.');
-    const controller=new AbortController();commandAbort=controller;
-    const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});
-    const repairPaths=draftFromContext?new Set(selected.items.map(item=>item.path)):undefined;
-    const testedSummary=summary, testedRevision=summary.revision;
-    try{
-     const result=await runCandidateTests(folder,overlays,tests,python,controller.signal,fixtures,repairPaths);
-     if(summary===testedSummary)summary.recordTest(result.exitCode,testedRevision);
-     emit(result.feedback);return result.feedback;
-    }
-    finally{signal?.removeEventListener('abort',abort);if(commandAbort===controller)commandAbort=undefined;}
-   },command:async(command,args,signal)=>{
+   propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:(tests,signal)=>testReviewedChanges(folder,tests,()=>active&&!cancellation&&!runExpired&&!modelSwitching,signal,draftFromContext?new Set(selected.items.map(item=>item.path)):undefined),command:async(command,args,signal)=>{
     const allowed=(command==='pytest'&&args.every(a=>a==='-q'||/^tests\/[\w/.-]+\.py(?:::[\w]+)*$/.test(a)))||(command==='git'&&['status --short','diff --stat','diff'].includes(args.join(' ')))||(command==='flask'&&args.join(' ')==='--help');
     if(!allowed)throw new Error('Command is not in the validation allowlist. Run custom commands yourself in the terminal.');
     const epoch=reviewEpoch;
@@ -605,6 +718,6 @@ export async function activate(context:vscode.ExtensionContext) {
   await confinedPath(target,file);
   await run(prompt,new InlineSelection(file,doc.getText(),doc.offsetAt(selection.start),doc.offsetAt(selection.end)));
  });
- context.subscriptions.push({dispose(){void cancel();void bridge?.close();}});
+ context.subscriptions.push({dispose(){suspending=true;void cancel();void bridge?.close();}});
 }
-export function deactivate(){}
+export function deactivate(){return finishRecoveryWrites?.();}

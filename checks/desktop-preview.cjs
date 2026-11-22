@@ -108,7 +108,7 @@ exports.run = async () => {
     await extension.activate();
     assert.equal(extension.isActive, true);
     const commands = await vscode.commands.getCommands(true);
-    const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets'];
+    const commandIds = ['start', 'inline', 'review', 'cancel', 'undo', 'previewContext', 'verify', 'exportPatch', 'findRelatedTests', 'compareContextBudgets', 'checkSetup'];
     for (const id of commandIds) assert.ok(commands.includes('forgelens.' + id), `Missing command ${id}`);
     const selected = await bounded(vscode.commands.executeCommand('forgelens.previewContext',
       'Preview @file:src/visible.ts @file:src/tracked.tmp @file:nested/keep.drop'));
@@ -180,10 +180,31 @@ exports.run = async () => {
     } finally { fs.writeFileSync(target, original); }
     assert.deepEqual(snapshot(folder), before, 'Native verification fixture was not restored byte for byte');
     assert.equal(requests, 0, 'Native saved-file checks must not contact the model endpoint');
+    const setupServer=createServer((req,res)=>{
+      assert.equal(req.url,'/api/v1/models');
+      res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({data:[{name:'local/qa'}]}));
+    });
+    await new Promise(resolve=>setupServer.listen(0,'127.0.0.1',resolve));
+    try {
+      await config.update('baseUrl','http://127.0.0.1:'+setupServer.address().port,vscode.ConfigurationTarget.Global);
+      const unconfigured=await bounded(vscode.commands.executeCommand('forgelens.checkSetup'));
+      assert.equal(unconfigured.find(row=>row.name==='Model').ok,false);
+      await config.update('model','local/qa',vscode.ConfigurationTarget.Global);
+      const configured=await bounded(vscode.commands.executeCommand('forgelens.checkSetup'));
+      assert.ok(configured.every(row=>row.ok),JSON.stringify(configured));
+      if(captureDir) {
+        await page.getByText('ForgeLens setup check',{exact:false}).first().waitFor({timeout:10000});
+        await page.screenshot({path:path.join(captureDir,'check-my-setup.png')});
+      }
+    } finally {
+      setupServer.closeAllConnections();
+      await new Promise(resolve=>setupServer.close(resolve));
+    }
     console.log('FORGELENS_PREVIEW_DESKTOP_PASS ' + JSON.stringify({
       editor: vscode.version, hostNode: process.versions.node, os: process.platform, arch: process.arch,
       version: extension.packageJSON.version, revision: process.env.GITHUB_SHA, commands: commandIds.length,
       contextInspection: {budgetComparison:true, relatedTest:'tests/visible.test.ts'},
+      setupCheck: {missingModelDetected:true, configuredCatalogVerified:true},
       installedPackage: { directory: path.basename(installedPath), sha256: process.env.FORGELENS_VSIX_SHA256 },
       selectedPaths, ignoredExplicitMentionsExcluded: true, fixtureUnchanged: true, trueforgeRequests: requests,
       verification: { nativeQuickPick: true, driver: 'Clicked the visible native picker item', actualTaskProcessEvents: checks, fixtureRestored: true },

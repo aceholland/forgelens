@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { reviewedFailureContext, validateCandidate } from '../src/candidateValidation';
+import { reviewedFailureContext, runCandidateTests, validateCandidate } from '../src/candidateValidation';
 import { reviewedCandidate } from '../src/editorReview';
 import { createProposal, decideHunk } from '../src/review';
 
@@ -68,4 +68,44 @@ test('stale, colliding, excluded and unsafe candidates fail before pytest can st
   }
   const cancel = new AbortController(); cancel.abort();
   await assert.rejects(validateCandidate(root,[file],[],'unused',cancel.signal), {name:'AbortError'});
+});
+
+test('Node compares saved and accepted JavaScript with named TypeScript cases, leaving the workspace untouched', async t => {
+  const root=await mkdtemp(path.join(tmpdir(),'forgelens-node-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const original='module.exports=0;\n', content='module.exports=1;\n';
+  const file='comparison.test.mts';
+  await writeFile(path.join(root,'value.cjs'),original);
+  await writeFile(path.join(root,file),[
+    "import test from 'node:test';", "import assert from 'node:assert/strict';",
+    "import value from './value.cjs';", "const typed:number=value;",
+    "test('old',()=>assert.equal(typed,0));", "test('new',()=>assert.equal(typed,1));",
+    "test('legacy',()=>assert.fail('existing failure'));", "test.skip('pending',()=>{});","",
+  ].join('\n'));
+  const result=await runCandidateTests(root,[{path:'value.cjs',original,content}],[file],python);
+  assert.equal(result.exitCode,1,result.feedback);
+  assert.deepEqual(result.comparison,{runner:'node:test',baselineExitCode:1,candidateExitCode:1,
+    newlyFailing:[file+'::old'],alreadyFailing:[file+'::legacy'],nowPassing:[file+'::new'],candidateOnlyFailures:[]});
+  assert.equal(await readFile(path.join(root,'value.cjs'),'utf8'),original);
+  assert.deepEqual((await readdir(root)).sort(),[file,'value.cjs']);
+  await assert.rejects(runCandidateTests(root,[{path:'value.cjs',original,content}],[file,'test_other.py'],python),/separate runs/);
+});
+
+test('pytest compares named baseline and candidate outcomes and reports a candidate-only failing test', async t => {
+  const root=await mkdtemp(path.join(tmpdir(),'forgelens-py-comparison-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const original='value=0\n',content='value=1\n';
+  const file='test_compare.py';
+  await writeFile(path.join(root,'value.py'),original);
+  await writeFile(path.join(root,file),[
+    'from value import value','def test_old():','    assert value == 0',
+    'def test_new():','    assert value == 1','def test_legacy():','    assert False','',
+  ].join('\n'));
+  const newFile={path:'test_created.py',original:'',content:'def test_extra():\n    assert False\n',isNew:true};
+  const result=await runCandidateTests(root,[{path:'value.py',original,content},newFile],[file,newFile.path],python);
+  assert.deepEqual(result.comparison,{runner:'pytest',baselineExitCode:1,candidateExitCode:1,
+    newlyFailing:[file+'::test_old'],alreadyFailing:[file+'::test_legacy'],nowPassing:[file+'::test_new'],
+    candidateOnlyFailures:['test_created.py::test_extra']},result.feedback);
+  assert.equal(await readFile(path.join(root,'value.py'),'utf8'),original);
+  assert.deepEqual((await readdir(root)).sort(),[file,'value.py']);
 });
