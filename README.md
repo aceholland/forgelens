@@ -29,9 +29,16 @@ Version 0.3.0 is a post-deadline release. The original competition recording, wr
 | **Verify saved changes** | Choose Git status, Git diff checks, or Flask CLI tests from the native picker. The task terminal shows the output. The panel reports exit status and duration. |
 | **Stop or recover** | Escape in the panel stops the run and clears pending proposals. The panel reports cancellation time. Two bounded retries precede a configured fallback after qualifying early failures. Once an edit may have been staged, the runner avoids automatic replay. |
 
+<details>
+<summary>Earlier context-preview walkthrough</summary>
+
+In 0.2.0, the local preview identified Flask's CLI code, tests and documentation from the original path-free request. A separate Qwen3 1.7B trial found the same three files and timed out before proposing a change. [Narrated 0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/ForgeLens-0.2.0-preview.mp4) · [Original screenshot](docs/preview-context-flask.png)
+
+</details>
+
 ## Try it in VS Code
 
-**1. Install the extension.** Download the VSIX above. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install v0.1.13.** Download the recorded extension at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
