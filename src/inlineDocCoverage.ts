@@ -4,33 +4,48 @@ interface FalseCases { literals:string[]; empty:boolean; missing:boolean; caseIn
 const namePattern = '[A-Za-z_]\\w*';
 const literalPattern = `(?:"[^"\\\\\\r\\n]*"|'[^'\\\\\\r\\n]*')`;
 const lookup = new RegExp(`^(${namePattern})\\s*=\\s*(?:${namePattern}\\.)+get\\(\\s*(?:${namePattern}|${literalPattern})(?:\\s*,\\s*(None|${literalPattern}))?\\s*\\)$`);
+const aliasAssignment = new RegExp(`^(${namePattern})\\s*=\\s*(${namePattern})(?:\\.(lower|casefold|upper)\\(\\))?$`);
+const earlyFalse = new RegExp(`^if (?:not (${namePattern})|(${namePattern}) is None):$`);
 
 function falseCases(statements:string[]):FalseCases|undefined {
   const assignment = lookup.exec(statements[0] ?? '');
   if (!assignment) return;
-  const variable = assignment[1]!;
   const fallback = assignment[2] && assignment[2] !== 'None' ? assignment[2].slice(1,-1) : null;
-  let rest = statements.slice(1);
+  // Each binding is derived solely from the lookup. For ASCII strings the last case transformation determines comparison.
+  const aliases = new Map<string,string>([[assignment[1]!, '']]);
+  let at = 1;
   let guard:'falsy'|'none'|undefined;
-  if (rest[0] === `if not ${variable}:` || rest[0] === `if ${variable} is None:`) {
-    if (rest[1] !== 'return False') return;
-    guard = rest[0].startsWith('if not ') ? 'falsy' : 'none';
-    rest = rest.slice(2);
+  let missingRaises = false;
+  while (at<statements.length && at<=24 && !statements[at]!.startsWith('return ')) {
+    const branch = earlyFalse.exec(statements[at]!);
+    if (branch) {
+      if (!aliases.has((branch[1]??branch[2])!) || !/^[ \t]+return False$/.test(statements[at+1]??'')) return;
+      if (branch[1]) guard='falsy';
+      else guard ??= 'none';
+      at+=2;
+      continue;
+    }
+    const alias = aliasAssignment.exec(statements[at]!);
+    if (!alias || !aliases.has(alias[2]!)) return;
+    if (alias[3] && fallback===null && !guard) missingRaises=true;
+    aliases.set(alias[1]!,alias[3]??aliases.get(alias[2]!)!);
+    at++;
   }
-  if (!rest[0]?.startsWith('return ')) return;
+  if (!statements[at]?.startsWith('return ')) return;
   // Only the one final membership expression can span lines. Other statements fail the anchored grammar below.
-  let expression = rest.join(' ').slice('return '.length).trim();
+  let expression = statements.slice(at).join(' ').slice('return '.length).trim();
   const wrapped = /^bool\s*\(([\s\S]*)\)$/.exec(expression);
   if (wrapped) expression = wrapped[1]!.trim();
-  const shortCircuit = new RegExp(`^(bool\\(\\s*${variable}\\s*\\)|${variable})\\s+and\\s+`).exec(expression);
+  const shortCircuit = new RegExp(`^(?:bool\\(\\s*(${namePattern})\\s*\\)|(${namePattern}))\\s+and\\s+`).exec(expression);
   if (shortCircuit) {
-    if (!wrapped && shortCircuit[1] === variable) return; // A bare "and" can return the input itself.
+    if (!aliases.has((shortCircuit[1]??shortCircuit[2])!) || (!wrapped && shortCircuit[2])) return;
     guard = 'falsy';
     expression = expression.slice(shortCircuit[0].length);
   }
-  const membership = new RegExp(`^${variable}(?:\\.(lower|casefold|upper)\\(\\))?\\s+not\\s+in\\s*([({\\[])([\\s\\S]*)([)}\\]])$`).exec(expression);
-  if (!membership) return;
-  const [ , transform, open, inner, close ] = membership;
+  const membership = new RegExp(`^(${namePattern})(?:\\.(lower|casefold|upper)\\(\\))?\\s+not\\s+in\\s*([({\\[])([\\s\\S]*)([)}\\]])$`).exec(expression);
+  if (!membership || !aliases.has(membership[1]!)) return;
+  const [ , variable, finalTransform, open, inner, close ] = membership;
+  const transform=finalTransform??aliases.get(variable!);
   if ((open==='(' && close!==')') || (open==='[' && close!==']') || (open==='{' && close!=='}')) return;
   const group = inner!.trim();
   if (!new RegExp(`^${literalPattern}(?:\\s*,\\s*${literalPattern})*\\s*,?$`).test(group)) return;
@@ -42,14 +57,15 @@ function falseCases(statements:string[]):FalseCases|undefined {
   return {
     literals:[...new Set(literals.filter(v=>v!==''))],
     empty:guard==='falsy' || literals.includes(''),
-    missing:fallback===null ? Boolean(guard) : (guard==='falsy' && !fallback) || literals.includes(normalized(fallback)),
+    missing:fallback===null ? Boolean(guard) && !missingRaises : (guard==='falsy' && !fallback) || literals.includes(normalized(fallback)),
     caseInsensitive:Boolean(transform),
   };
 }
 
 function readFunction(source:string) {
   const lines = source.replace(/\r\n/g,'\n').split('\n');
-  if (!/^\s*def\s+\w+\s*\([^\n]*\)\s*(?:->\s*bool\s*)?:\s*$/.test(lines[0]??'')) return;
+  const declaration = /^\s*def\s+(\w+)\s*\([^\n]*\)\s*(?:->\s*bool\s*)?:\s*$/.exec(lines[0]??'');
+  if (!declaration) return;
   const body = lines.slice(1).join('\n').trimStart();
   const opening = /^(?:[rRuU])?("""|'''|"|')/.exec(body);
   if (!opening) return;
@@ -62,18 +78,13 @@ function readFunction(source:string) {
   const linesOfCode = body.slice(end+quote.length).split('\n').filter(l=>l.trim() && !l.trimStart().startsWith('#'));
   const indent = linesOfCode[0]?.match(/^[ \t]+/)?.[0];
   if (!indent || linesOfCode.some(l=>!l.startsWith(indent))) return;
-  // A guard's false return must be nested, and the following return must be outside its suite.
-  const guardLine = linesOfCode.findIndex(l=>l.trimStart().startsWith('if '));
-  if (guardLine>=0 && (linesOfCode[guardLine]?.slice(indent.length).startsWith(' ') ||
-      !/^\s+return False$/.test(linesOfCode[guardLine+1]?.slice(indent.length).trimEnd()??'') ||
-      !linesOfCode[guardLine+2]?.slice(indent.length).startsWith('return '))) return;
-  return {doc, statements:linesOfCode.map(l=>l.trim())};
+  return {name:declaration[1], doc, statements:linesOfCode.map(l=>l.slice(indent.length).trimEnd())};
 }
 
 const emptyWords = /\b(?:empty|blank|zero[ -]length|length (?:zero|0)|no characters)\b|""|''/i;
 const missingWords = /\b(?:unset|undefined|missing|absent|nonexistent|unspecified|omitted|unconfigured|not (?:set|defined|present|provided|found|specified|supplied|configured)|does(?:n't| not) exist|no (?:environment variable|key|entry|value)(?:\s+is)?\b)/i;
-const falseMeaning = /\b(?:returns?|yields?|is|are|defaults? to|counts? as|treated as|interpreted as|considered|evaluates? to|resolves? to|results? in|as)\s+(?:the (?:boolean|value)\s+)?["']?false\b|\bfalse\s+(?:if|when|for|values?|inputs?|cases?)\b|\b(?:disabled?|turns? off)\b|\btrue\s+(?:unless|except(?: when| for)?)\b/gi;
-const trueMeaning = /\b(?:returns?|is|are|yields?|evaluates? to|results? in|treated as)\s+["']?true\b(?!\s+(?:unless|except))/i;
+const falseMeaning = /\b(?:returns?|yields?|is|are|defaults? to|counts? as|treated as|interpreted as|considered|evaluates? to|resolves? to|results? in|as)\s+(?:the (?:boolean|value)\s+)?false\b|\bfalse\s+(?:if|when|for|values?|inputs?|cases?)\b|\b(?:disabled?|turns? off)\b|\btrue\s+(?:unless|except(?: when| for)?)\b/gi;
+const trueMeaning = /\b(?:returns?|is|are|yields?|evaluates? to|results? in|treated as)\s+true\b(?!\s+(?:unless|except))/i;
 
 function docBlocks(doc:string) {
   const blocks:{bullet:boolean;text:string}[] = [];
@@ -111,13 +122,30 @@ function documentedConditions(doc:string) {
 }
 
 /** An empty result also means the task or implementation is outside the supported grammar. */
-export function pythonDocCoverageIssues(request:string, replacement:string):string[] {
+export function pythonDocCoverageIssues(request:string, replacement:string, original?:string):string[] {
   if (replacement.length>32000 || !/\b(?:docstrings?|docs?|document(?:ation|ing)?)\b/i.test(request) ||
       !/\b(?:every|all|exhaustive(?:ly)?|each|enumerate)\b/i.test(request) || !/\b(?:false|falsy|falsey)\b/i.test(request) ||
       /\b(?:without|avoid|skip|do not|don't|never)\s+(?:(?:chang(?:e|ing)|edit(?:ing)?|updat(?:e|ing)|touch|the)\s+)*(?:docs?|docstrings?|documentation)\b/i.test(request)) return [];
   const parsed = readFunction(replacement);
   if (!parsed) return [];
-  const contract = falseCases(parsed.statements);
+  let contract = falseCases(parsed.statements);
+  let source = 'The candidate implementation returns False for ';
+  if (!contract && original && original.length<=32000) {
+    // Only an explicitly additive behavior change preserves the original cases when the rewritten body is opaque.
+    const clauses=request.split(/[.;!?\n]|,?\s+and\s+(?=(?:also\s+)?(?:update|document|describe|list|explain)\b)/i);
+    const extendsFalse=clauses.some(c=>/\bfalse\b/i.test(c) &&
+      /\b(?:also|too|as well|in addition|additional(?:ly)?|add|extend)\b/i.test(c) &&
+      /\b(?:treat|recognize|recognise|consider|return|interpret|count|support|allow|accept|add|extend)\b/i.test(c) &&
+      !/\b(?:docstrings?|docs?|documentation|document)\b/i.test(c));
+    const changesExisting=/\b(?:replace|remove|drop|exclude|instead|only|stop|no longer|true|switch|change the default|change (?:the )?(?:original|existing|previous))\b/i.test(request);
+    if (extendsFalse && !changesExisting) {
+      const prior=readFunction(original);
+      if (prior && prior.name===parsed.name) {
+        contract=falseCases(prior.statements);
+        source='The original implementation returns False for these inputs preserved by the additive request: ';
+      }
+    }
+  }
   if (!contract) return [];
   const docs = documentedConditions(parsed.doc);
   const missing:string[] = [];
@@ -135,6 +163,6 @@ export function pythonDocCoverageIssues(request:string, replacement:string):stri
     const list = /^\w+$/.test(literal) ? listWords : docs.negative;
     if (!mentioned.test(list) || mentioned.test(directPositive)) missing.push(JSON.stringify(literal));
   }
-  return missing.length ? ['The candidate implementation returns False for '+missing.join(', ')+
+  return missing.length ? [source+missing.join(', ')+
     '. Describe these inputs and their false result explicitly in the function docstring.'] : [];
 }

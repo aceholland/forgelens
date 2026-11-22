@@ -139,7 +139,7 @@ export class InlineSelection {
     const direct=directDocumentation(python,before,this.original.slice(this.end),this.text);
     const previous=selectedDocumentation(python,this.text,direct);
     const next=selectedDocumentation(python,candidate,direct);
-    const issues = python?pythonDocCoverageIssues(request,candidate):[];
+    const issues = python?pythonDocCoverageIssues(request,candidate,this.text):[];
     if(previous===undefined || candidate===this.text || (!previous.trim() && !/\b(?:docstrings?|jsdoc)\b/i.test(request)))return issues;
     if(next===undefined){
       if(previous.trim() && (!candidate.trim() || (direct && !(python?pythonLiteral.test(candidate.trimStart()):!!jsComment(candidate.trimStart())))))

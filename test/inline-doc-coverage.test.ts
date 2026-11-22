@@ -68,6 +68,7 @@ test('keeps a reStructuredText or Markdown false-value list separate from the fo
   const explanation = 'Any other non-empty string is treated as ``True``. A blank string or missing\n    configuration entry results in ``False``.';
   const valid = [heading,bullets,explanation].join('\n\n');
   assert.deepEqual(pythonDocCoverageIssues(request,sample(valid)), []);
+  assert.deepEqual(pythonDocCoverageIssues(request,sample(valid.replaceAll('- ``"', '- The value is ``"'))), []);
   assert.deepEqual(pythonDocCoverageIssues(request,sample(valid.replaceAll('\n\n','\n'))), []);
   const wrongList = pythonDocCoverageIssues(request,sample(valid.replace('as ``False','as ``True'))).join(' ');
   assert.match(wrongList, /"skip"/); assert.match(wrongList, /"pause"/);
@@ -75,4 +76,37 @@ test('keeps a reStructuredText or Markdown false-value list separate from the fo
   assert.match(wrongBranch, /empty/i); assert.match(wrongBranch, /missing/i);
   const omitted = valid.replace('A blank string or missing\n    configuration entry','A missing entry');
   assert.match(pythonDocCoverageIssues(request,sample(omitted)).join(' '), /empty/i);
+});
+
+test('follows straight-line aliases and case conversions around guarded false returns', () => {
+  const source = (doc:string, lookup:string) => sample(doc,lookup,
+    'saved = token\n    if not saved:\n        return False\n    folded = saved.upper()\n    again = folded\n    return again not in {"HOLD", "RETRY"}');
+  const missing = pythonDocCoverageIssues(request,source('Return False for HOLD or RETRY.', 'options.get("gate")')).join(' ');
+  assert.match(missing,/empty string/); assert.match(missing,/missing lookup key/);
+  assert.doesNotMatch(missing,/"HOLD"|"RETRY"/);
+  assert.deepEqual(pythonDocCoverageIssues(request,source('Return False for a missing key, an empty string, hold, or retry.', 'options.get("gate")')),[]);
+  assert.deepEqual(pythonDocCoverageIssues(request,source('Return False for an empty string, hold, or retry.', 'options.get("gate", "go")')),[]);
+});
+
+test('an eager transform on a missing value can raise before a later guard', () => {
+  const body = 'clean = token.casefold()\n    if not clean:\n        return False\n    return clean not in {"quiet"}';
+  assert.deepEqual(pythonDocCoverageIssues(request,sample('Return False for an empty string or quiet.', 'options.get("gate")', body)),[]);
+  assert.match(pythonDocCoverageIssues(request,sample('Return False for quiet.', 'options.get("gate")', body)).join(' '),/empty string/);
+});
+
+test('additive requests check the original contract against a rewritten body when it cannot be traced', () => {
+  const original = sample('Original behavior.');
+  const doc = 'Return False for skip, pause, and false.';
+  const rewritten = sample(doc, 'options.get("badge")', 'return custom_parser(token)');
+  const additive = 'Also treat sleeping as false. Update the docstring to list every false value.';
+  const missing = pythonDocCoverageIssues(additive,rewritten,original).join(' ');
+  assert.match(missing,/original implementation/i); assert.match(missing,/empty string/); assert.match(missing,/missing lookup key/);
+  assert.doesNotMatch(missing,/sleeping/);
+  const repaired = rewritten.replace(doc, 'Return False for an empty string, a missing key, skip, pause, false, or sleeping.');
+  assert.deepEqual(pythonDocCoverageIssues(additive,repaired,original),[]);
+  for(const instruction of ['Replace the previous rules with a new parser and also return false for quiet.', 'Remove the old guards, then also treat quiet as false.', 'Change the default to true, and also accept quiet as false.', 'Also update the docstring.']) {
+    assert.deepEqual(pythonDocCoverageIssues(instruction+' Document every false value.',rewritten,original),[]);
+  }
+  assert.deepEqual(pythonDocCoverageIssues(additive,rewritten.replace('def active','def archived'),original),[]);
+  assert.deepEqual(pythonDocCoverageIssues(additive,rewritten,sample('Unknown.', 'options.get("badge")','return other(token)')),[]);
 });
