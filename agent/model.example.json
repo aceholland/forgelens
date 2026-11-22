@@ -1,6 +1,22 @@
 {
   "_note": "Reference only. Configure providers in TrueForge Settings → Models. Copy only vscodeUserSettings into VS Code User Settings; never commit actual credentials.",
   "trueForgeSetup": {
+    "anonymousForPublicProjects": {
+      "instructions": "Run node scripts/anonymous-model-provider.mjs and use the local token printed to your terminal.",
+      "type": "custom",
+      "name": "anonymous-kilo",
+      "baseUrl": "http://127.0.0.1:18940/v1",
+      "models": [
+        {
+          "name": "recursive-flint-v1-0-free",
+          "modelId": "recursive/flint-v1.0:free",
+          "properties": {
+            "contextLength": 64000,
+            "maxOutputTokens": 24576
+          }
+        }
+      ]
+    },
     "cloudPrimary": {
       "provider": "Choose an authorized fast catalog or OpenAI-compatible provider",
       "apiKey": "REPLACE_IN_TRUEFORGE_UI_ONLY",
