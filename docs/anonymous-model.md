@@ -15,6 +15,8 @@ Kilo's public gateway accepts requests without a provider account for models who
 
 The helper forwards native model requests and streaming responses, including tool calls. It pins the configured model and spaces Kilo calls by at least 18.1 seconds. For a temporary 429, it honors the retry interval. Longer quota holds return to TrueForge with the provider's wait time. To use a different free coding model, pass `kilo`, its exact `:free` catalogue ID and the local port as arguments. Restarting the helper generates a new local token.
 
+Kilo sometimes returns an account-wide notice asking anonymous users to come back later. The helper forwards it immediately and observes the supplied retry time. If Kilo omits a reset time, the helper pauses for the published one-hour rate window. All free-model requests from the same IP share this quota. [Kilo rate limits](https://kilo.ai/docs/gateway/usage-and-billing#rate-limiting)
+
 ### OVHcloud
 
 OVHcloud also documents anonymous function calling at two requests per minute per IP and model. For that endpoint, use `node scripts/anonymous-model-provider.mjs ovh DeepSeek-V4.1-Flash-1017 18940` and set the matching provider model ID in TrueForge. The helper spaces OVH requests by 32 seconds. In our evaluation an anonymous synthetic tool call succeeded, but the full Task B request encountered HTTP 429 with a longer provider quota hold. [Official anonymous example](https://docs.ovhcloud.com/en/guides/public-cloud/ai-machine-learning/ai-endpoints-function-calling) · [Limits](https://docs.ovhcloud.com/en/guides/public-cloud/ai-machine-learning/ai-endpoints-getting-started)

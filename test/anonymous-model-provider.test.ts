@@ -95,3 +95,27 @@ test('a queued caller rechecks a long 429 hold imposed by an earlier in-flight g
   assert.equal((await fetch(url, options)).status, 429);
   assert.equal(forwarded, 1);
 });
+
+test('Kilo account-wide limits immediately return the original notice and honor the quota window', async t => {
+  const { anonymousProvider, routes } = await import(moduleUrl);
+  for (const retryAfter of [null, '149']) {
+    const message = retryAfter ? 'Rate limit exceeded for free models. Please try again later.'
+      : 'Sign up for free to continue and explore 500 other models. Takes 2 minutes, no credit card required. Or come back later.';
+    const raw = JSON.stringify({ error: { code: 429, message } });
+    const upstreamHeaders = new Headers({ 'content-type': 'application/json' });
+    if (retryAfter) upstreamHeaders.set('retry-after', retryAfter);
+    let forwarded = 0;
+    const server = anonymousProvider({ localToken, now: () => 100_000,
+      wait: () => { throw Error('An explicit gateway account limit should return immediately.'); },
+      forward: () => { forwarded++; return new Response(raw, { status: 429, headers: upstreamHeaders }); }
+    });
+    const url = await listen(server, t);
+    const options = { method: 'POST', headers, body: JSON.stringify({ model: routes.kilo.model, messages: [] }) };
+    const limited = await fetch(url, options);
+    assert.equal(limited.status, 429);
+    assert.equal(limited.headers.get('retry-after'), retryAfter ?? '3600');
+    assert.equal(await limited.text(), raw);
+    assert.equal((await fetch(url, options)).status, 429);
+    assert.equal(forwarded, 1);
+  }
+});

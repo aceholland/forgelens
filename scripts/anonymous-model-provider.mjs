@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 const host = '127.0.0.1';
 const maximumBodyBytes = 2 * 1024 * 1024;
 const maximumWaitMs = 120_000;
+const kiloRateWindowMs = 60 * 60_000;
 export const routes = {
   kilo: {
     target: 'https://ai-gateway.kilo.ai/api/v1/chat/completions',
@@ -33,6 +34,15 @@ function retryDelay(header, now) {
     ? Number(header) * 1000
     : Date.parse(header) - now;
   return Number.isFinite(milliseconds) ? Math.max(1000, milliseconds + 500) : 61_000;
+}
+
+async function isKiloAccountLimit(response) {
+  const data = await response.clone().json().catch(() => null);
+  const message = data?.error?.message;
+  return typeof message === 'string' && (
+    /^sign up for free to continue\b[\s\S]*\bcome back later\b/i.test(message) ||
+    /^rate limit exceeded for free models\b/i.test(message)
+  );
 }
 
 // Each request can reach only one fixed provider and model. The local access
@@ -129,16 +139,21 @@ export function anonymousProvider({
           inputBytes: bytes, maxOutputTokens: body.max_tokens ?? body.max_completion_tokens ?? null,
           retryAfter: result.headers.get('retry-after'), requestId: result.headers.get('x-request-id')
         });
+        let retryAfter = result.headers.get('retry-after');
         if (result.status === 429) {
-          const delay = retryDelay(result.headers.get('retry-after'), now());
+          const accountLimited = provider === 'kilo' && await isKiloAccountLimit(result);
+          // An explicit anonymous-account limit applies across Kilo's free models.
+          // When no reset is supplied, pause this helper for its documented hourly window.
+          if (accountLimited && !retryAfter) retryAfter = String(kiloRateWindowMs / 1000);
+          const delay = retryDelay(retryAfter, now());
           nextStart = Math.max(nextStart, now() + delay);
-          if (attempt < 3 && delay <= maximumWaitMs) {
+          if (!accountLimited && attempt < 3 && delay <= maximumWaitMs) {
             await result.body?.cancel();
             continue;
           }
         }
         const headers = { 'content-type': result.headers.get('content-type') || 'application/json' };
-        if (result.headers.has('retry-after')) headers['retry-after'] = result.headers.get('retry-after');
+        if (retryAfter) headers['retry-after'] = retryAfter;
         response.writeHead(result.status, headers);
         response.flushHeaders();
         if (result.body) await pipeline(Readable.fromWeb(result.body), response, { signal });
