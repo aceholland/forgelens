@@ -81,7 +81,7 @@ exports.run = async dir => {
         if(!detail)throw Error('Expected a native modal for '+name);
         // Existing release independently validates both scopes. Only the
         // benchmark's allowed read-only/pytest commands can be approved here.
-        if(name==='Run command' && !/^Run (?:git (?:status|diff)|(?:python|pytest)\b)/i.test(detail.trim())){
+        if(name==='Run command' && !/\bRun (?:git (?:status --short|diff(?: --stat)?)|flask --help|pytest(?: [-\w/.:]+)*)\?/i.test(detail)){
           throw Error('A command outside the evaluation requested consent.');
         }
         result.approvals.push({control:name,at:new Date().toISOString()});save();

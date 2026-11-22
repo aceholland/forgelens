@@ -12,6 +12,21 @@ import { isSafeContextPath, selectContext, type ContextSelection } from './conte
 import { AnchorMismatch, resolveAgentProposal } from './patch';
 import { anchorExcerpt, draftInsertionOffsets } from './compactContext';
 
+const exactEdit = z.object({
+ oldText:z.string().min(1).max(250000).describe('A unique literal from the current file to replace.'),
+ newText:z.string().max(250000).describe('Literal replacement text, including newlines. An empty string deletes the match.')
+});
+const draftEdit = z.union([exactEdit.strict(),z.strictObject({
+ beforeLine:z.union([z.number().int().positive(),z.literal('end')]).describe('A complete numbered line shown for this file, or "end" when its end is shown.'),
+ newText:z.string().min(1).max(250000).describe('Literal text to insert at that position, including required newlines.')
+})],{error:issue=>{
+ const keys=issue.input && typeof issue.input==='object' ? Object.keys(issue.input) : [];
+ const unknown=keys.filter(key=> !['oldText','newText','beforeLine'].includes(key)).slice(0,4)
+  .map(key=>/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key)?key:'(unrecognized field)');
+ return (unknown.length?'Unsupported edit fields include '+unknown.join(', ')+'. ':'')+
+  'Use exactly one field pair. {oldText, newText} replaces a unique current literal. {beforeLine, newText} inserts before a displayed line number or at the displayed "end".';
+}}).describe('Use {oldText, newText} for replacement or {beforeLine, newText} for insertion.');
+
 export interface EditorBridge {
  root:string; budget:number; tokenBudget?:number; task?:string; requireDiscovery?:boolean; active():boolean;
  /** Separate scout endpoint: saved-source reads only; never plans, proposals or commands. */
@@ -199,11 +214,7 @@ export async function startMcp(bridge: EditorBridge) {
   if(preselected)mcp.registerTool('propose_changes',{
    description:'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
    inputSchema:{files:z.array(z.object({path:draftPaths?z.enum([...draftPaths],{error:'Drafts can edit only retrieved files. Use Run agent for additional paths.'}):z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
-    edits:z.array(draftPaths ? z.object({
-      beforeLine:z.union([z.number().int().positive(),z.literal('end')]).optional().describe('Insert before this displayed line, or append at a displayed file end. Use this or oldText.'),
-      oldText:z.string().min(1).max(250000).optional().describe('Exact unique text to replace. Use this or beforeLine.'),
-      newText:z.string().max(250000).describe('Literal insertion or replacement, including the required newlines.')
-    }) : z.object({oldText:z.string().min(1).max(250000),newText:z.string().max(250000)})).min(1).max(20)})).min(1).max(12),
+    edits:z.array(draftPaths ? draftEdit : exactEdit).min(1).max(20)})).min(1).max(12),
     tests:z.array(z.string().min(1).max(400)).max(20).optional()}
   },async({files,tests},extra)=>{
    guard();

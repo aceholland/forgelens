@@ -64,6 +64,22 @@ test('draft offers one scoped tool, preflights the entire batch and repairs from
   assert.deepEqual(tools.map(tool=>tool.name),['propose_changes']);
   const schema=tools[0]!.inputSchema.properties as any;
   assert.deepEqual([...schema.files.items.properties.path.enum].sort(),Object.keys(saved).sort());
+  const editSchema=schema.files.items.properties.edits.items;
+  const variants=editSchema.anyOf ?? editSchema.oneOf;
+  assert.deepEqual(variants.map((variant:any)=>[variant.required,variant.additionalProperties]),[
+    [['oldText','newText'],false],[['beforeLine','newText'],false]
+  ]);
+  for (const malformed of [{oldTextBefore:'UNTRUSTED_VALUE',oldTextNull:null,newText:'replacement'},
+     {oldText:'UNTRUSTED_VALUE',beforeLine:2,newText:'replacement'}]) {
+    const rejected=await client.callTool({name:'propose_changes',arguments:{files:[{path:'widget.py',reason:'Update widget',edits:[malformed]}]}});
+    assert.equal(rejected.isError,true);
+    const feedback=JSON.stringify(rejected);
+    assert.match(feedback,/oldText, newText/);
+    assert.match(feedback,/beforeLine, newText/);
+    if('oldTextBefore' in malformed)assert.match(feedback,/oldTextBefore, oldTextNull/);
+    assert.doesNotMatch(feedback,/UNTRUSTED_VALUE/);
+    assert.deepEqual(calls,[]);
+  }
   for(const name of ['find_relevant_files','read_file','search_workspace','select_context','create_file','propose_edit','run_command','validate_candidate','report_plan']){
     const denied=await client.callTool({name,arguments:{path:'unselected.py'}});
     assert.equal(denied.isError,true,name);

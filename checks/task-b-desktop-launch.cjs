@@ -41,6 +41,7 @@ async function main() {
   assert.equal(git(['status','--porcelain'],workspace),'');
   const vsix = process.argv[3] ? path.resolve(process.argv[3]) : undefined;
   const extensions = path.join(dir,'extensions');
+  let bundle = path.join(root,'dist','extension.js');
   if (vsix) {
     // No interpolated names are passed through a command shell. The relative
     // arguments work even when the CI scratch directory contains spaces.
@@ -50,6 +51,9 @@ async function main() {
     execFileSync(process.platform==='win32' ? '"'+cli+'"' : cli, [
       '--user-data-dir','profile','--extensions-dir','extensions','--install-extension','package.vsix','--force'
     ],{cwd:dir,shell:process.platform==='win32',windowsHide:true,stdio:'inherit'});
+    const installed = fs.readdirSync(extensions,{withFileTypes:true}).filter(entry=>entry.isDirectory() && /^forgelens-team\.forgelens-\d/i.test(entry.name));
+    assert.equal(installed.length,1,'Expected one installed ForgeLens package in the isolated profile');
+    bundle = path.join(extensions,installed[0].name,'dist','extension.js');
   }
   const config = {
     'forgelens.model':env.TRUEFORGE_MODEL,'forgelens.baseUrl':base.href,'forgelens.fallbackModel':'',
@@ -69,7 +73,7 @@ async function main() {
   const port=socket.address().port;
   await new Promise(resolve=>socket.close(resolve));
   const evidence = {root,dir,workspace,base:base.href,model:env.TRUEFORGE_MODEL,mode,minutes,port,python,playwright,prompt,
-    pinned,source:git(['rev-parse','HEAD'],root),bundleHash:sha(fs.readFileSync(path.join(root,'dist/extension.js'))),
+    pinned,source:git(['rev-parse','HEAD'],root),bundleHash:sha(fs.readFileSync(bundle)),
     packageHash:vsix && sha(fs.readFileSync(vsix))};
   fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify(evidence,null,2));
   const driver=path.join(extensions,'acesentry.task-b-check-1.0.0');
