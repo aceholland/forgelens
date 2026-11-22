@@ -171,12 +171,12 @@ exports.run = async () => {
     assert.deepEqual(baselineComparison,{runner:'pytest',baselineExitCode:0,candidateExitCode:0});
     await panel.getByRole('button',{name:'Test accepted changes…',exact:true}).click();
     const picker=page.locator('.quick-input-widget:visible');
-    await picker.locator('input').fill('comparison.test.mts');
+    await picker.locator('input:visible:not([type=checkbox])').first().fill('comparison.test.mts');
     await picker.getByText('tests/comparison.test.mts',{exact:true}).click();
     await consent('Run candidate tests',['node','--experimental-strip-types','--test -- tests/comparison.test.mts','two separate temporary workspace copies']);
     const displayed=await until(async()=>{
       const text=await panel.locator('#testComparison').innerText();
-      return text.includes('Baseline exit 1 · Candidate exit 1') && text;
+      return /Baseline exit 1[^\n]+Candidate exit 1/.test(text) && text;
     },'Node staged test comparison');
     for(const [label,name] of [['Newly failing','old contract'],['Already failing','existing failure'],['Now passing','new contract']]){
       assert.ok(displayed.includes(label+' (1)\n  tests/comparison.test.mts::'+name),displayed);

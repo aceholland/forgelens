@@ -189,6 +189,7 @@ exports.run = async () => {
       await config.update('baseUrl','http://127.0.0.1:'+setupServer.address().port,vscode.ConfigurationTarget.Global);
       const unconfigured=await bounded(vscode.commands.executeCommand('forgelens.checkSetup'));
       assert.equal(unconfigured.find(row=>row.name==='Model').ok,false);
+      if(captureDir) await vscode.commands.executeCommand('notifications.clearAll');
       await config.update('model','local/qa',vscode.ConfigurationTarget.Global);
       const configured=await bounded(vscode.commands.executeCommand('forgelens.checkSetup'));
       assert.ok(configured.every(row=>row.ok),JSON.stringify(configured));

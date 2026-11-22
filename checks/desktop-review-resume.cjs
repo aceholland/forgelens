@@ -78,6 +78,10 @@ exports.run=async()=>{
     const proposed=await panel.locator('#mergeProposal').textContent();
     assert.ok(proposed.includes('return n * 2')&&proposed.includes('TAG = "stable"'));
     assert.ok((await text.inputValue()).includes('<<<<<<< Workspace '));
+    if(recordingDir){
+      await panel.locator('#mergeBox').evaluate(el=>el.scrollIntoView({block:'start'}));
+      await capture('conflict-three-versions');
+    }
     await panel.getByRole('button',{name:'Stage merged result',exact:true}).click();
     await waitOutput('remove their marker lines');
     const newer='# preserve this unsaved comment\n'+local;
