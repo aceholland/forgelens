@@ -1,0 +1,111 @@
+diff --git a/docs/cli.rst b/docs/cli.rst
+index a72e6d51cbcc3c1423018a6c219a6f1283fe68bc..c7ad50f71d83ac0fa287f417326144276ee9b3c6 100644
+--- a/docs/cli.rst
++++ b/docs/cli.rst
+@@ -315,6 +315,26 @@ committed to the repository so that it works automatically wherever the project
+ is checked out.
+ 
+ 
++Show the App's Config
++---------------------
++
++The ``config`` command prints the loaded application's configuration as
++JSON. This is useful for inspecting the configuration an app actually
++loaded, for example when a value doesn't seem to be applied.
++
++.. code-block:: text
++
++    $ flask config
++    {
++      "DEBUG": false,
++      "SECRET_KEY": "***"
++    }
++
++To avoid printing secrets, the values of any key whose name contains
++``SECRET``, ``PASSWORD``, ``TOKEN``, or ``KEY`` are shown as ``"***"``
++instead of their real value.
++
++
+ Custom Commands
+ ---------------
+ 
+diff --git a/src/flask/cli.py b/src/flask/cli.py
+index ed11f256a153300887657e51b0b2f00543ca5229..594eb23263917475eff1ed088e502eca5496d1b0 100644
+--- a/src/flask/cli.py
++++ b/src/flask/cli.py
+@@ -4,6 +4,7 @@ import ast
+ import collections.abc as cabc
+ import importlib.metadata
+ import inspect
++import json
+ import os
+ import platform
+ import re
+@@ -594,6 +595,7 @@ class FlaskGroup(AppGroup):
+             self.add_command(run_command)
+             self.add_command(shell_command)
+             self.add_command(routes_command)
++            self.add_command(config_command)
+ 
+         self._loaded_plugin_commands = False
+ 
+@@ -1115,6 +1117,24 @@ def routes_command(sort: str, all_methods: bool) -> None:
+         click.echo(template.format(*row))
+ 
+ 
++@click.command("config", short_help="Show the app's config as JSON.")
++@with_appcontext
++def config_command() -> None:
++    """Show the application's configuration as JSON.
++
++    The values of any key whose name contains ``SECRET``, ``PASSWORD``,
++    ``TOKEN``, or ``KEY`` are masked as ``"***"`` so that sensitive
++    values are not displayed.
++    """
++    config = current_app.config.copy()
++
++    for key in config:
++        if any(s in key.upper() for s in ("SECRET", "PASSWORD", "TOKEN", "KEY")):
++            config[key] = "***"
++
++    click.echo(json.dumps(config, indent=2, default=str))
++
++
+ cli = FlaskGroup(
+     name="flask",
+     help="""\
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index e254c1dd8ee1783503b10d5d89e355448949236e..f1870e193cca6f33e196cd41a1fd90e1bb0022a0 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1,6 +1,7 @@
+ # This file was part of Flask-CLI and was modified under the terms of
+ # its Revised BSD License. Copyright © 2015 CERN.
+ import importlib.metadata
++import json
+ import os
+ import platform
+ import ssl
+@@ -700,3 +701,22 @@ def test_cli_empty(app):
+ def test_run_exclude_patterns():
+     ctx = run_command.make_context("run", ["--exclude-patterns", __file__])
+     assert ctx.params["exclude_patterns"] == [__file__]
++
++
++def test_config_command(runner):
++    app = Flask(__name__)
++    app.config["SECRET_KEY"] = "sensitive"
++    app.config["CUSTOM_TOKEN"] = "sensitive"
++    app.config["MY_PASSWORD"] = "sensitive"
++    app.config["MY_API_KEY"] = "sensitive"
++    app.config["VISIBLE_VALUE"] = "shown"
++    cli = FlaskGroup(create_app=lambda: app)
++
++    result = runner.invoke(cli, ["config"])
++    assert result.exit_code == 0
++    config = json.loads(result.output)
++    assert config["SECRET_KEY"] == "***"
++    assert config["CUSTOM_TOKEN"] == "***"
++    assert config["MY_PASSWORD"] == "***"
++    assert config["MY_API_KEY"] == "***"
++    assert config["VISIBLE_VALUE"] == "shown"

@@ -1,0 +1,67 @@
+{
+  "vscode": "1.147.0",
+  "platform": "win32",
+  "extensionVersion": "0.3.1",
+  "model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+  "mode": "draft",
+  "sessionId": "01m81kjkmez8nz2xy3cb32657b",
+  "requestSubmittedUTC": "2026-11-22T12:26:53.097Z",
+  "turnFinishedUTC": "2026-11-22T12:31:10.991Z",
+  "turnElapsedSeconds": 257.9,
+  "operatorMessages": 1,
+  "operatorAnswers": 0,
+  "approvals": [
+    "Review files",
+    "Accept all pending hunks",
+    "Accept all pending hunks",
+    "Accept all pending hunks",
+    "Run candidate tests",
+    "Apply accepted",
+    "Apply accepted",
+    "Apply accepted"
+  ],
+  "automaticRetriesShownInEditor": 0,
+  "draftModelIntervalSeconds": 70,
+  "reasoningEffort": "",
+  "sequentialDraft": false,
+  "recordedInstallerSha256": "505d64a9a3d110a36374d340aa3e91240ab5b7b8fde1d9ae382413a8acccaed7",
+  "runtimeSha256": "fb6ed6419c500b3d801ad1ac2cadabd388303525de0595dbdd51466d5c88298a",
+  "terminal": {
+    "checks": {
+      "cli": true,
+      "help": true,
+      "json": true,
+      "threeFiles": true,
+      "independent": true
+    },
+    "files": [
+      "docs/cli.rst",
+      "src/flask/cli.py",
+      "tests/test_cli.py"
+    ],
+    "patchSha256": "ee13250d3e52545a17ca875d1c367c107fab399400a370a4dbae9b2ed0065070",
+    "cli": "59 passed in 0.38s",
+    "full": "491 passed in 5.07s",
+    "sensitiveKeys": 16,
+    "passed": true
+  },
+  "recording": {
+    "duration": 88.729667,
+    "narration": "Microsoft Heera",
+    "audioMeanDb": -22.4,
+    "workbenchFrames": 30,
+    "originalPromptToFirstDiffMs": 184752,
+    "videoSha256": "5db6240b66cf449775661e8ff0a84a2557274fffbe002acbea6dbd7fbfd127f0",
+    "subtitlesSha256": "4d8cf86d1db1383f3cf29121728a7cfa399175040d05b2dd17d4d409c0777745",
+    "frozenPatchSha256": "ee13250d3e52545a17ca875d1c367c107fab399400a370a4dbae9b2ed0065070",
+    "nativeSession": "01m81kjkmez8nz2xy3cb32657b",
+    "checks": {
+      "cli": true,
+      "help": true,
+      "json": true,
+      "threeFiles": true,
+      "independent": true
+    },
+    "fullDecode": "passed"
+  }
+}

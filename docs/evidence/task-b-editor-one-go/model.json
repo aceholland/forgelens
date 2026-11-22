@@ -1,0 +1,33 @@
+{
+  "localInference": false,
+  "provider": "Kilo anonymous gateway",
+  "model": "baidu/ernie-5.5-flash-preview:free",
+  "trueforgeModel": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+  "pricing": "https://kilo.ai/docs/gateway/usage-and-billing",
+  "upstreamModelRestrictedToFreeSuffix": true,
+  "contextLimitTokens": 64000,
+  "outputLimitTokens": 24576,
+  "upstreamHttpStatuses": [
+    429,
+    429,
+    200,
+    200
+  ],
+  "generations": [
+    {
+      "request": 3,
+      "finish": "tool_calls",
+      "inputTokens": 5517,
+      "outputTokens": 14663,
+      "costUSD": 0
+    },
+    {
+      "request": 4,
+      "finish": "stop",
+      "inputTokens": 20498,
+      "outputTokens": 362,
+      "costUSD": 0
+    }
+  ],
+  "providerReportedTotalUSD": 0
+}

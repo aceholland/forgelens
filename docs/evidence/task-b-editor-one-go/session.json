@@ -1,0 +1,265 @@
+{
+  "sessionId": "01m81kjkmez8nz2xy3cb32657b",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "packageSha256": "505d64a9a3d110a36374d340aa3e91240ab5b7b8fde1d9ae382413a8acccaed7",
+  "bundleSha256": "fb6ed6419c500b3d801ad1ac2cadabd388303525de0595dbdd51466d5c88298a",
+  "generatorGitHead": "81f82b6dd0fd340dda46d668e9a68b746d13d768",
+  "model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+  "mode": "draft",
+  "firstEventUTC": "2026-11-22T12:26:57.118Z",
+  "lastEventUTC": "2026-11-22T12:31:10.683Z",
+  "turns": 1,
+  "turnStatus": "done",
+  "promptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+  "onlyOriginalTurnInput": true,
+  "modelMessages": 2,
+  "additionalInitialMessages": 1,
+  "initialMessagesAllPinnedSource": true,
+  "systemInstructionsMatchInstalledMode": true,
+  "selectedSourceLineRanges": {
+    "src/flask/cli.py": [
+      [
+        549,
+        639
+      ],
+      [
+        1115,
+        1136
+      ],
+      [
+        293,
+        299
+      ],
+      [
+        942,
+        949
+      ],
+      [
+        1007,
+        1015
+      ],
+      [
+        1067,
+        1075
+      ],
+      [
+        1,
+        12
+      ]
+    ],
+    "tests/test_cli.py": [
+      [
+        364,
+        479
+      ],
+      [
+        700,
+        703
+      ],
+      [
+        36,
+        43
+      ],
+      [
+        321,
+        328
+      ],
+      [
+        352,
+        359
+      ],
+      [
+        1,
+        12
+      ]
+    ],
+    "docs/cli.rst": [
+      [
+        243,
+        392
+      ],
+      [
+        554,
+        557
+      ],
+      [
+        1,
+        12
+      ]
+    ]
+  },
+  "toolCalls": {
+    "propose_changes": 1
+  },
+  "nativeApprovals": {
+    "allow": 1
+  },
+  "clarificationRequests": 0,
+  "operatorAnswers": 0,
+  "denialsWithBuiltInMessage": 0,
+  "installedTypedShapeDenials": 0,
+  "noClarificationsRequested": true,
+  "otherUserFeedback": {},
+  "noHumanHintsOrPromptCorrections": true,
+  "writeCalls": [
+    {
+      "tool": "propose_changes",
+      "approval": "allow",
+      "paths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "nativeArgumentsSha256CanonicalJSON": "5adfc946acf2ceef6e37964b9d01bbed6e4a6a13fde8289f43c784d2b539b5f9",
+      "reviewedFiles": 3,
+      "receivedAllFileReceipts": true
+    }
+  ],
+  "editorHunkDecisions": {
+    "accepted": 6
+  },
+  "files": {
+    "src/flask/cli.py": {
+      "modelSha256LF": "b38b93e441bb65837f0ee291144f9bc1a4c62a925be06fe65886e2a3696df3ea",
+      "workingSha256LF": "b38b93e441bb65837f0ee291144f9bc1a4c62a925be06fe65886e2a3696df3ea",
+      "workingSha256Raw": "b38b93e441bb65837f0ee291144f9bc1a4c62a925be06fe65886e2a3696df3ea",
+      "same": true
+    },
+    "tests/test_cli.py": {
+      "modelSha256LF": "65a3e3c95b7a25c11f9dc8dda70af18d62e325b2b488ead23d8553716bccbe01",
+      "workingSha256LF": "65a3e3c95b7a25c11f9dc8dda70af18d62e325b2b488ead23d8553716bccbe01",
+      "workingSha256Raw": "65a3e3c95b7a25c11f9dc8dda70af18d62e325b2b488ead23d8553716bccbe01",
+      "same": true
+    },
+    "docs/cli.rst": {
+      "modelSha256LF": "d74e849d9c539b0127bf0c9bb2095f2eee3c1890e0ac33f47ae3f6256e591bea",
+      "workingSha256LF": "d74e849d9c539b0127bf0c9bb2095f2eee3c1890e0ac33f47ae3f6256e591bea",
+      "workingSha256Raw": "d74e849d9c539b0127bf0c9bb2095f2eee3c1890e0ac33f47ae3f6256e591bea",
+      "same": true
+    }
+  },
+  "changedPaths": [
+    "docs/cli.rst",
+    "src/flask/cli.py",
+    "tests/test_cli.py"
+  ],
+  "savedCandidateMatchesModel": true,
+  "gitPatchMatchesSavedDriverArtifact": true,
+  "gitPatchSha256": "ee13250d3e52545a17ca875d1c367c107fab399400a370a4dbae9b2ed0065070",
+  "replayIssues": [],
+  "isolatedTrueForgeTotals": {
+    "sessions": 1,
+    "turns": 1
+  },
+  "originalSubmissionUTC": "2026-11-22T12:26:53.097Z",
+  "nativeTimeline": [
+    {
+      "event": "turn.created",
+      "utc": "2026-11-22T12:26:57.118Z"
+    },
+    {
+      "event": "mcp.initialize",
+      "utc": "2026-11-22T12:26:57.416Z"
+    },
+    {
+      "event": "model.message",
+      "utc": "2026-11-22T12:29:56.323Z"
+    },
+    {
+      "event": "tool.approval_required",
+      "utc": "2026-11-22T12:29:56.347Z"
+    },
+    {
+      "event": "turn.update",
+      "utc": "2026-11-22T12:29:56.352Z"
+    },
+    {
+      "event": "user.tool_approval",
+      "utc": "2026-11-22T12:29:56.777Z"
+    },
+    {
+      "event": "turn.update",
+      "utc": "2026-11-22T12:29:56.818Z"
+    },
+    {
+      "event": "tool.response",
+      "utc": "2026-11-22T12:31:06.889Z"
+    },
+    {
+      "event": "model.message",
+      "utc": "2026-11-22T12:31:10.677Z"
+    },
+    {
+      "event": "turn.done",
+      "utc": "2026-11-22T12:31:10.683Z"
+    }
+  ],
+  "editorReviewControls": {
+    "Review files": 1,
+    "Accept all pending hunks": 3,
+    "Run candidate tests": 1,
+    "Apply accepted": 3
+  },
+  "providerAttempts": [
+    {
+      "time": "2026-11-22T12:26:58.549Z",
+      "status": 429,
+      "attempt": 1,
+      "model": "baidu/ernie-5.5-flash-preview:free"
+    },
+    {
+      "time": "2026-11-22T12:28:00.524Z",
+      "status": 429,
+      "attempt": 2,
+      "model": "baidu/ernie-5.5-flash-preview:free"
+    },
+    {
+      "time": "2026-11-22T12:29:02.838Z",
+      "status": 200,
+      "attempt": 3,
+      "model": "baidu/ernie-5.5-flash-preview:free"
+    },
+    {
+      "time": "2026-11-22T12:31:09.296Z",
+      "status": 200,
+      "attempt": 1,
+      "model": "baidu/ernie-5.5-flash-preview:free"
+    }
+  ],
+  "providerGenerations": [
+    {
+      "finish": "tool_calls",
+      "prompt_tokens": 5517,
+      "completion_tokens": 14663,
+      "cost": 0
+    },
+    {
+      "finish": "stop",
+      "prompt_tokens": 20498,
+      "completion_tokens": 362,
+      "cost": 0
+    }
+  ],
+  "independentCheckCount": 12,
+  "sensitiveKeysChecked": 16,
+  "registeredBaselineTests": 490,
+  "candidateTests": 491,
+  "cliTests": "59 passed in 0.38s",
+  "fullTests": "491 passed in 5.07s",
+  "independentChecks": {
+    "appearsInGlobalHelp": true,
+    "printsJSONObject": true,
+    "masksAll16SyntheticKeys": true,
+    "preservesOrdinaryTypesAndValues": true,
+    "includesFlaskDefaults": true,
+    "documentedAlongsideBuiltins": true,
+    "addedTestsExecuted": true,
+    "addedTestsFailAgainstUnchangedFlask": true,
+    "existingTestNodesRetained": true,
+    "candidateTestCollectionSucceeds": true,
+    "flaskCliTestsPass": true,
+    "fullFlaskSuitePasses": true
+  },
+  "allRawSavedBytesMatchModelLF": true,
+  "passed": true
+}

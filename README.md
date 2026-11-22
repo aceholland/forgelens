@@ -2,9 +2,9 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.3.0](https://github.com/aceholland/forgelens/releases/download/v0.3.0/forgelens-0.3.0.vsix) · [Watch live review and undo, 1m 06s](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-review.mp4) · [Original narrated Round 1 demo, 3m 59s](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+[Install ForgeLens 0.3.1](https://github.com/aceholland/forgelens/releases/download/v0.3.1/forgelens-0.3.1.vsix) · [Watch Task B in VS Code, 1m 29s](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [One-request evidence](docs/evidence/task-b-editor-one-go/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-Version 0.3.0 is a post-deadline release. Read the [two-page evidence supplement](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-evidence.pdf) or [plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-overview.txt). The original competition recording, write-up and installable extension are preserved with [Round 1 release 0.1.13](https://github.com/aceholland/forgelens/releases/tag/v0.1.13).
+Version 0.3.1 is a post-deadline update to the agent and editor verification. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-0.3.1-overview.txt) · [Earlier live review and undo recording](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-review.mp4) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
 
 ![A ForgeLens review in Windows VS Code. The first hunk is accepted, the second is pending, and both lines are visible in the editor diff.](docs/live-hunk-review.png)
 
@@ -12,12 +12,12 @@ Version 0.3.0 is a post-deadline release. Read the [two-page evidence supplement
 
 | Question | Observed result |
 | --- | --- |
-| Did a real model produce a working Flask command? | Gemini Flash Lite produced a four-file patch from the unchanged, path-free Task B prompt in 170 seconds in a headless TrueForge run. One procedural clarification supplied no code or paths. Replaying that exact patch passed **59 CLI tests and all 491 Flask tests**. The grader also checked help, JSON, 16 sensitive keys, ordinary values, docs and the newly added test. [Watch the independent check in VS Code, 1m 20s](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-task-b-replay.mp4) · [Run and patch](docs/evidence/task-b-flash-lite/README.md) |
-| Can I verify those four files before applying them? | The staged validator passed the same **59 CLI and 491 full-suite tests** with Flask’s public test fixture explicitly pinned. All 235 tracked files kept their original hashes. The default copy excludes dotenv files. [Staged replay and fixture setup](docs/evidence/task-b-flash-lite/staged-replay.md) |
+| Did Task B finish from one request? | **Yes in the recorded Windows run.** Baidu ERNIE 5.5 Flash Preview received the path-free request in Draft from context, proposed 3 files and completed its native turn. With zero operator answers or code corrections, the saved patch passed **59 CLI tests, all 491 Flask tests and 16 independent masking cases**. [Watch the terminal results](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [Session, patch and checks](docs/evidence/task-b-editor-one-go/README.md) |
+| Can I test accepted changes before applying? | In an earlier four-file Flash Lite replay, the staged validator passed **59 CLI and 491 full-suite tests** with Flask’s public test fixture explicitly pinned. All 235 tracked files kept their original hashes. The default copy excludes dotenv files. [Staged replay and fixture setup](docs/evidence/task-b-flash-lite/staged-replay.md) |
 | Does live feedback change what the agent sees? | In real Windows VS Code, a scripted model received the exact accepted and rejected hunks, then read the accepted overlay. In a second fixture it received an actual pytest failure and repaired the change in the same turn. The original three file hashes stayed unchanged. [Review and repair evidence](docs/live-review-check.md) |
 | Does allocating context across more files help? | On an independently selected set of 40 Flask changes, every target file appeared in the context for **16/40** changes versus **3/40** with whole-file BM25. ForgeLens used 5,016 excerpt tokens on average. The report includes the queries, both methods, scores and the separate published 79-change sample. [Retrieval evaluation](docs/flask-retrieval.md) |
 
-**Unassisted Task B trials.** In one Windows VS Code run, a free model, ERNIE 5.5 Flash, proposed six hunks across source, tests and documentation from one request. The accepted candidate passed all 492 Flask tests, but the command exposed mixed-case secrets in an independent check. A provider rate limit also interrupted the turn. The desktop evaluation checks both the finished TrueForge session and the actual command output before recording a pass. [Windows attempts](docs/evidence/task-b-windows-one-go/attempts.md) · [Earlier CPU trials](docs/evidence/task-b-open-models/README.md) · [How to repeat the editor run](docs/repeat-task-b.md)
+The recorded Windows run took **4 minutes 18 seconds**. The provider reported **$0** for the two model responses. Other free configurations timed out, hit quotas or produced an incomplete change. [Earlier attempts](docs/evidence/task-b-windows-one-go/attempts.md) · [Use the recorded settings](docs/repeat-task-b.md#recorded-configuration)
 
 ## What you can do
 
@@ -44,7 +44,7 @@ In 0.2.0, the local preview identified Flask's CLI code, tests and documentation
 
 ## Try it in VS Code
 
-**1. Install v0.3.0.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install v0.3.1.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
@@ -131,7 +131,7 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. On stable macOS and Linux, the installed extension also connected to real TrueForge with a scripted local model. Both editors accepted two hunks, rejected one, passed two tests in the staged copy and returned the results to the model. The original files kept their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Cross-platform results](https://github.com/aceholland/forgelens/actions/runs/45004531362) · [Released package verification](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-package-verification.json)
+The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. On stable macOS and Linux, the installed extension also connected to real TrueForge with a scripted local model. Both editors accepted two hunks, rejected one, passed two tests in the staged copy and returned the results to the model. The original files kept their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Current package and platform checks](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-0.3.1-package-verification.json)
 
 | Editor host | Coverage |
 | --- | --- |
@@ -145,7 +145,7 @@ The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot ru
 ## Build from a clean clone
 
 ```sh
-git clone --branch v0.3.0 https://github.com/aceholland/forgelens.git
+git clone --branch v0.3.1 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 python -m pip install pytest==9.0.2

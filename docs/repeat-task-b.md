@@ -46,3 +46,44 @@ node checks/task-b-desktop-launch.cjs D:\runs\fresh-task-b .\forgelens-0.3.1.vsi
 ```
 
 The driver configures Flask’s committed public dotenv fixture in this disposable profile so that the full suite can also run before apply. Use a new output directory each time. It contains the local session receipt, saved patch, terminal results and editor captures. Inspect the result before sharing files from it. The model and provider can produce a different outcome on a repeat.
+
+
+## Recorded configuration
+
+Open the pinned Flask folder in desktop VS Code and configure the provider in local TrueForge. The recorded model ID and editor settings are below. Select **Draft from context** and enter the original request once.
+
+```json
+{
+  "forgelens.model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+  "forgelens.fallbackModel": "",
+  "forgelens.liveReview": true,
+  "forgelens.sequentialDraft": false,
+  "forgelens.draftModelIntervalSeconds": 70,
+  "forgelens.runTimeoutMinutes": 45,
+  "forgelens.modelCallTimeoutSeconds": 1800
+}
+```
+
+[Native session, saved patch and independent checks](evidence/task-b-editor-one-go/README.md)
+
+To reproduce the anonymous provider, start the helper below. Use its printed local URL and token in a TrueForge custom provider named `anonymous-kilo`. Set the local model name to `baidu-ernie-5-5-flash-preview-free`, upstream model ID to `baidu/ernie-5.5-flash-preview:free`, context limit to 64,000 tokens and output limit to 24,576. The recording allowed 45 minutes per run and 1,800 seconds per model call.
+
+```sh
+node scripts/anonymous-model-provider.mjs kilo baidu/ernie-5.5-flash-preview:free 18940
+```
+
+[Free provider setup](anonymous-model.md)
+
+For the recorded Windows setup, set the following values in the PowerShell window that starts TrueForge. These settings allow a long-running model response and time for review. The ForgeLens gateway handles transient upstream rate limits. Use Flask’s test environment for **ForgeLens › Python Path**.
+
+```powershell
+$env:HOST = '127.0.0.1'
+$env:NETWORK_POLICY_ENABLED = 'true'
+$env:OUTBOUND_URL_ALLOWED_HOSTS = '["127.0.0.1"]'
+$env:MODEL_HTTP_HEADERS_TIMEOUT_MS = '600000'
+$env:MODEL_HTTP_BODY_TIMEOUT_MS = '600000'
+$env:MCP_REQUEST_TIMEOUT_MS = '300000'
+$env:MODEL_HTTP_MAX_RETRIES = '0'
+$env:OUTBOUND_HTTP_MAX_RETRIES = '0'
+npx.cmd @truefoundry/trueforge@0.185.1 --port 8790
+```

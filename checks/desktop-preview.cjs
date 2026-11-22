@@ -23,30 +23,51 @@ async function bounded(promise, label = 'Context preview', milliseconds = 20000)
 
 /** Drive the actual workbench QuickPick; never replace showQuickPick or tasks. */
 async function verifyCommand(vscode, page, folder, label, expectedExitCode) {
-  let listener, endListener;
+  const listeners = [];
+  const observed = [];
+  const record = (stage, event) => {
+    const task = event.execution.task;
+    if (task.definition.type === 'forgelens-verify') observed.push({stage, name:task.name, runId:task.definition.runId});
+  };
   const isSelectedTask = task => task.definition.type === 'forgelens-verify' && task.name === label;
+  listeners.push(vscode.tasks.onDidStartTask(event => record('task started', event)));
+  listeners.push(vscode.tasks.onDidStartTaskProcess(event => record('process started', event)));
   const completion = new Promise(resolve => {
-    listener = vscode.tasks.onDidEndTaskProcess(event => {
+    listeners.push(vscode.tasks.onDidEndTaskProcess(event => {
+      record('process ended', event);
       const task = event.execution.task;
       if (!isSelectedTask(task)) return;
       const execution = task.execution;
       resolve({ name: task.name, runId:task.definition.runId, exitCode: event.exitCode, processExecution: execution instanceof vscode.ProcessExecution,
         executable: execution?.process, args: execution?.args, cwd: execution?.options?.cwd });
-    });
+    }));
   });
   const taskEnded = new Promise(resolve => {
-    endListener = vscode.tasks.onDidEndTask(event => {
+    listeners.push(vscode.tasks.onDidEndTask(event => {
+      record('task ended', event);
       if (isSelectedTask(event.execution.task)) resolve(event.execution.task.definition.runId);
-    });
+    }));
   });
   try {
-    const command = vscode.commands.executeCommand('forgelens.verify');
-    // Wait for the visible workbench picker and click the specific command.
-    await page.locator('.quick-input-widget:visible').getByText(label, { exact: true }).click({ timeout: 15000 });
-    await bounded(command, 'Verification picker selection', 30000);
+    const picker = page.locator('.quick-input-widget:visible').filter({hasText:'Verify saved changes'});
+    for(let attempt=1;attempt<=2;attempt++){
+      const command = vscode.commands.executeCommand('forgelens.verify');
+      await picker.waitFor({state:'visible', timeout:15000});
+      try { await picker.getByText(label, { exact: true }).click({ timeout:5000 }); }
+      catch(error){if(await picker.isVisible())throw error;} // The terminal may take focus during the click.
+      await bounded(command, 'Verification picker selection', 30000);
+      await picker.waitFor({state:'hidden',timeout:5000});
+      // executeTask registers its execution before resolving, and the end event
+      // is delivered when VS Code removes it. Never relaunch an observed task.
+      const registered = vscode.tasks.taskExecutions.filter(e=>e.task.definition.type==='forgelens-verify');
+      if (observed.length || registered.length) break;
+      console.log('FORGELENS_VERIFICATION_PICKER_DISMISSED '+JSON.stringify({label,expectedExitCode,attempt}));
+      assert.equal(attempt,1,'The verification picker closed twice without launching a task');
+    }
     // VS Code can report process exit before releasing its dedicated task terminal.
     // Wait for both events before opening the picker for another run of the same task.
-    const [result, endedId] = await bounded(Promise.all([completion,taskEnded]), 'Native verification process and task completion', 45000);
+    const [result, endedId] = await bounded(Promise.all([completion,taskEnded]), label+' native completion (expected exit '+expectedExitCode+')', 45000)
+      .catch(error=>{throw new Error(error.message+'. Observed task events: '+JSON.stringify(observed));});
     assert.ok(result.runId && result.runId === endedId, 'Process and task events must belong to the same verification');
     assert.equal(result.name, label, 'Native chooser selected a different check');
     assert.equal(result.processExecution, true, 'Verification must start a real ProcessExecution');
@@ -56,7 +77,7 @@ async function verifyCommand(vscode, page, folder, label, expectedExitCode) {
     assert.deepEqual(result.args, label === 'Git status' ? ['status', '--short'] : ['diff', '--check']);
     console.log('FORGELENS_NATIVE_VERIFICATION_PROCESS ' + JSON.stringify(result));
     return result;
-  } finally { listener?.dispose(); endListener?.dispose(); }
+  } finally { for(const listener of listeners)listener.dispose(); }
 }
 
 exports.run = async () => {
