@@ -38,7 +38,7 @@ The walkthrough uses the recorded VS Code workbench and voices the steps in Engl
 
 ## Compact multi-file review and a failing test
 
-A second Windows run enabled `forgelens.compactRequests` in the same editor version. The task asked to double a number, update its regression test, and document the behavior. The deterministic model's first request contained real source excerpts selected by ForgeLens. It issued one `propose_changes` call for the implementation, test, and documentation.
+A second Windows run enabled `forgelens.compactRequests` in the same editor version. The task asked to double a number, update its regression test, and document the behavior. The model endpoint recorded static system instructions, a user-role message containing the local excerpts labeled as untrusted workspace data, and a separate user-role task message. The deterministic model issued one `propose_changes` call for the implementation, test, and documentation.
 
 The native review accepted three changes and rejected an unrelated change to a module tag. Before each test run, the native **Run candidate tests** dialog listed the three staged paths and the configured Python executable with these arguments.
 
@@ -56,3 +56,7 @@ The local model endpoint recorded four requests in the same TrueForge turn.
 | 4 | Received the accepted repair and the second pytest result. Pytest exited 0 with one passing test against the three staged files. |
 
 The editor driver compared the original file hashes at the consent and hunk-decision steps and again at completion. All three disk files retained their original contents. The workspace contained no generated files outside Git's metadata, and no source buffer had unsaved changes. The candidate files stayed available for final user review.
+
+## Deferred review blocks candidate execution
+
+A third Windows run used `forgelens.liveReview: false`. TrueForge returned a structured denial for a batch with an invalid workspace path, and the model retried with three valid files in the same turn. All proposed hunks were still pending when it requested pytest, first inside the batch and then through `validate_candidate`. The editor declined both requests and returned instructions to finish review. The exact-command execution dialog never opened. A marker in the disposable test module confirmed that pytest never collected it. File hashes and editor buffers remained unchanged.

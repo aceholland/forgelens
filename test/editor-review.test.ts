@@ -1,7 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createProposal, decideHunk, renderProposal, ReviewStore } from '../src/review';
-import { LiveReviews, lensOffsets, reviewFeedback } from '../src/editorReview';
+import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate } from '../src/editorReview';
+
+test('candidate tests require all live decisions and include only accepted content', () => {
+  const pending = createProposal('sample.py', 'a\nx\nb\n', 'A\nx\nB\n');
+  const partial = decideHunk(pending, 'hunk-1', 'accepted');
+  const mixed = decideHunk(partial, 'hunk-2', 'rejected');
+  const rejected = decideHunk(createProposal('no.py', 'old', 'new'), 'hunk-1', 'rejected');
+  assert.throws(() => reviewedCandidate([partial], true, false), /Finish live hunk review/);
+  assert.throws(() => reviewedCandidate([mixed], true, true), /Finish live hunk review/);
+  assert.throws(() => reviewedCandidate([mixed], false, false), /deferred review/);
+  assert.deepEqual(reviewedCandidate([mixed, rejected], true, false), [
+    {path: 'sample.py', original: 'a\nx\nb\n', content: 'A\nx\nb\n', isNew: false},
+  ]);
+});
 
 test('a live tool receives exact original offsets and per-hunk review without writing', async () => {
   const live = new LiveReviews(), store = new ReviewStore();

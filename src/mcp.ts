@@ -56,7 +56,10 @@ export async function startMcp(bridge: EditorBridge) {
  const missingContext=()=>({...show('Missing exploration request context.'),isError:true});
  const failed=(error:unknown,used:number)=>({...show(error instanceof Error?error.message:'Exploration failed.',used),isError:true});
  const digest=(...values:(string|number)[])=>createHash('sha256').update(JSON.stringify(values)).digest('hex');
- const remaining=(max:number)=>hasProposed?max:Math.min(max,Math.max(900,Math.max(6000,bridge.budget)-exposedChars));
+ const remaining=(max:number)=>{
+  const limit=preselected?Math.min(max,1800):max;
+  return hasProposed?limit:Math.min(limit,Math.max(900,Math.max(6000,bridge.budget)-exposedChars));
+ };
  const shown=(key:string, text:string, repeat:string, used:number)=>{
   verifyGeneration();
   exposedChars+=text.length;

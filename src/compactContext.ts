@@ -3,6 +3,20 @@ import { previewWorkspace } from './contextPreview';
 import { excerptTokenCount } from './tokenBudget';
 import { readWorkspace } from './workspace';
 
+/** Link calls in a retrieved example to declarations present in the same source file. */
+function referencedDefinitions(excerpt:string,lines:string[]):[number,number,string][]{
+  const identifiers=new Set(Array.from(excerpt.matchAll(/\b\w+\(\s*([a-zA-Z_$][\w$]*)\s*[,)]/g),match=>match[1]));
+  const found:[number,number,string][]=[];
+  for(let i=0;i<lines.length && found.length<4;i++){
+    const name=lines[i]!.match(/^\s*(?:(?:export|async|default)\s+)*(?:def|function|class)\s+([\w$]+)/)?.[1];
+    if(!name || !identifiers.has(name))continue;
+    let start=i;
+    while(start>0 && start>i-6 && lines[start-1]!.trimStart().startsWith('@'))start--;
+    found.push([start,Math.min(lines.length,i+7),'definition of '+name+' referenced in the selected excerpt']);
+  }
+  return found;
+}
+
 /** Package real local excerpts with import and end-of-file anchors for a low-round-trip run. */
 export async function compactContext(root:string, task:string, chars:number, tokens:number, stopped:()=>boolean) {
   const budgetChars=Math.min(chars,14000), budgetTokens=Math.min(tokens,3200);
@@ -12,8 +26,10 @@ export async function compactContext(root:string, task:string, chars:number, tok
   for (const item of selected.items) {
     if(stopped()) return undefined;
     const lines=(await readWorkspace(root,item.path)).split('\n');
-    for(const [start,end,reason] of [[0,Math.min(12,lines.length),'file header'],[Math.max(0,lines.length-22),lines.length,'end of file']] as const) {
-      if(start+1<=(item.endLine??0) && end>=(item.startLine??1)) continue;
+    const windows:[number,number,string][]=[...referencedDefinitions(item.content,lines),
+      [0,Math.min(12,lines.length),'file header'],[Math.max(0,lines.length-22),lines.length,'end of file']];
+    for(const [start,end,reason] of windows) {
+      if(result.items.some(other=>other.path===item.path && start+1<=(other.endLine??0) && end>=(other.startLine??1))) continue;
       const content=lines.slice(start,end).join('\n'), cost=excerptTokenCount(content);
       if(!content.trim() || cost>budgetTokens-result.usedTokens || content.length>budgetChars-result.usedChars) continue;
       result.items.push({...item,startLine:start+1,endLine:end,reason,content,truncated:true});

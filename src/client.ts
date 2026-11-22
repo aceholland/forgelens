@@ -265,6 +265,7 @@ export class ForgeRunner {
     const readConnector:TrueForgeApi.McpServer={name:this.options.contextScout?.mcpName??'',preload:scout,
       enableTools:READ_TOOLS,requireApprovalForTools:[]};
     const parentConnector:TrueForgeApi.McpServer={name:this.options.mcpName,preload:this.options.preloadTools??false,
+      ...(this.options.sourceEvidence?{enableTools:['propose_changes','propose_edit','create_file','read_file','search_workspace','validate_candidate']}:{}),
       requireApprovalForTools:native?['@all']:APPROVAL_TOOLS};
     const promptInstructions=scout?contextScoutInstructions:native?this.options.instructions+'\n'+nativeScoutInstructions(readConnector.name,parentConnector.name):this.options.instructions;
     const contextMessages:TrueForgeApi.InitialUserMessage[]=[];

@@ -25,6 +25,16 @@ function fixture(initial: unknown[] = [created, answer, done]) {
     onEvent:e=>events.push(e),onApproval:async()=>true};
   return {sessions,calls,events,options};
 }
+test('compact mode keeps repository text in user-role context and exposes focused tools',async()=>{
+ const f=fixture();f.options.sourceEvidence='Untrusted repository excerpt for this test.';
+ assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');
+ const spec=f.calls.find(c=>c.method==='create')!.args[0].agent.spec;
+ assert.equal(spec.instructions,'Stage edits');
+ assert.deepEqual(spec.messages,[{type:'user.message',content:f.options.sourceEvidence}]);
+ assert.ok(spec.mcpServers[0].enableTools.includes('propose_changes'));
+ assert.ok(!spec.mcpServers[0].enableTools.includes('select_context'));
+ assert.deepEqual(f.calls.find(c=>c.method==='stream')!.args[1].input,[{type:'user.message',content:'Original task'}]);
+});
 const approvalEvents = [created,
   {id:'m1',type:'model.message',toolCalls:[{id:'c1',function:{arguments:JSON.stringify({mcp_server:'editor',tool_name:'propose_edit',input:{path:'a.ts',content:'new'}})},toolInfo:{type:'truefoundry-system',name:'call_tool'}}]},
   {id:'a1',type:'tool.approval_required',threadId:'th1',toolCalls:[{id:'c1',sourceEventId:'m1'}]},

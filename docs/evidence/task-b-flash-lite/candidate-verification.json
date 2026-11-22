@@ -13,8 +13,8 @@
     "tests/test_cli.py::TestConfig::test_config"
   ],
   "sensitiveKeysChecked": 16,
-  "cliTests": "59 passed in 0.59s",
-  "fullTests": "491 passed in 7.91s",
+  "cliTests": "59 passed in 0.99s",
+  "fullTests": "491 passed in 6.89s",
   "checks": {
     "appearsInGlobalHelp": true,
     "printsJSONObject": true,
@@ -23,6 +23,7 @@
     "includesFlaskDefaults": true,
     "documentedAlongsideBuiltins": true,
     "addedTestsExecuted": true,
+    "addedTestsFailAgainstUnchangedFlask": true,
     "existingTestNodesRetained": true,
     "flaskCliTestsPass": true,
     "fullFlaskSuitePasses": true

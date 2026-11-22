@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { ForgeRunner, registerMcp, type ForgeOptions } from './client';
 import { startMcp } from './mcp';
 import { confinedPath } from './workspace';
@@ -12,7 +13,7 @@ import { describeContext, previewWorkspace } from './contextPreview';
 import { compactContext, compactEvidence, compactInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
-import { LiveReviews, lensOffsets, reviewFeedback, type Decision } from './editorReview';
+import { LiveReviews, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
 import { candidateTestArgs, validateCandidate } from './candidateValidation';
 import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
@@ -227,12 +228,6 @@ export async function activate(context:vscode.ExtensionContext) {
    return reviewFeedback(reviewed);
   }finally{signal?.removeEventListener('abort',abort);live.end(request);if(active&&!cancellation&&!runExpired)phase=live.list().length?'Review requested':'Running';updateState();}
  }
- function reviewedCandidate(){
-  if(!liveMode || live.list().length || store.list().some(file=>file.hunks.some(h=>h.status==='pending'))){
-   throw new Error('Finish live hunk review before running candidate tests. With deferred review, apply and save your decisions and choose Verify saved changes.');
-  }
-  return store.list().map(p=>({path:p.path,original:p.original,content:renderProposal(p),isNew:p.kind==='create'})).filter(p=>p.content!==p.original);
- }
  async function fileIdentity(file:string){
   const stat=await lstat(file,{bigint:true});
   return stat.isFile()?`${stat.dev}:${stat.ino}:${stat.birthtimeNs}`:undefined;
@@ -362,7 +357,8 @@ export async function activate(context:vscode.ExtensionContext) {
     void panel?.webview.postMessage({type:'plan',files});
    },pending:currentOverlay,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
    propose:(file,content,base,signal)=>stage(file,content,base,false,signal),create:(file,content,signal)=>stage(file,content,'',true,signal),validate:async(tests,signal)=>{
-    const overlays=reviewedCandidate();
+    const snapshot=()=>reviewedCandidate(store.list(),liveMode,live.list().length>0);
+    const overlays=snapshot();
     if(!overlays.length)throw new Error('There are no staged changes to test.');
     const python=config.get<string>('pythonPath','python');
     const epoch=reviewEpoch;
@@ -370,6 +366,7 @@ export async function activate(context:vscode.ExtensionContext) {
      modal:true,detail:`Command: ${[python,...candidateTestArgs(tests)].map(arg=>/\s/.test(arg)?JSON.stringify(arg):arg).join(' ')}\nStaged files: ${overlays.map(p=>p.path).join(', ')}\nTests execute project code with your user permissions.`
     },'Run candidate tests');
     if(!choice||signal?.aborted||!active||cancellation||runExpired||modelSwitching||epoch!==reviewEpoch||root()!==folder)throw new Error('Candidate validation declined or expired.');
+    if(!isDeepStrictEqual(snapshot(),overlays))throw new Error('Reviewed files changed during confirmation. Request validation again.');
     if(commandAbort)throw new Error('Another verification process is already active.');
     const controller=new AbortController();commandAbort=controller;
     const abort=()=>controller.abort();signal?.addEventListener('abort',abort,{once:true});

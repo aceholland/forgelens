@@ -1,6 +1,15 @@
-import { decideHunk, type FileProposal, type ReviewHunk } from './review';
+import { decideHunk, renderProposal, type FileProposal, type ReviewHunk } from './review';
 
 export type Decision = 'accepted' | 'rejected';
+/** Pytest may see only completed live reviews, including just the accepted side of a mixed decision. */
+export function reviewedCandidate(files: FileProposal[], liveMode: boolean, hasLiveProposal: boolean) {
+  if (!liveMode || hasLiveProposal || files.some(file => file.hunks.some(hunk => hunk.status === 'pending'))) {
+    throw new Error('Finish live hunk review before running candidate tests. With deferred review, apply and save your decisions and choose Verify saved changes.');
+  }
+  return files.map(file => ({path: file.path, original: file.original, content: renderProposal(file), isNew: file.kind === 'create'}))
+    .filter(file => file.content !== file.original);
+}
+
 export interface LiveRequest {
   proposal: FileProposal;
   result: Promise<FileProposal>;

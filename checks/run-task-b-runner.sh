@@ -14,7 +14,10 @@ printf '{"forgeLens":"%s","flask":"22d924701a6ae2e4cd01e9a15bbaf3946094af65","tr
   "$(git rev-parse HEAD)" "$model_sha" > "$EVIDENCE_DIR/run.json"
 git clone --depth 1 --branch 3.1.3 https://github.com/pallets/flask.git "$FLASK_ROOT"
 test "$(git -C "$FLASK_ROOT" rev-parse HEAD)" = 22d924701a6ae2e4cd01e9a15bbaf3946094af65
-python -m pip install --disable-pip-version-check -e "$FLASK_ROOT" pytest==9.0.2 asgiref greenlet python-dotenv
+# The upstream lockfile versions for Python 3.12 keep this a Flask 3.1.3 check.
+python -m pip install --disable-pip-version-check -e "$FLASK_ROOT" pytest==9.0.2 \
+  asgiref==3.11.0 greenlet==3.3.1 python-dotenv==1.2.1 werkzeug==3.1.5 click==8.3.1 \
+  blinker==1.9.0 itsdangerous==2.2.0 jinja2==3.1.6 markupsafe==3.0.3
 npm install --prefix "$scratch/trueforge" --no-audit --no-fund @truefoundry/trueforge@0.185.1
 curl --fail --location --retry 3 --silent --show-error "$llama_url" -o "$scratch/llama.tar.gz"
 echo "$llama_sha  $scratch/llama.tar.gz" | sha256sum --check --status
@@ -49,10 +52,38 @@ export TRUEFORGE_URL=http://127.0.0.1:18930 TRUEFORGE_MODEL=ci-local/solver
 curl --fail --silent --show-error -o /dev/null -H 'Content-Type: application/json' \
   -d '{"manifest":{"type":"custom","name":"ci-local","base_url":"http://127.0.0.1:18931/v1","auth":{"api_key":"local-placeholder"},"models":[{"name":"solver","model_id":"gpt-oss-20b","properties":{"context_length":24576,"max_output_tokens":4096}}]}}' \
   "$TRUEFORGE_URL/api/v1/settings/model-providers"
-export CONTEXT_BUDGET=8000 FORGELENS_VALIDATE_STAGED=true DYNAMIC_SUB_AGENTS=false
+export CONTEXT_BUDGET=14000 FORGELENS_COMPACT_REQUESTS=true FORGELENS_VALIDATE_STAGED=true DYNAMIC_SUB_AGENTS=false
 export RUN_TIMEOUT_MS=4800000 MODEL_CALL_TIMEOUT_MS=900000 STREAM_IDLE_TIMEOUT_MS=900000
 model_status=0
 node --import tsx test-local-b.ts || model_status=$?
+if [[ "$model_status" != 0 && -f "$EVIDENCE_DIR/result.json" ]]; then
+  node --input-type=module <<'NODE'
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+const dir = process.env.EVIDENCE_DIR;
+const result = JSON.parse(await readFile(join(dir, 'result.json'), 'utf8'));
+const events = JSON.parse(await readFile(join(dir, 'events.json'), 'utf8'));
+const turn = events.find(event => event.type === 'turn.created')?.turnId;
+if (turn && result.sessionId) {
+  const url = new URL('/api/v1/sessions/' + encodeURIComponent(result.sessionId) + '/turns/' + encodeURIComponent(turn), process.env.TRUEFORGE_URL);
+  const response = await fetch(url);
+  if (response.ok) {
+    const message = (await response.json()).data?.state?.message ?? '';
+    const families = [
+      ['context_limit', /context.{0,40}(?:size|length|exceed|limit)|too many tokens|prompt is too long/i],
+      ['iteration_limit', /iteration.{0,40}(?:limit|exceed)|maximum.{0,40}iterations/i],
+      ['model_server_unavailable', /connection refused|ECONNRESET|ECONNREFUSED|fetch failed/i],
+      ['upstream_timeout', /timeout|timed out/i],
+      ['tool_schema', /tool.{0,40}(?:schema|invalid)|invalid.{0,40}tool/i],
+    ];
+    const failure = {category: families.find(([, pattern]) => pattern.test(message))?.[0] ?? 'other',
+      httpStatus: Number(message.match(/(?:HTTP|failed \()\s*([45]\d\d)/i)?.[1]) || null};
+    console.log('Free local model diagnostic', failure);
+    await writeFile(join(dir,'run.json'), JSON.stringify({...JSON.parse(await readFile(join(dir,'run.json'),'utf8')), failure},null,2));
+  }
+}
+NODE
+fi
 test -f "$EVIDENCE_DIR/proposals.json"
 python checks/run-task-b-verification.py "$FLASK_ROOT" "$EVIDENCE_DIR"
 test "$model_status" -eq 0
