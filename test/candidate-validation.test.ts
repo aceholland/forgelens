@@ -84,6 +84,7 @@ test('Node compares saved and accepted JavaScript with named TypeScript cases, l
   ].join('\n'));
   const result=await runCandidateTests(root,[{path:'value.cjs',original,content}],[file],python);
   assert.equal(result.exitCode,1,result.feedback);
+  assert.ok(result.feedback.split('\n').includes('Baseline exit 1 | Candidate exit 1'));
   assert.deepEqual(result.comparison,{runner:'node:test',baselineExitCode:1,candidateExitCode:1,
     newlyFailing:[file+'::old'],alreadyFailing:[file+'::legacy'],nowPassing:[file+'::new'],candidateOnlyFailures:[]});
   assert.equal(await readFile(path.join(root,'value.cjs'),'utf8'),original);

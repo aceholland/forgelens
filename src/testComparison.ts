@@ -59,7 +59,7 @@ export function compareTestRuns(runner: TestRunner, baseline: TestRun | undefine
 }
 
 export function describeComparison(report:TestComparison) {
-  const lines=['Baseline exit '+(report.baselineExitCode??'unavailable')+' Â· Candidate exit '+report.candidateExitCode];
+  const lines=['Baseline exit '+(report.baselineExitCode??'unavailable')+' | Candidate exit '+report.candidateExitCode];
   if (report.note) lines.push(report.note);
   for (const [label, list] of [['Newly failing',report.newlyFailing],['Already failing',report.alreadyFailing],
     ['Now passing',report.nowPassing],['Failed only in candidate selection',report.candidateOnlyFailures]] as const) {

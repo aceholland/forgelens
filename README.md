@@ -4,6 +4,18 @@ ForgeLens is a desktop VS Code extension for making reviewed changes across sour
 
 [Install ForgeLens 0.5.0](https://github.com/aceholland/forgelens/releases/download/v0.5.0/forgelens-0.5.0.vsix) · [Narrated A/B/C demo](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-demo.mp4) · [Technical write-up](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-writeup.pdf) · [Verification files](https://github.com/aceholland/forgelens/releases/tag/v0.5.0)
 
+### Verified on the Windows laptop
+
+**A — inline edit.** Free hosted Nemotron received one instruction. Its first visible diff appeared in 42.6 seconds and correctly documented empty and unset values, all five named false values, and the result for other inputs. The saved change passed 35 helper tests and 490 Flask tests. Undo restored all 235 tracked files.
+
+**B — path-free agent request.** Free hosted ERNIE 5.5 Flash Preview changed the CLI, its tests and documentation from one instruction with zero operator answers. The original TrueForge turn completed in 5 minutes 16 seconds and the provider reported $0. The saved patch passed 64 CLI tests, 496 Flask tests and 16 independent masking cases.
+
+**C — failure recovery.** After an unreachable endpoint and an authentication error, ForgeLens switched to the local model. The editor remained responsive. After Stop all 235 tracked files matched their original hashes.
+
+[Windows screenshots and checks](docs/evidence/v050/README.md) · [Cross-platform CI](https://github.com/aceholland/forgelens/actions/runs/45044139432) · [Download the patches and run receipts](https://github.com/aceholland/forgelens/releases/download/v0.5.0/ForgeLens-0.5.0-evidence.zip)
+
+The daily VS Code profile on this laptop uses free local Qwen on D. The filmed A and B runs used separate zero-price hosted models. An earlier local A run passed the behavioral tests but produced a contradictory sentence in its docstring. Earlier hosted B attempts hit rate limits or returned incomplete edits. The evidence archive records those attempts.
+
 ### What’s new in 0.5.0
 
 | When you need to… | Use |
