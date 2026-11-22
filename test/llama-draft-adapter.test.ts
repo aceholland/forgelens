@@ -66,11 +66,37 @@ test('local adapter selects the single native proposal, streams raw model bytes 
     assert.equal(bodies.at(-1),raw);
   }
   assert.deepEqual(audit.slice(2),untouched.map((_,i)=>({event:'llama_adapter_request',request:i+3,forcedProposalToolChoice:false})));
-  assert.equal((await post(url,'x'.repeat(2*1024*1024+1))).status,413);
   assert.equal((await post(url,'{')).status,400);
   assert.equal((await post(url,'{}',{headers:{'content-type':'application/json',origin:'https://example.com'}})).status,403);
   assert.equal((await fetch(url+'/unexpected')).status,404);
   assert.equal(bodies.length,untouched.length+2);
+});
+
+test('oversized concurrent uploads receive complete 413 replies for fixed and chunked bodies', async t=>{
+  const {startAdapter}=await import(new URL('../scripts/llama-draft-adapter.mjs',import.meta.url).href);
+  let forwarded=0;
+  const upstream=createServer((_req,res)=>{forwarded++;res.end();});
+  upstream.listen(0,'127.0.0.1');await once(upstream,'listening');
+  const adapter:Server=startAdapter(0,port(upstream));
+  await once(adapter,'listening');
+  t.after(()=>{adapter.closeAllConnections();upstream.closeAllConnections();adapter.close();upstream.close();});
+  const url='http://127.0.0.1:'+port(adapter)+endpoint;
+  const block=new Uint8Array(64*1024);
+  const fixed=new Uint8Array(3*1024*1024);
+  await Promise.all(Array.from({length:8},async (_,i)=>{
+    let sent=0;
+    const body=i%2 ? new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent++ < 48) controller.enqueue(block); else controller.close();
+      },
+    }) : fixed;
+    const request:RequestInit & {duplex:'half'}={method:'POST',body,duplex:'half',
+      headers:{'content-type':'application/json',connection:'close'}};
+    const response=await fetch(url,request);
+    assert.equal(response.status,413);
+    assert.deepEqual(await response.json(),{error:{message:'Request too large.'}});
+  }));
+  assert.equal(forwarded,0);
 });
 
 test('closing a streaming client closes the outstanding upstream inference', async t=>{

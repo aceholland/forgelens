@@ -1,6 +1,8 @@
-# Live hunk review in Windows VS Code
+# Live hunk review in desktop VS Code
 
 On November 22, 2026, ForgeLens 0.3.0 completed a review run in Windows VS Code 1.147.0 against a local TrueForge server. A deterministic model issued a fixed sequence of tool calls so the check could compare its next input with the user's exact decisions. This supplemental recording covers the editor workflow. The competition submission has its own Task B evidence.
+
+The portable two-file check also ran in the installed VSIX on Linux x64 and macOS arm64 with VS Code 1.147.0. Both instances accepted two hunks, rejected one and passed the two requested tests before applying anything. The local provider received those decisions and the pytest result. Both original file hashes matched. [Linux job](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134701) · [macOS job](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134793)
 
 ## Follow the review
 

@@ -129,13 +129,14 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. [Installation workflow](.github/workflows/desktop-preview.yml) · [Verified source-build matrix](https://github.com/aceholland/forgelens/actions/runs/45000547014)
+The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. On stable macOS and Linux, the installed extension also connected to real TrueForge with a scripted local model. Both editors accepted two hunks, rejected one, passed two tests in the staged copy and returned the results to the model. The original files kept their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Cross-platform results](https://github.com/aceholland/forgelens/actions/runs/45004531362) · [Released package verification](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-package-verification.json)
 
 | Editor host | Coverage |
 | --- | --- |
 | Windows x64 stable | Context preview, native picker, recorded live review and staged pytest repair |
-| macOS arm64 stable | Context preview and native picker |
-| Linux x64 stable and 1.101.0 | Context preview and native picker |
+| macOS arm64 stable | Context preview, native picker, live hunk decisions, staged pytest and model feedback |
+| Linux x64 stable | Context preview, native picker, live hunk decisions, staged pytest and model feedback |
+| Linux x64 1.101.0 | Installation, activation, context preview and native picker |
 
 The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot run this build. Full model-driven runs on Remote SSH, WSL, Dev Containers, Codespaces and editor forks remain unverified. [Windows review and repair](docs/live-review-check.md)
 

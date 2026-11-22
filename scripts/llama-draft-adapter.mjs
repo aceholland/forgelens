@@ -27,7 +27,8 @@ function prepareBody(bytes) {
 }
 
 function reject(response, status, message) {
-  response.writeHead(status, {'content-type':'application/json', connection:'close'});
+  response.req.resume();
+  response.writeHead(status, {'content-type':'application/json'});
   response.end(JSON.stringify({error:{message}}));
 }
 
@@ -43,15 +44,19 @@ export function startAdapter(port, upstreamPort, onRequest) {
     let bytes;
     if (!models) {
       if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') return reject(res,415,'JSON required.');
-      if (Number(req.headers['content-length']) > maxBytes) return reject(res,413,'Request too large.');
       const parts = [];
       let size = 0;
+      let oversized = Number(req.headers['content-length']) > maxBytes;
       try {
-        for await (const part of req.iterator({destroyOnReturn:false})) {
+        // Drain a rejected upload before replying. Closing a socket with unread data
+        // can reset the Windows client before it receives the HTTP status.
+        for await (const part of req) {
+          if (oversized) continue;
           size += part.length;
-          if (size > maxBytes) { req.resume(); return reject(res,413,'Request too large.'); }
-          parts.push(part);
+          if (size > maxBytes) { oversized = true; parts.length = 0; }
+          else parts.push(part);
         }
+        if (oversized) return reject(res,413,'Request too large.');
         const prepared = prepareBody(Buffer.concat(parts, size));
         bytes = prepared.bytes;
         onRequest?.({event:'llama_adapter_request', request:++sequence, forcedProposalToolChoice:prepared.forced});
