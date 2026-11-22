@@ -129,6 +129,12 @@ export const draftInstructions = [
   'Reviewed changes to pytest files offer to run those tests. You may set tests to retrieved paths, or [] for the full suite. If a check fails, repair the relevant files and request the same tests again. Respect all hunk decisions and report the actual validation outcome.',
 ].join('\n');
 
+/** Keep each generation small while retaining the model's complete plan. */
+export const sequentialDraftInstructions = draftInstructions + '\n' + [
+  'Use the sequential file plan. On the first propose_changes call, set plan to your complete ordered list of {path, reason} and files to the edits for its first file only. Cover every deliverable explicitly requested by the user in the file plan. If the retrieved files cannot support a deliverable, report it as incomplete.',
+  'For each following call omit plan and propose one file. Follow the reviewed receipt for the next path or a correction. Requested tests run when the full plan has been reviewed. If review stops, respect the decisions and report what remains. Finish with the actual review and test outcomes.',
+].join('\n');
+
 /** Give a failed edit a small window from its own current file, including staged changes. */
 export function anchorExcerpt(current:string,anchor:string,fallbackLine:number) {
   const lines=current.split(/\r?\n/);

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { isJSONRPCRequest, isJSONRPCResultResponse } from '@modelcontextprotocol/sdk/types.js';
+import { isJSONRPCErrorResponse, isJSONRPCRequest, isJSONRPCResultResponse } from '@modelcontextprotocol/sdk/types.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
@@ -11,6 +11,9 @@ import { confinedPath, listWorkspace, readWorkspace } from './workspace';
 import { isSafeContextPath, selectContext, type ContextSelection } from './context';
 import { AnchorMismatch, resolveAgentProposal } from './patch';
 import { anchorExcerpt, draftInsertionOffsets } from './compactContext';
+import type { SequentialDraft } from './sequentialDraft';
+import { waitForDraftInterval } from './draftPacing';
+import { guardPythonDraftInsertions } from './pythonDraft';
 
 const exactEdit = z.object({
  oldText:z.string().min(1).max(250000).describe('A unique literal from the current file to replace.'),
@@ -34,6 +37,9 @@ export interface EditorBridge {
  /** Actual local discovery supplied to the model as structured source excerpts. */
  compactContext?:ContextSelection;
  draftFromContext?:boolean;
+ sequentialDraft?:SequentialDraft;
+ draftModelIntervalSeconds?:number;
+ onDraftWait?(remainingMs:number):void;
  /** The host can offer pytest for newly reviewed test changes. Deferred review leaves this disabled. */
  autoValidateReviewedTests?:boolean;
  pending?(path:string):string|undefined;
@@ -63,6 +69,12 @@ export async function startMcp(bridge: EditorBridge) {
  const preselected=!readOnly && Boolean(bridge.compactContext?.items.length);
  if(bridge.draftFromContext&&!preselected)throw new Error('Draft from context requires a nonempty editable source selection. Try Run agent.');
  const draftPaths=bridge.draftFromContext?new Set(bridge.compactContext!.items.map(item=>item.path)):undefined;
+ const sequential=draftPaths ? bridge.sequentialDraft : undefined;
+ const seconds=bridge.draftModelIntervalSeconds??0;
+ const draftIntervalMs=draftPaths && Number.isInteger(seconds) && seconds>0 ? Math.min(seconds,90)*1000 : 0;
+ let sequentialBusy=false;
+ const draftPath = draftPaths ? z.enum([...draftPaths],{error:'Drafts can edit only retrieved files. Use Run agent for additional paths.'}) : z.string().min(1).max(400);
+ const reason = z.string().trim().min(1).max(400);
  const draftRoot=draftPaths?await realpath(bridge.root):undefined;
  let generation=0,discoveryComplete=preselected;
  const explorationTools=new Set(['find_relevant_files','select_context','read_file','search_workspace']);
@@ -212,14 +224,16 @@ export async function startMcp(bridge: EditorBridge) {
   }
   if(!readOnly){
   if(preselected)mcp.registerTool('propose_changes',{
-   description:'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
-   inputSchema:{files:z.array(z.object({path:draftPaths?z.enum([...draftPaths],{error:'Drafts can edit only retrieved files. Use Run agent for additional paths.'}):z.string().min(1).max(400),reason:z.string().trim().min(1).max(400),
-    edits:z.array(draftPaths ? draftEdit : exactEdit).min(1).max(20)})).min(1).max(12),
+   description:sequential ? 'Include your ordered file plan on the first call. Propose exact edits for one planned file per call. Tests run on the reviewed candidate after the last file.' : 'Record a file plan and review exact edits to several existing files in one request. Supply a reason per file. Optional tests run on the reviewed candidate with separate user approval. A rejected hunk is never applied.',
+   inputSchema:{...(sequential?{plan:z.array(z.object({path:draftPath,reason})).min(1).max(12).optional()}:{}),
+    files:z.array(z.object({path:draftPath,reason,
+    edits:z.array(draftPaths ? draftEdit : exactEdit).min(1).max(20)})).min(1).max(sequential?1:12),
     tests:z.array(z.string().min(1).max(400)).max(20).optional()}
-  },async({files,tests},extra)=>{
+  },async({files,tests,plan},extra)=>{
    guard();
    if(tests && !bridge.validate)throw new Error('Candidate testing is unavailable in this workspace.');
    if(draftPaths&&tests?.some(test=>!draftPaths.has(test.split('::')[0]!)))throw new Error('Choose a retrieved test path, request the full suite with [], or use Run agent.');
+   if(sequential?.begin(files[0]!.path,plan) && plan) bridge.onPlan?.(plan);
    const targets=new Set<string>();
    const prepared=[];
    const problems:string[]=[];
@@ -234,6 +248,7 @@ export async function startMcp(bridge: EditorBridge) {
     try{
      const offsets = draftPaths && file.edits.some(edit=>'beforeLine' in edit)
       ? draftInsertionOffsets(bridge.compactContext!,file.path,base) : undefined;
+     if(offsets)guardPythonDraftInsertions(file.path,base,file.edits,offsets);
      prepared.push({path:file.path,base,content:resolveAgentProposal(base,file,offsets)});
     }
     catch(error){
@@ -256,17 +271,20 @@ export async function startMcp(bridge: EditorBridge) {
    }
    guard();extra.signal.throwIfAborted();
    if(problems.length)throw new Error('No file in this batch was staged.\n'+problems.join('\n'));
-   bridge.onPlan?.(files.map(({path,reason})=>({path,reason})));
+   if(!sequential)bridge.onPlan?.(files.map(({path,reason})=>({path,reason})));
    report('propose_changes','',prepared.length+' files');
    const results:string[]=[];
    for (const file of prepared) {
     guard();extra.signal.throwIfAborted();
+    if(sequential && file.content===file.base)throw new Error('The proposal does not change this file.');
     try {
      const feedback=await bridge.propose(file.path,file.content,file.base,extra.signal);
      results.push(file.path+' — '+feedback);
+     sequential?.reviewed(file.path,file.content,bridge.pending?.(file.path));
      if(bridge.pending?.(file.path)!==undefined)hasProposed=true;
     } catch(error) {
      guard();extra.signal.throwIfAborted();
+     if(sequential)sequential.stopped='Review did not finish for '+file.path+'. Check its staged hunks before starting another draft.';
      return {...show([...results,file.path+' stopped: '+(error instanceof Error?error.message:'Review failed.'),
       'Later files were not proposed. Read the reviewed overlay before continuing.'].join('\n')),isError:true};
     }
@@ -277,10 +295,19 @@ export async function startMcp(bridge: EditorBridge) {
        const overlay=bridge.pending?.(file.path);
        return overlay!==undefined && overlay!==file.base && /^(?:test_.*|.*_test)\.py$/.test(path.posix.basename(file.path));
       }).map(file=>file.path) : [];
-   const testsToRun = tests ?? (reviewedTests.length ? reviewedTests : undefined);
+   const requestedTests = tests ?? (reviewedTests.length ? reviewedTests : undefined);
+   sequential?.requestTests(requestedTests);
+   const testsToRun = sequential ? sequential.finalTests : requestedTests;
    if(testsToRun) {
-    try { results.push(await bridge.validate!(testsToRun,extra.signal)); }
-    catch(error) { results.push('Candidate validation did not finish: '+(error instanceof Error?error.message:'unknown error')); }
+    try {
+     const result=await bridge.validate!(testsToRun,extra.signal);
+     results.push(result);
+     sequential?.validation(result);
+    } catch(error) {
+     const reason='Candidate validation did not finish: '+(error instanceof Error?error.message:'unknown error');
+     results.push(reason);
+     if(sequential)sequential.stopped=reason;
+    }
    }
    guard();return show(results.join('\n'));
   });
@@ -327,9 +354,29 @@ export async function startMcp(bridge: EditorBridge) {
    await mcp.connect(transport);
    const dispatch=transport.onmessage!;
    const indices=new Map<string|number,{tool:string;used:number;generation:number}>();
+   let sequentialId:string|number|undefined;
+   const starts=new Map<string|number,number>();
+   const disconnected=new AbortController();
    const send=transport.send.bind(transport);
-   transport.send=(message,options)=>{
+   transport.send=async(message,options)=>{
+    if(draftIntervalMs && (isJSONRPCResultResponse(message)||isJSONRPCErrorResponse(message)) && message.id!=null){
+     const start=starts.get(message.id);
+     if(start!==undefined){
+      starts.delete(message.id);
+      const ready=await waitForDraftInterval(start,draftIntervalMs,()=>!closed && bridge.active(),disconnected.signal,bridge.onDraftWait);
+      if(!ready){res.destroy();return;}
+     }
+    }
     if(isJSONRPCResultResponse(message)){
+     if(sequential && sequentialId===message.id){
+      sequentialId=undefined;
+      sequentialBusy=false;
+      if(message.result.isError)sequential.recordFailure();
+      const remaining=sequential.incomplete();
+      const state=sequential.stopped?'stopped':remaining?'continue':'complete';
+      const content=message.result.content as {type:string;text:string}[];
+      message={...message,result:{...message.result,content:[...content,{type:'text',text:(remaining??'Report the actual review and test outcomes.')+'\nForgeLens sequential draft: '+state}]}};
+     }
      const entry=indices.get(message.id);indices.delete(message.id);
      if(entry && message.result.isError===true){
       const parts=message.result.content as {type:string;text?:string}[]|undefined;
@@ -345,7 +392,14 @@ export async function startMcp(bridge: EditorBridge) {
     if(!isJSONRPCRequest(message)||message.method!=='tools/call')return dispatch(message,extra);
     const tool=message.params?.name;
     if(typeof tool!=='string')return dispatch(message,extra);
+    if(draftIntervalMs && tool==='propose_changes')starts.set(message.id,performance.now());
     bridge.onToolRequest?.(tool);
+    if(sequential && tool==='propose_changes'){
+     if(sequential.stopped||sequentialBusy)
+      return transport.send({jsonrpc:'2.0',id:message.id,result:{...show(sequential.stopped??'A file review is in progress. Wait for its receipt.'),isError:true}}).catch(()=>{});
+     sequentialBusy=true;
+     sequentialId=message.id;
+    }
     if(draftPaths&&tool!=='propose_changes'){
      return transport.send({jsonrpc:'2.0',id:message.id,result:{...show('Draft from context offers propose_changes only. Use Run agent for other workspace tools.'),isError:true}}).catch(()=>{});
     }
@@ -362,7 +416,11 @@ export async function startMcp(bridge: EditorBridge) {
      attempt.run({used,generation},()=>dispatch(message,extra));
     }else attempt.run({used:calls,generation},()=>dispatch(message,extra));
    };
-   res.on('close',()=>{transports.delete(transport);void transport.close();void mcp.close();});await transport.handleRequest(req,res);}
+   res.on('close',()=>{
+    disconnected.abort();
+    if(sequential && sequentialId!==undefined){sequentialBusy=false;sequential.stopped='The file review connection closed before a receipt was delivered.';}
+    transports.delete(transport);void transport.close();void mcp.close();
+   });await transport.handleRequest(req,res);}
   catch {if(!res.headersSent)res.writeHead(500).end('MCP request failed');}
  });
  await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});

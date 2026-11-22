@@ -1,4 +1,5 @@
 name: Task B live model
+run-name: Task B · ${{ inputs.model }} · ${{ inputs.sequential_draft && 'sequential draft' || 'default' }}
 
 on:
   workflow_dispatch:
@@ -18,6 +19,10 @@ on:
         description: Ask the 7B draft model to use the native edit tool on its first request
         type: boolean
         default: false
+      sequential_draft:
+        description: Ask a desktop model to plan its files and propose one file per call
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,6 +35,7 @@ jobs:
     env:
       SOLVER_MODEL: ${{ inputs.model }}
       REQUEST_FIRST_DRAFT_TOOL: ${{ inputs.request_first_draft_tool && 'true' || 'false' }}
+      FORGELENS_SEQUENTIAL_DRAFT: ${{ inputs.sequential_draft && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
         with:

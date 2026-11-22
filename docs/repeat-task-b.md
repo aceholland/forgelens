@@ -21,6 +21,10 @@ flowchart LR
 
 **Run agent** can also work from a single request. Turn off **ForgeLens › Ask Questions**. Enable **Compact Requests** to provide the initial source excerpts while allowing the model to read more files as it works. Both modes retain hunk review and test approvals.
 
+With **Sequential Draft** enabled, the model names the files needed for the request and sends one file’s edits per call. The editor keeps accepted hunks while the model works on the remaining files. A numbered Python insertion that would place a new module-level function inside an existing block returns a correction with a visible source anchor when one is available. After a temporary loss of the event stream, ForgeLens checks the original TrueForge turn and can rejoin it using its last event ID. [Proposal checks](../test/python-draft.test.ts) · [Native turn recovery](../src/client.ts)
+
+If your provider limits input tokens per minute, set **ForgeLens › Draft Model Interval Seconds** to `70` for a one-minute window. Review opens immediately. Time spent reviewing and running tests counts toward the interval before the tool sends its result back to TrueForge. The default is zero. Keep the TrueForge MCP request timeout long enough for your review and this wait. The provider still enforces its quotas. [Pacing and cancellation checks](../test/draft-pacing.test.ts)
+
 ## Reproduce the recorded evaluation
 
 The [desktop driver](../checks/task-b-desktop-launch.cjs) opens a separate editor profile and clones the pinned revision into a **new** evidence directory. It enters the official request once and clicks review controls. A clarification ends the attempt. After saving, it runs the [terminal checks](../checks/task-b-desktop-grade.py) and then applies the resulting patch to a second clean checkout for [independent grading](../checks/run-task-b-verification.py).

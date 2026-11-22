@@ -1,4 +1,5 @@
 import { createForgeTransport } from './transport';
+import type { SequentialDraft } from './sequentialDraft';
 import { TrueForge, TrueForgeApi, isEventDelta, mergeEventDelta } from '@truefoundry/trueforge-sdk';
 import { contextScoutInstructions, nativeScoutInstructions } from './instructions';
 
@@ -14,6 +15,7 @@ export interface ForgeOptions {
   sourceEvidence?: string;
   /** Draft from the supplied context with one preloaded, review-required editor tool. */
   draftFromContext?: boolean;
+  sequentialDraft?: SequentialDraft;
   baseUrl: string; model: string; fallbackModel?: string; preloadTools?: boolean; reasoningEffort?: string; dynamicSubAgents?: boolean; mcpName: string; instructions: string;
   onEvent(event: ForgeEvent): void;
   onApproval(details: ApprovalDetails): Promise<ApprovalDecision>;
@@ -42,6 +44,13 @@ const APPROVAL_TOOLS = ['propose_edit','propose_write','propose_changes','create
 const RETRY_DELAYS_MS = [800,1600];
 class ModelCallTimeout extends Error {}
 class RetryExceedsDeadline extends Error {}
+export class TurnStreamInterrupted extends Error {
+  constructor(readonly sessionId: string, readonly turnId: string, status?: string) {
+    super('TrueForge stream ended without a terminal event. ' +
+      (status ? `Last confirmed native turn state: ${status}. ` : '') +
+      `Check session ${sessionId} before retrying.`);
+  }
+}
 export interface RunResult { sessionId: string; status: 'done' | 'cancelled' | 'error' }
 
 function isPermanentRejection(message:string):boolean {
@@ -344,11 +353,12 @@ export class ForgeRunner {
     }
     this.sessionId = sessionId;
     if(scout)this.options.onEvent({type:'client.status',message:`Read-only context scout session: ${sessionId}.`});
-    let stream = await this.sdk.sessions.createTurnStream(sessionId, {
+    let stream: AsyncIterable<TrueForgeApi.TurnStreamingEvent> | TrueForgeApi.TurnStreamingEvent[] = await this.sdk.sessions.createTurnStream(sessionId, {
       input: [{ type: 'user.message', content: prompt }],
     }, { abortSignal: attemptSignal, maxRetries: 0 });
     const events = new Map<string, TrueForgeApi.TurnStreamingEvent>();
     let turnId = ''; let lastEventId = '';
+    let streamRecoveries = 0;
     let sawOutputOrToolActivity = false;
     let nativeChildren=0;
     const questions = new Map<string, TrueForgeApi.ToolResponseRequiredEvent>();
@@ -357,6 +367,12 @@ export class ForgeRunner {
       let paused = false;
       for await (const event of stream) {
         if (this.cancelled || attemptSignal.aborted) break;
+        const sequence = draft ? this.options.sequentialDraft : undefined;
+        if (sequence?.stopped || (event.type==='turn.done' && event.state.status==='done' && sequence?.incomplete())) {
+          this.options.onEvent({type:'client.status',message:'Draft incomplete. '+sequence!.incomplete()});
+          if(event.type!=='turn.done')await this.cancel();
+          return {sessionId,status:'error'};
+        }
         observe(event);
         lastEventId = event.id;
         if (isEventDelta(event)) {
@@ -410,7 +426,33 @@ export class ForgeRunner {
         if (event.type === 'turn.update' && event.state.status === 'paused') { paused = true; break; }
       }
       if (this.cancelled || attemptSignal.aborted) break;
-      if (!paused) throw new Error('TrueForge stream ended without a terminal event. Check the session before retrying.');
+      if (!paused) {
+        // An SSE subscription can expire while the same native turn keeps running.
+        // Only read its state/events here. Never repeat a turn or an approval POST.
+        if (!turnId || !lastEventId || ++streamRecoveries > 8) throw new TurnStreamInterrupted(sessionId,turnId);
+        let status: string | undefined;
+        try {
+          const quick = {abortSignal:attemptSignal,timeoutInSeconds:5,maxRetries:0};
+          const {data:turn} = await this.sdk.sessions.getTurn(sessionId,turnId,quick);
+          if (turn.id !== turnId || turn.sessionId !== sessionId) throw new Error('Turn identity mismatch');
+          status = turn.state.status;
+          if (status === 'done' || status === 'error' || status === 'cancelled') {
+            const page = await this.sdk.sessions.listTurnEvents(sessionId,turnId,{order:'desc',limit:1},quick);
+            const terminal = page.data[0];
+            if (terminal?.type !== 'turn.done' || terminal.state.status !== status) throw new Error('Terminal event unavailable');
+            stream = [terminal];
+          } else {
+            // A message may contain only a prefix of its arguments when the stream
+            // closes. Replay its full snapshot before using it for an approval.
+            const cursor = events.get(lastEventId)?.type === 'model.message' ? {fromEventId:lastEventId} : {afterEventId:lastEventId};
+            stream = await this.sdk.sessions.subscribeToTurn(sessionId,turnId,cursor,{abortSignal:attemptSignal,maxRetries:0});
+          }
+        } catch {
+          if (this.cancelled || attemptSignal.aborted) break;
+          throw new TurnStreamInterrupted(sessionId,turnId,status);
+        }
+        continue;
+      }
       if(scout)throw new Error('Read-only scout requested approval or interaction. No response was sent.');
       if (!turnId || (!pending.size && !questions.size)) throw new Error('TrueForge paused for an unsupported input. Open its session to continue.');
       if (draft && questions.size) {
@@ -461,6 +503,10 @@ export class ForgeRunner {
         }else decision=await this.waitForApproval(details,attemptSignal);
         if(attemptSignal.aborted)break;
         const allowed = typeof decision === 'boolean' ? decision : decision.allowed;
+        if (!allowed && draft && this.options.sequentialDraft && details.name==='propose_changes') {
+          if (decision===false) this.options.sequentialDraft.stopped='The reviewer declined the file proposal.';
+          else this.options.sequentialDraft.recordFailure();
+        }
         const reason = typeof decision === 'boolean' ? 'Rejected by the editor user.' : decision.reason;
         if (!allowed) this.options.onEvent({ type: 'client.status', message: reason });
         if (this.cancelled || attemptSignal.aborted) break;

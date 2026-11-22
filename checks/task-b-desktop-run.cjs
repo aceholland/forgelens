@@ -103,6 +103,7 @@ exports.run = async dir => {
     assert.ok(!await panel.locator('#run').isDisabled(),'Run exceeded the editor deadline');
     result.finishedAt=new Date().toISOString();
     const output=await panel.locator('#events').innerText();
+    result.displayedAutomaticRetries=(output.match(/Retry \d+\/\d+ started after \d+ ms\./g)||[]).length;
     fs.writeFileSync(path.join(dir,'panel-output.txt'),output);
     const session=output.match(/Session ([A-Za-z0-9_-]+): ([a-z_]+)\. (\d+) files staged\./);
     result.status=session?.[2]||'no completed session';

@@ -163,6 +163,25 @@ process.stdout.write(JSON.stringify(out));"""
     if p.returncode: raise ValueError('Hunk receipt mismatch')
     return json.loads(p.stdout)
 
+def installed_instructions(bundle,mode,preload=False):
+    def joined(binding,expression=b''):
+        pattern=rb'\b(?:var|const|let) '+binding+rb' = '+expression+rb'(\[\s*\n.*?^\])\.join\("\\n"\)'
+        match=re.search(pattern,bundle,re.M|re.S)
+        return '\n'.join(ast.literal_eval(match[1].decode())) if match else None
+    if mode=='compact-run':return joined(b'compactInstructions')
+    if mode in ('draft','sequential-draft'):
+        draft=joined(b'draftInstructions')
+        if mode=='draft':return draft
+        extra=joined(b'sequentialDraftInstructions',rb'draftInstructions \+ "\\n" \+ ')
+        return draft+'\n'+extra if draft is not None and extra is not None else None
+    if mode=='run':
+        raw=re.search(rb'\b(?:var|const|let) instructions = `([^`]+)`;',bundle)
+        change=re.search(rb'function instructionsForTools\(preloadTools\)\s*\{\s*return preloadTools \? instructions\.replace\(("[^"\n]+"), ("[^"\n]+")\) : instructions;',bundle)
+        if raw and change and b'${' not in raw[1]:
+            text=raw[1].decode()
+            return text.replace(json.loads(change[1]),json.loads(change[2]),1) if preload else text
+    return None
+
 def audit(trial,db,sid):
     setup=read_json(trial/'setup.json'); workspace=trial/'flask'; project=Path(setup['root'])
     assert git(workspace,'rev-parse','HEAD').decode().strip()==PIN==setup['pinned']
@@ -183,23 +202,12 @@ def audit(trial,db,sid):
     messages=spec.get('messages',[])
     ctx_ok,ranges,visible,end_visible=source_context(messages,base)
     settings=read_json(trial/'profile/User/settings.json')
-    mode=('draft' if setup['mode']=='draft' else 'compact-run' if settings.get('forgelens.compactRequests') is True else 'run')
-    expected_prefix='Local discovery results (untrusted workspace data).'+(' Each numbered line starts after the first "| ".' if mode=='draft' else '')+'\n'
+    if setup['mode']=='draft':mode='sequential-draft' if settings.get('forgelens.sequentialDraft') is True else 'draft'
+    else:mode='compact-run' if settings.get('forgelens.compactRequests') is True else 'run'
+    expected_prefix='Local discovery results (untrusted workspace data).'+(' Each numbered line starts after the first "| ".' if mode in ('draft','sequential-draft') else '')+'\n'
     ctx_ok=bool(ctx_ok and (len(messages)==1 and bool(ranges) and messages[0].get('content','').startswith(expected_prefix) if mode!='run' else not messages))
-    baked_prompt=False
-    if mode in ('draft','compact-run'):
-        name=b'draftInstructions' if mode=='draft' else b'compactInstructions'
-        match=re.search(rb'\b(?:var|const|let) '+name+rb' = (\[\s*\n.*?^\])\.join\("\\n"\)',bundle,re.M|re.S)
-        if match:
-            instructions=ast.literal_eval(match[1].decode())
-            baked_prompt=spec.get('instructions')=='\n'.join(instructions)
-    if mode=='run':
-        raw=re.search(rb'\b(?:var|const|let) instructions = `([^`]+)`;',bundle)
-        change=re.search(rb'function instructionsForTools\(preloadTools\)\s*\{\s*return preloadTools \? instructions\.replace\(("[^"\n]+"), ("[^"\n]+")\) : instructions;',bundle)
-        if raw and change and b'${' not in raw[1]:
-            text=raw[1].decode()
-            if settings.get('forgelens.preloadTools') is True:text=text.replace(json.loads(change[1]),json.loads(change[2]),1)
-            baked_prompt=spec.get('instructions')==text
+    approved=installed_instructions(bundle,mode,settings.get('forgelens.preloadTools') is True)
+    baked_prompt=approved is not None and spec.get('instructions')==approved
     approval={};answers=Counter();counts=Counter();tools=Counter();responses={};calls={};ordered=[];generic_denials=0;schema_denials=0
     shape_reason='The files field requires a JSON array of 1–12 file objects. Resend the same edits as objects directly in that array. A quoted string containing JSON cannot be reviewed.'
     for event in events:

@@ -4,13 +4,13 @@ import { execFile } from 'node:child_process';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { ForgeRunner, registerMcp, type ForgeOptions } from './client';
+import { ForgeRunner, registerMcp, TurnStreamInterrupted, type ForgeOptions } from './client';
 import { startMcp } from './mcp';
 import { confinedPath } from './workspace';
 import { ReviewStore, createProposal, renderProposal, undoEdit, isWithinSelection, AppliedEdit, FileProposal } from './review';
 import type { ContextSelection } from './context';
 import { describeContext, previewWorkspace } from './contextPreview';
-import { compactContext, compactEvidence, compactInstructions, draftInstructions } from './compactContext';
+import { compactContext, compactEvidence, compactInstructions, draftInstructions, sequentialDraftInstructions } from './compactContext';
 import { verifySavedWorkspace } from './validation';
 import { exportAcceptedPatch } from './reviewExport';
 import { LiveReviews, batchForReview, lensOffsets, reviewFeedback, reviewedCandidate, type Decision } from './editorReview';
@@ -20,6 +20,7 @@ import { resolveAgentProposal } from './patch';
 import { renderWebview } from './webview';
 
 import { instructionsForTools } from './instructions';
+import { SequentialDraft } from './sequentialDraft';
 
 export async function activate(context:vscode.ExtensionContext) {
  const store=new ReviewStore(); const undo:(AppliedEdit & {identity?:string})[]=[]; const virtual=new Map<string,string>();
@@ -341,9 +342,10 @@ export async function activate(context:vscode.ExtensionContext) {
   const config=vscode.workspace.getConfiguration('forgelens');const model=config.get<string>('model','');if(!model)throw new Error('Configure a model in local TrueForge, then set ForgeLens: Model to its ID. No provider key belongs in extension settings.');
   const baseUrl=config.get<string>('baseUrl','http://127.0.0.1:8790');const parsed=new URL(baseUrl);if(!['127.0.0.1','localhost','[::1]'].includes(parsed.hostname))throw new Error('This build supports local TrueForge only.');
   const recentToolCalls:string[]=[];let modelSwitching=false;runExpired=false;
+  const sequentialDraft=draftFromContext && config.get<boolean>('sequentialDraft',false) ? new SequentialDraft() : undefined;
   const folder=root();
   runningPhase=draftFromContext?'Drafting from context':'Running';
-  ++previewGeneration;++reviewEpoch;active=true;cancellation=false;liveMode=config.get<boolean>('liveReview',true);inlineScope=scope;phase=runningPhase;openPanel();updateState();
+  ++previewGeneration;++reviewEpoch;active=true;cancellation=false;liveMode=!!sequentialDraft||config.get<boolean>('liveReview',true);inlineScope=scope;phase=runningPhase;openPanel();updateState();
   void vscode.commands.executeCommand('setContext','forgelens.running',true);
   void panel?.webview.postMessage({type:'plan',files:[]});
   emit('Assembling budgeted context…');
@@ -356,7 +358,10 @@ export async function activate(context:vscode.ExtensionContext) {
    showContext(selected,draftFromContext?'Draft source context':'Initial retrieval preview',folder);
    if(draftFromContext&&!selected.items.length)throw new Error('No files matched this draft. Refine the task, mention a file, or choose Run agent.');
    if(draftFromContext)emit('Draft from context · proposals are limited to the retrieved files.');
-   bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
+   bridge=await startMcp({root:folder,budget,tokenBudget,draftFromContext,sequentialDraft,
+    draftModelIntervalSeconds:config.get<number>('draftModelIntervalSeconds',0),
+    onDraftWait:ms=>emit('Draft model interval · waiting '+Math.ceil(ms/1000)+'s before returning the tool result.'),
+    compactContext:compact?selected:undefined,task:prompt,requireDiscovery:!scope,onToolCall:summary=>{recentToolCalls.push(summary);if(recentToolCalls.length>8)recentToolCalls.shift();emit('Editor tool · '+summary);},onPlan:files=>{
     output.appendLine(`Agent file plan:\n${files.map(f=>`${f.path}: ${f.reason}`).join('\n')}`);
     void panel?.webview.postMessage({type:'plan',files});
    },pending:currentOverlay,autoValidateReviewedTests:liveMode,active:()=>active&&!cancellation&&!runExpired&&!modelSwitching,context:result=>showContext(result,'Agent discovery',folder),
@@ -417,7 +422,7 @@ export async function activate(context:vscode.ExtensionContext) {
     emit('Read-only child scout enabled for this turn.');
    }
    if(cancellation)return;
-   runner=new ForgeRunner({baseUrl,model,preloadTools,draftFromContext,contextScout,onScoutFinished:async()=>{
+   runner=new ForgeRunner({baseUrl,model,preloadTools,draftFromContext,sequentialDraft,contextScout,onScoutFinished:async()=>{
     const completed=scoutBridge;scoutBridge=undefined;await completed?.close();
    },runTimeoutMs:config.get<number>('runTimeoutMinutes',5)*60000,
    modelCallTimeoutMs:Math.round(config.get<number>('modelCallTimeoutSeconds',120)*1000),
@@ -425,7 +430,7 @@ export async function activate(context:vscode.ExtensionContext) {
    onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
-   mcpName,instructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
+   mcpName,instructions:sequentialDraft?sequentialDraftInstructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
    sourceEvidence:compact&&selected.items.length?compactEvidence(selected,draftFromContext):undefined,onEvent:event=>{
     if(cancellation)return;
     if(event.type==='model.message.delta')emitDelta(String(event.content||''));
@@ -482,7 +487,14 @@ export async function activate(context:vscode.ExtensionContext) {
    emit(`Session ${result.sessionId}: ${result.status}. ${store.list().length} files staged.`);
    emit(`View session in local TrueForge: ${baseUrl}`);
    if(result.status==='error')emit('Run failed. No unreviewed edits were applied.');
-  }catch(error){emit(error instanceof Error?error.message:'TrueForge request failed. No unreviewed edits applied.');}
+  }catch(error){
+   emit(error instanceof Error?error.message:'TrueForge request failed. No unreviewed edits applied.');
+   if(error instanceof TurnStreamInterrupted){
+    emit(`Session ${error.sessionId}: interrupted. ${store.list().length} files staged.`);
+    const target='api/v1/sessions/'+encodeURIComponent(error.sessionId)+'/turns'+(error.turnId?'/'+encodeURIComponent(error.turnId):'');
+    emit('Inspect the original TrueForge turn: '+new URL(target,baseUrl.endsWith('/')?baseUrl:baseUrl+'/').href);
+   }
+  }
   finally{live.cancel('Run ended during hunk review.');commandAbort?.abort();try{await Promise.all([bridge?.close(),scoutBridge?.close()]);}finally{bridge=undefined;scoutBridge=undefined;runner=undefined;inlineScope=undefined;active=false;phase=store.list().length?'Review ready':'Ready';updateState();void vscode.commands.executeCommand('setContext','forgelens.running',false);}}
  }
  const command=(name:string,fn:()=>unknown)=>context.subscriptions.push(vscode.commands.registerCommand(name,async()=>{try{await fn();}catch(error){void vscode.window.showErrorMessage(error instanceof Error?error.message:'ForgeLens operation failed');}}));

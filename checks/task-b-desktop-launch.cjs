@@ -65,7 +65,7 @@ async function main() {
     'telemetry.telemetryLevel':'off','update.mode':'none','extensions.autoUpdate':false,'extensions.autoCheckUpdates':false,
     'terminal.integrated.gpuAcceleration':'off','terminal.integrated.enablePersistentSessions':false
   };
-  for (const [source,setting] of [['FORGELENS_ASK_QUESTIONS','forgelens.askQuestions'],['FORGELENS_PRELOAD_TOOLS','forgelens.preloadTools'],['FORGELENS_COMPACT_REQUESTS','forgelens.compactRequests']]) {
+  for (const [source,setting] of [['FORGELENS_ASK_QUESTIONS','forgelens.askQuestions'],['FORGELENS_PRELOAD_TOOLS','forgelens.preloadTools'],['FORGELENS_COMPACT_REQUESTS','forgelens.compactRequests'],['FORGELENS_SEQUENTIAL_DRAFT','forgelens.sequentialDraft']]) {
     if (env[source] === undefined) continue;
     assert.ok(['true','false'].includes(env[source]),source+' must be true or false');
     config[setting] = env[source] === 'true';
@@ -76,6 +76,11 @@ async function main() {
     assert.ok(manifest.contributes.configuration.properties[setting].enum.includes(env.FORGELENS_REASONING_EFFORT),'Unsupported reasoning effort');
     config[setting]=env.FORGELENS_REASONING_EFFORT;
   }
+  if(env.FORGELENS_DRAFT_MODEL_INTERVAL_SECONDS!==undefined){
+    const seconds=Number(env.FORGELENS_DRAFT_MODEL_INTERVAL_SECONDS);
+    assert.ok(Number.isInteger(seconds) && seconds>=0 && seconds<=90,'Draft model interval must be 0–90 whole seconds');
+    config['forgelens.draftModelIntervalSeconds']=seconds;
+  }
   fs.writeFileSync(path.join(dir,'profile/User/settings.json'),JSON.stringify(config));
   const prompt = fs.readFileSync(path.join(root,'diagnostics/metadata.ts'),'utf8').match(/export const TASK_B_PROMPT = `([^`]+)`;/)[1];
   assert.equal(sha(prompt),'adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1');
@@ -85,7 +90,7 @@ async function main() {
   await new Promise(resolve=>socket.close(resolve));
   const evidence = {root,dir,workspace,base:base.href,model:env.TRUEFORGE_MODEL,mode,minutes,port,python,playwright,prompt,
     pinned,source:git(['rev-parse','HEAD'],root),bundleHash:sha(fs.readFileSync(bundle)),
-    packageHash:vsix && sha(fs.readFileSync(vsix)),askQuestions:config['forgelens.askQuestions'],preloadTools:config['forgelens.preloadTools'],compactRequests:config['forgelens.compactRequests'],reasoningEffort:config['forgelens.reasoningEffort']};
+    packageHash:vsix && sha(fs.readFileSync(vsix)),askQuestions:config['forgelens.askQuestions'],preloadTools:config['forgelens.preloadTools'],compactRequests:config['forgelens.compactRequests'],sequentialDraft:config['forgelens.sequentialDraft'],reasoningEffort:config['forgelens.reasoningEffort'],draftModelIntervalSeconds:config['forgelens.draftModelIntervalSeconds']};
   fs.writeFileSync(path.join(dir,'setup.json'),JSON.stringify(evidence,null,2));
   const driver=path.join(extensions,'acesentry.task-b-check-1.0.0');
   fs.mkdirSync(driver);

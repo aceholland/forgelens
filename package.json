@@ -76,6 +76,18 @@
           "default": true,
           "description": "Allow Run agent and Edit Selection to ask clarifying questions. Turn off to let the agent use the request and workspace conventions. Edit and test approvals still appear."
         },
+        "forgelens.draftModelIntervalSeconds": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 90,
+          "description": "Minimum seconds from a Draft tool request to its result. Review opens immediately and counts toward the interval. For a model with a one-minute input quota, try 70 seconds. Set the local TrueForge MCP request timeout longer than this interval and any extended reviews."
+        },
+        "forgelens.sequentialDraft": {
+          "type": "boolean",
+          "default": false,
+          "description": "In Draft from context, ask the model to plan the files, then propose one file at a time with live hunk review. Requested tests run on the assembled candidate."
+        },
         "forgelens.compactRequests": {
           "type": "boolean",
           "default": false,

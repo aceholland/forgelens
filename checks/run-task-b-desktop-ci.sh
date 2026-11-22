@@ -32,7 +32,6 @@ export FORGELENS_EDITOR_MODE=draft FORGELENS_EDITOR_MINUTES=80
 status=0
 xvfb-run -a -s '-screen 0 1440x1000x24' node checks/task-b-desktop-launch.cjs "$desktop_dir" "$vsix" || status=$?
 # Keep genuine failed takes and artefacts. The two independent checks also gate success.
-python checks/task-b-desktop-receipt.py "$scratch" "$evidence" || status=1
 session="$(node -e 'try {const r=require(process.argv[1]); if (/^[a-zA-Z0-9_-]{10,80}$/.test(r.sessionId||""))process.stdout.write(r.sessionId)} catch {}' "$desktop_dir/result.json")"
 if [[ -n "$session" ]]; then
   python checks/task-b-session-replay.py "$desktop_dir" "$scratch/trueforge.sqlite" "$session" "$evidence/native-replay.json" || status=1
@@ -40,4 +39,5 @@ else
   echo 'No native session receipt from the editor.'
   status=1
 fi
+python checks/task-b-desktop-receipt.py "$scratch" "$evidence" || status=1
 exit "$status"

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TrueForge } from '@truefoundry/trueforge-sdk';
 import { CreateSessionRequest } from '@truefoundry/trueforge-sdk/serialization';
-import { ForgeRunner, DEFAULT_MODEL_CALL_TIMEOUT_MS, type ForgeOptions } from '../src/client';
+import { ForgeRunner, DEFAULT_MODEL_CALL_TIMEOUT_MS, TurnStreamInterrupted, type ForgeOptions } from '../src/client';
+import { SequentialDraft } from '../src/sequentialDraft';
 
 async function* stream(events: unknown[]) { for (const event of events) yield event; }
 const created = {id:'e1',type:'turn.created',turnId:'t1'};
@@ -25,6 +26,17 @@ function fixture(initial: unknown[] = [created, answer, done]) {
     onEvent:e=>events.push(e),onApproval:async()=>true};
   return {sessions,calls,events,options};
 }
+test('a model final message cannot complete a partial sequential plan', async()=>{
+  const f=fixture();
+  const draft=new SequentialDraft();
+  draft.begin('first',[{path:'first',reason:'first edit'},{path:'second',reason:'second edit'}]);
+  draft.reviewed('first','changed','changed');
+  Object.assign(f.options,{draftFromContext:true,sequentialDraft:draft,getStagedProposalCount:()=>1});
+  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'error');
+  assert.ok(f.events.some(e=>(e as any).message?.includes('Next planned file: second')));
+  assert.ok(!f.events.some(e=>(e as any).type==='turn.done' && (e as any).state.status==='done'));
+});
+
 test('compact mode keeps repository text in user-role context and exposes focused tools',async()=>{
  const f=fixture();f.options.sourceEvidence='Untrusted repository excerpt for this test.';
  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');
@@ -253,6 +265,64 @@ test('bounded retry on explicit transient session rejection',async()=>{
 
 test('stream ending without a terminal event fails safely',async()=>{
  const f=fixture([created]); await assert.rejects(new ForgeRunner(f.options).run('edit'),/without a terminal/);
+});
+
+test('expired subscription resumes the same turn and restores complete native tool arguments before approving', async () => {
+ const base = approvalEvents[1] as any;
+ const f = fixture([created, {...base, toolCalls: []}]);
+ Object.assign(f.sessions,{getTurn:async (sessionId:string,id:string)=>({data:{sessionId,id,state:{status:'running'}}})});
+ const cursors:unknown[]=[];
+ f.sessions.subscribeToTurn=async(sessionId:string,turnId:string,cursor:unknown)=>{
+   assert.deepEqual([sessionId,turnId],['s1','t1']);
+   cursors.push(cursor);
+   return stream(cursors.length===1?approvalEvents.slice(1):[done]) as any;
+ };
+ const approvals:string[]=[];
+ f.options.onApproval=async details=>{approvals.push(details.name);return true;};
+ assert.deepEqual(await new ForgeRunner(f.options).run('original request'),{sessionId:'s1',status:'done'});
+ assert.deepEqual(cursors,[{fromEventId:'m1'},{afterEventId:'p1'}]);
+ assert.deepEqual(approvals,['propose_edit']);
+ assert.equal(f.calls.filter(c=>c.method==='stream').length,1);
+ assert.equal(f.calls.filter(c=>c.method==='events').length,1);
+});
+
+test('expired subscription reconciles only a persisted matching terminal event', async () => {
+ for(const terminal of [done,failed,{...done,state:{status:'cancelled'}}]){
+   const f=fixture([created,answer]);
+   Object.assign(f.sessions,{
+     getTurn:async(sessionId:string,id:string)=>({data:{sessionId,id,state:terminal.state}}),
+     listTurnEvents:async(sessionId:string,id:string,query:unknown)=>{
+       assert.deepEqual([sessionId,id,query],['s1','t1',{order:'desc',limit:1}]);return {data:[terminal]};
+     }
+   });
+   assert.deepEqual(await new ForgeRunner(f.options).run('original request'),{sessionId:'s1',status:terminal.state.status});
+   assert.deepEqual(f.events.filter((e:any)=>e.type==='turn.done'),[terminal]);
+   assert.equal(f.calls.filter(c=>c.method==='subscribe'||c.method==='events').length,0);
+ }
+});
+
+test('unconfirmed terminal state preserves the original session and reviewed files without fallback or another approval', async () => {
+ const f=fixture([created,answer]);f.options.fallbackModel='test/backup';
+ f.options.getStagedProposalCount=()=>2;
+ Object.assign(f.sessions,{getTurn:async()=>({data:{sessionId:'s1',id:'t1',state:{status:'done'}}}),listTurnEvents:async()=>({data:[answer]})});
+ await assert.rejects(new ForgeRunner(f.options).run('original request'),(err:unknown)=>
+   err instanceof TurnStreamInterrupted && err.sessionId==='s1' && err.turnId==='t1' && err.message.includes('Last confirmed native turn state: done'));
+ assert.ok(!f.events.some((e:any)=>e.type==='turn.done'));
+ assert.deepEqual(f.calls.map(c=>c.method),['create','stream']);
+});
+
+test('reconnection never follows a mismatched turn or loops indefinitely on empty subscriptions', async () => {
+ for(const wrongTurn of [false,true]){
+   const f=fixture([created]);let reads=0;let resumes=0;
+   Object.assign(f.sessions,{getTurn:async()=>{reads++;return {data:{sessionId:'s1',id:wrongTurn?'different':'t1',state:{status:'running'}}};}});
+   f.sessions.subscribeToTurn=async(sessionId:string,turnId:string,cursor:unknown)=>{
+     assert.deepEqual([sessionId,turnId,cursor],['s1','t1',{afterEventId:'e1'}]);
+     resumes++;return stream([]) as any;
+   };
+   await assert.rejects(new ForgeRunner(f.options).run('original request'),TurnStreamInterrupted);
+   assert.equal(reads,wrongTurn?1:8);assert.equal(resumes,wrongTurn?0:8);
+   assert.deepEqual(f.calls.map(c=>c.method),['create','stream']);
+ }
 });
 
 test('refuses concurrent task before any second session is created',async()=>{

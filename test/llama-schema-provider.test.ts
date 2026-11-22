@@ -89,4 +89,6 @@ test('the local schema provider preserves model arguments, rejects truncation an
   const records = log.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
   assert.equal(records.length, 1);
   assert.equal(records[0].argumentsSha256, createHash('sha256').update(generated).digest('hex'));
+  const canonical = JSON.stringify({files:[{edits:[{beforeLine:'end',newText:'hello\n'}],path:'greeting.txt',reason:'café'}]});
+  assert.equal(records[0].argumentsSha256CanonicalJSON, createHash('sha256').update(canonical).digest('hex'));
 });
