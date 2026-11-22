@@ -11,6 +11,8 @@ on:
           - gpt-oss-20b
           - qwen3-coder-30b-a3b
           - qwen2-5-coder-7b
+          - qwen2-5-coder-14b-desktop
+          - ornith-1-5-9b-desktop
       request_first_draft_tool:
         description: Ask the 7B draft model to use the native edit tool on its first request
         type: boolean
@@ -28,9 +30,9 @@ jobs:
   flask:
     if: github.event.repository.private == false
     runs-on: ubuntu-24.04
-    timeout-minutes: 100
+    timeout-minutes: 115
     env:
-      SOLVER_MODEL: ${{ inputs.model || 'qwen2-5-coder-7b' }}
+      SOLVER_MODEL: ${{ inputs.model || 'qwen2-5-coder-14b-desktop' }}
       REQUEST_FIRST_DRAFT_TOOL: ${{ (github.event_name == 'push' || inputs.request_first_draft_tool) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +48,7 @@ jobs:
       - name: Generate and independently grade the candidate
         run: bash checks/run-task-b-runner.sh
       - name: Preserve model and benchmark evidence
-        if: always()
+        if: always() && !endsWith(env.SOLVER_MODEL, '-desktop')
         uses: actions/upload-artifact@v4
         with:
           name: task-b-${{ env.SOLVER_MODEL }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -59,3 +61,21 @@ jobs:
             ${{ runner.temp }}/task-b-evidence/candidate-verification.json
             ${{ runner.temp }}/task-b-evidence/candidate.patch
             ${{ runner.temp }}/task-b-evidence/provider-audit.json
+      - name: Preserve desktop recording and receipts
+        if: always() && endsWith(env.SOLVER_MODEL, '-desktop')
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-b-${{ env.SOLVER_MODEL }}-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 1
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/task-b-evidence/run.json
+            ${{ runner.temp }}/task-b-evidence/native-replay.json
+            ${{ runner.temp }}/task-b-evidence/model-receipt.json
+            ${{ runner.temp }}/task-b-evidence/desktop.mp4
+            ${{ runner.temp }}/task-b-evidence/desktop/result.json
+            ${{ runner.temp }}/task-b-evidence/desktop/candidate.patch
+            ${{ runner.temp }}/task-b-evidence/desktop/terminal-result.json
+            ${{ runner.temp }}/task-b-evidence/desktop/independent/candidate-verification.json
+            ${{ runner.temp }}/task-b-evidence/desktop/screens/*.png
+            ${{ runner.temp }}/task-b-evidence/desktop/frames/*.jpg

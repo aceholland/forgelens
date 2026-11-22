@@ -9,6 +9,8 @@ mkdir -p "$scratch/llama" "$EVIDENCE_DIR"
 model="${SOLVER_MODEL:-gpt-oss-20b}"
 model_flags=()
 use_adapter=false
+desktop=false
+max_output=4096
 export FORGELENS_DRAFT_FROM_CONTEXT=false
 case "$model" in
   gpt-oss-20b)
@@ -31,13 +33,28 @@ case "$model" in
     export FORGELENS_DRAFT_FROM_CONTEXT=true
     if [[ "${REQUEST_FIRST_DRAFT_TOOL:-false}" == true ]]; then use_adapter=true; fi
     ;;
+  qwen2-5-coder-14b-desktop|ornith-1-5-9b-desktop)
+    context=12288
+    model_flags=(--batch-size 256 --ubatch-size 128 --no-ui)
+    if [[ "$model" == qwen2-5-coder-14b-desktop ]]; then
+      model_sha=c1e659736d89ac1065fb495330fb824d94001974a4bfa78e7270e43476a8d940
+      model_url=https://huggingface.co/Qwen/Qwen2.5-Coder-14B-Instruct-GGUF/resolve/d0a692ef765eefbf2fabb130b3cb2e8917e3d225/qwen2.5-coder-14b-instruct-q4_k_m.gguf
+    else
+      model_sha=70c112196e0b7023803c9762752e46d29e612a92c83f995bc3ba1ceb07e8fab6
+      model_url=https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/abdd624b12ebf020b767fff532ff44fe552b28c3/Ornith-1.5-9B-Q4_K_M.gguf
+      model_flags+=(--reasoning-budget 0 --chat-template-kwargs '{"enable_thinking":false}')
+    fi
+    desktop=true
+    use_adapter=true
+    export FORGELENS_DRAFT_FROM_CONTEXT=true
+    ;;
   *) echo "Unsupported diagnostic model"; exit 2 ;;
 esac
 llama_sha=1a1af0cb6dc2af9779e10085266de44084288d58a2917e14b64400c436fb124a
 llama_url=https://github.com/ggml-org/llama.cpp/releases/download/b12613/llama-b12613-bin-ubuntu-x64.tar.gz
 flags_json="$(node -e 'console.log(JSON.stringify(process.argv.slice(1)))' -- "${model_flags[@]}")"
-printf '{"forgeLens":"%s","flask":"22d924701a6ae2e4cd01e9a15bbaf3946094af65","trueForge":"0.185.1","model":"%s","modelSha256":"%s","contextLength":%d,"maxOutputTokens":4096,"modelFlags":%s,"draftFromContext":%s,"requestFirstDraftTool":%s,"modelCallLimitSeconds":1800,"taskLimitSeconds":4800,"llamaCpp":"b12613","userRequests":1,"operatorAnswers":0,"diagnosticApproval":"stage bounded proposals and test disposable overlays"}\n' \
-  "$(git rev-parse HEAD)" "$model" "$model_sha" "$context" "$flags_json" "$FORGELENS_DRAFT_FROM_CONTEXT" "$use_adapter" > "$EVIDENCE_DIR/run.json"
+printf '{"forgeLens":"%s","flask":"22d924701a6ae2e4cd01e9a15bbaf3946094af65","trueForge":"0.185.1","model":"%s","modelSha256":"%s","contextLength":%d,"maxOutputTokens":%d,"modelFlags":%s,"draftFromContext":%s,"requestFirstDraftTool":%s,"modelCallLimitSeconds":1800,"taskLimitSeconds":4800,"llamaCpp":"b12613","plannedUserRequests":1,"operatorAnswersAllowed":0,"diagnosticApproval":"stage bounded proposals and test disposable overlays"}\n' \
+  "$(git rev-parse HEAD)" "$model" "$model_sha" "$context" "$max_output" "$flags_json" "$FORGELENS_DRAFT_FROM_CONTEXT" "$use_adapter" > "$EVIDENCE_DIR/run.json"
 git clone --depth 1 --branch 3.1.3 https://github.com/pallets/flask.git "$FLASK_ROOT"
 test "$(git -C "$FLASK_ROOT" rev-parse HEAD)" = 22d924701a6ae2e4cd01e9a15bbaf3946094af65
 # The upstream lockfile versions for Python 3.12 keep this a Flask 3.1.3 check.
@@ -53,7 +70,9 @@ echo "$model_sha  $scratch/solver.gguf" | sha256sum --check --status
 server="$(find "$scratch/llama" -type f -name llama-server -print -quit)"
 test -x "$server"
 export LD_LIBRARY_PATH="$(dirname "$server")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-"$server" -m "$scratch/solver.gguf" --alias "$model" --host 127.0.0.1 --port 18931 \
+mkdir -p "$scratch/daemon-home" "$scratch/daemon-temp"
+daemon_env=(env -i "PATH=$PATH" "HOME=$scratch/daemon-home" "TMPDIR=$scratch/daemon-temp" LANG=C.UTF-8)
+"${daemon_env[@]}" "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" "$server" -m "$scratch/solver.gguf" --alias "$model" --host 127.0.0.1 --port 18931 \
   --ctx-size "$context" "${model_flags[@]}" --parallel 1 --threads 4 --threads-batch 4 --n-gpu-layers 0 --jinja >"$scratch/llama.log" 2>&1 &
 llama_pid=$!
 trueforge_pid=''
@@ -68,7 +87,10 @@ export STANDALONE=true HOST=127.0.0.1 SQLITE_PATH="$scratch/trueforge.sqlite"
 export NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0.1"]'
 export MODEL_HTTP_MAX_RETRIES=0 MODEL_HTTP_HEADERS_TIMEOUT_MS=1800000 MODEL_HTTP_BODY_TIMEOUT_MS=1800000
 export MCP_REQUEST_TIMEOUT_MS=240000
-node "$scratch/trueforge/node_modules/@truefoundry/trueforge/dist/cli.js" --port 18930 >"$scratch/trueforge.log" 2>&1 &
+"${daemon_env[@]}" STANDALONE=true HOST=127.0.0.1 "SQLITE_PATH=$SQLITE_PATH" NETWORK_POLICY_ENABLED=true \
+  "OUTBOUND_URL_ALLOWED_HOSTS=$OUTBOUND_URL_ALLOWED_HOSTS" MODEL_HTTP_MAX_RETRIES=0 MODEL_HTTP_HEADERS_TIMEOUT_MS=1800000 \
+  MODEL_HTTP_BODY_TIMEOUT_MS=1800000 MCP_REQUEST_TIMEOUT_MS=240000 SENTRY_ENABLED=false \
+  node "$scratch/trueforge/node_modules/@truefoundry/trueforge/dist/cli.js" --port 18930 >"$scratch/trueforge.log" 2>&1 &
 trueforge_pid=$!
 wait_for_service() {
   local url="$1" pid="$2"
@@ -83,16 +105,22 @@ wait_for_service http://127.0.0.1:18931/health "$llama_pid"
 wait_for_service http://127.0.0.1:18930/api/v1/models "$trueforge_pid"
 provider_url=http://127.0.0.1:18931/v1
 if [[ "$use_adapter" == true ]]; then
-  node scripts/llama-draft-adapter.mjs 18932 18931 >"$scratch/adapter.log" 2>&1 &
+  adapter=scripts/llama-draft-adapter.mjs
+  if [[ "$desktop" == true ]]; then adapter=scripts/llama-schema-draft.mjs; fi
+  "${daemon_env[@]}" node "$adapter" 18932 18931 >"$scratch/adapter.log" 2>&1 &
   adapter_pid=$!
   wait_for_service http://127.0.0.1:18932/health "$adapter_pid"
   provider_url=http://127.0.0.1:18932/v1
 fi
 export TRUEFORGE_URL=http://127.0.0.1:18930 TRUEFORGE_MODEL="ci-local/$model"
-provider="$(node -e 'const [model,context,url]=process.argv.slice(1);console.log(JSON.stringify({manifest:{type:"custom",name:"ci-local",base_url:url,auth:{api_key:"local-placeholder"},models:[{name:model,model_id:model,properties:{context_length:Number(context),max_output_tokens:4096}}]}}))' "$model" "$context" "$provider_url")"
+provider="$(node -e 'const [model,context,url,output]=process.argv.slice(1);console.log(JSON.stringify({manifest:{type:"custom",name:"ci-local",base_url:url,auth:{api_key:"local-placeholder"},models:[{name:model,model_id:model,properties:{context_length:Number(context),max_output_tokens:Number(output)}}]}}))' "$model" "$context" "$provider_url" "$max_output")"
 curl --fail --silent --show-error -o /dev/null -H 'Content-Type: application/json' \
   -d "$provider" \
   "$TRUEFORGE_URL/api/v1/settings/model-providers"
+if [[ "$desktop" == true ]]; then
+  bash checks/run-task-b-desktop-ci.sh "$scratch" "$EVIDENCE_DIR"
+  exit
+fi
 export CONTEXT_BUDGET=14000 FORGELENS_COMPACT_REQUESTS=true FORGELENS_VALIDATE_STAGED=true DYNAMIC_SUB_AGENTS=false
 export FORGELENS_TEST_FIXTURE_PINS="$PWD/docs/evidence/task-b-flash-lite/public-fixture-pins.json"
 export RUN_TIMEOUT_MS=4800000 MODEL_CALL_TIMEOUT_MS=1800000 STREAM_IDLE_TIMEOUT_MS=1800000
