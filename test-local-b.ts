@@ -64,7 +64,7 @@ async function main() {
  const baseUrl=loopbackUrl(process.env.TRUEFORGE_URL??'http://127.0.0.1:8790');
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
- const selected=compact?await compactContext(root,prompt,budget,3200,()=>!active):undefined;
+ const selected=compact?await compactContext(root,prompt,budget,3200,()=>!active,draftFromContext):undefined;
  if(draftFromContext&&!selected?.items.length)throw new Error('Drafting requires retrieved workspace evidence.');
  if(selected)metadata.paths('discovery',selected.items.map(item=>item.path));
  mcp=await startMcp({root,budget,draftFromContext,compactContext:selected,task:prompt,requireDiscovery:true,autoValidateReviewedTests:validateStaged,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,

@@ -71,6 +71,11 @@
     "configuration": {
       "title": "ForgeLens",
       "properties": {
+        "forgelens.askQuestions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow Run agent and Edit Selection to ask clarifying questions. Turn off to let the agent use the request and workspace conventions. Edit and test approvals still appear."
+        },
         "forgelens.compactRequests": {
           "type": "boolean",
           "default": false,

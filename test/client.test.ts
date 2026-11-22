@@ -40,6 +40,17 @@ const approvalEvents = [created,
   {id:'a1',type:'tool.approval_required',threadId:'th1',toolCalls:[{id:'c1',sourceEventId:'m1'}]},
   {id:'p1',type:'turn.update',state:{status:'paused'}}];
 
+test('Run agent can turn off clarification questions while retaining edit approval', async () => {
+  const f = fixture(approvalEvents);
+  const reviewed: string[] = [];
+  f.options.onApproval = async details => { reviewed.push(details.name); return true; };
+  assert.equal((await new ForgeRunner(f.options).run('Original task')).status, 'done');
+  const spec = f.calls.find(call => call.method === 'create')!.args[0].agent.spec;
+  assert.equal(spec.config.askUserQuestions.enabled, false);
+  assert.deepEqual(reviewed, ['propose_edit']);
+  assert.deepEqual(f.calls.find(call => call.method === 'stream')!.args[1].input, [{type:'user.message',content:'Original task'}]);
+});
+
 test('draft from context preloads only the reviewed editor proposal and skips either configured scout', async () => {
   for (const mode of ['native', 'separate'] as const) {
     const f = fixture();

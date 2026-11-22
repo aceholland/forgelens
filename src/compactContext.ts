@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ContextSelection } from './context';
+import type { ContextItem, ContextSelection } from './context';
 import { previewWorkspace } from './contextPreview';
 import { excerptTokenCount } from './tokenBudget';
 import { readWorkspace } from './workspace';
@@ -19,12 +19,23 @@ function referencedDefinitions(excerpt:string,lines:string[]):[number,number,str
 }
 
 /** Package real local excerpts with import and end-of-file anchors for a low-round-trip run. */
-export async function compactContext(root:string, task:string, chars:number, tokens:number, stopped:()=>boolean) {
+export async function compactContext(root:string, task:string, chars:number, tokens:number, stopped:()=>boolean, draft=false) {
   const budgetChars=Math.min(chars,14000), budgetTokens=Math.min(tokens,3200);
   const selected=await previewWorkspace(root,task,Math.floor(budgetChars*0.75),stopped,Math.floor(budgetTokens*0.75));
   if(!selected || !selected.items.length) return selected;
   const draftFiles = new Map<string, { hash: string; lineCount: number; lastLineLength: number }>();
   const result:ContextSelection={...selected,items:[...selected.items],budgetChars,budgetTokens,draftFiles};
+  const sources:{item:ContextItem;lines:string[]}[]=[];
+  const tails=new Map<string,ContextItem & {startLine:number}>();
+  function extendTail(tail:ContextItem & {startLine:number},lines:string[],start:number){
+    if(start<0 || start+1>=tail.startLine || result.items.some(other=>other!==tail && other.path===tail.path &&
+       (other.startLine??1)<tail.startLine && (other.endLine??0)>=start+1))return false;
+    const content=lines.slice(start).join('\n');
+    const addedChars=content.length-tail.content.length, addedTokens=excerptTokenCount(content)-excerptTokenCount(tail.content);
+    if(result.usedChars+addedChars>budgetChars || result.usedTokens+addedTokens>budgetTokens)return false;
+    tail.startLine=start+1;tail.content=content;result.usedChars+=addedChars;result.usedTokens+=addedTokens;
+    return true;
+  }
   for (const item of selected.items) {
     if(stopped()) return undefined;
     const source=await readWorkspace(root,item.path);
@@ -34,9 +45,30 @@ export async function compactContext(root:string, task:string, chars:number, tok
     draftFiles.set(item.path, {
       hash: createHash('sha256').update(source).digest('hex'), lineCount: lines.length, lastLineLength: lines.at(-1)!.length
     });
+    sources.push({item,lines});
+    if(!draft || result.items.some(other=>other.path===item.path && other.endLine===lines.length &&
+      other.content.split('\n').at(-1)===lines.at(-1)))continue;
+    // Reserve the final nonblank line and its actual trailing whitespace before spending
+    // the remaining budget on definitions or headers from the first selected files.
+    let start=lines.length-1;
+    while(start>0 && !lines[start]!.trim())start--;
+    const content=lines.slice(start).join('\n'), cost=excerptTokenCount(content);
+    if(!content.trim() || result.usedChars+content.length>budgetChars || result.usedTokens+cost>budgetTokens)continue;
+    const tail={...item,startLine:start+1,endLine:lines.length,reason:'end of file',content,truncated:true};
+    result.items.push(tail);tails.set(item.path,tail);
+    result.usedTokens+=cost; result.usedChars+=content.length;
+  }
+  // Show up to two neighboring lines for indentation and surrounding syntax once all ends have a turn.
+  for(const {item,lines} of sources){
+    const tail=tails.get(item.path);
+    if(tail)for(let n=0;n<2;n++)if(!extendTail(tail,lines,tail.startLine-2))break;
+  }
+  for(const {item,lines} of sources){
     const windows:[number,number,string][]=[...referencedDefinitions(item.content,lines),
       [0,Math.min(12,lines.length),'file header'],[Math.max(0,lines.length-22),lines.length,'end of file']];
     for(const [start,end,reason] of windows) {
+      const tail=tails.get(item.path);
+      if(tail && reason==='end of file') { extendTail(tail,lines,start); continue; }
       if(result.items.some(other=>other.path===item.path && start+1<=(other.endLine??0) && end>=(other.startLine??1))) continue;
       const content=lines.slice(start,end).join('\n'), cost=excerptTokenCount(content);
       if(!content.trim() || cost>budgetTokens-result.usedTokens || content.length>budgetChars-result.usedChars) continue;

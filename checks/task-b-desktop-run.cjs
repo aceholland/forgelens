@@ -91,6 +91,7 @@ exports.run = async dir => {
       const accept=panel.locator('#accept-all');
       if(await accept.isVisible() && await accept.isEnabled()){
         slow=false;
+        await panel.locator('#hunks').evaluate(el=>el.scrollIntoView({block:'start'}));
         await shot('03-review');
         result.approvals.push({control:'Accept all pending hunks',files:await panel.locator('#hunks h3').allTextContents()});
         await accept.click({timeout:3000});save();slow=true;continue;
@@ -182,8 +183,27 @@ exports.run = async dir => {
     await until(()=>fs.existsSync(path.join(dir,'terminal-result.json')),'independent Flask checks',650000);
     await delay(500);await shot('07-full-suite');
     result.terminal=JSON.parse(fs.readFileSync(path.join(dir,'terminal-result.json'),'utf8'));
-    result.passed=result.status==='done' && result.singleOriginalTurn===true && result.terminal.passed;
-    assert.ok(result.passed,'The independent checks or native turn failed.');
+    assert.ok(result.status==='done' && result.singleOriginalTurn===true && result.terminal.passed,'The independent checks or native turn failed.');
+    const docPath='docs/cli.rst';
+    const docDiff=execFileSync('git',['-C',setup.workspace,'diff','--unified=0','HEAD','--',docPath],{encoding:'utf8',windowsHide:true});
+    let line, docLine;
+    for(const row of docDiff.split('\n')){
+      const hunk=row.match(/^@@ -\d+(?:,\d+)? \+(\d+)/);
+      if(hunk){line=Number(hunk[1])-1;continue;}
+      if(line===undefined || !row.startsWith('+'))continue;
+      if(/\bconfig\b/i.test(row)){docLine=line;break;}
+      ++line;
+    }
+    if(docLine!==undefined){
+      await vscode.commands.executeCommand('workbench.action.closePanel');
+      const doc=await vscode.workspace.openTextDocument(path.join(setup.workspace,docPath));
+      const opened=await vscode.window.showTextDocument(doc);
+      const selected=doc.lineAt(docLine).range;
+      opened.selection=new vscode.Selection(selected.start,selected.end);
+      opened.revealRange(selected,vscode.TextEditorRevealType.InCenter);
+      await delay(450);await shot('08-docs');
+    }
+    result.passed=true;
   } catch(error){
     result.error=error.message;
     if(panel) fs.writeFileSync(path.join(dir,'panel-output.txt'),await panel.locator('#events').innerText({timeout:2500}).catch(()=>''));

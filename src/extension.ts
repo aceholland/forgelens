@@ -351,7 +351,7 @@ export async function activate(context:vscode.ExtensionContext) {
    const budget=config.get<number>('contextBudget',24000);
    const tokenBudget=config.get<number>('tokenBudget',10000);
    const compact=draftFromContext||(!scope && config.get<boolean>('compactRequests',false));
-   const selected=compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
+   const selected=compact?await compactContext(folder,prompt,budget,tokenBudget,()=>cancellation,draftFromContext):await previewWorkspace(folder,prompt,budget,()=>cancellation,tokenBudget);
    if(!selected||cancellation)return;
    showContext(selected,draftFromContext?'Draft source context':'Initial retrieval preview',folder);
    if(draftFromContext&&!selected.items.length)throw new Error('No files matched this draft. Refine the task, mention a file, or choose Run agent.');
@@ -433,7 +433,7 @@ export async function activate(context:vscode.ExtensionContext) {
      emit(event.message);
     }else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);
     else emit(event.type);
-   },onQuestion:draftFromContext?undefined:async details=>{
+   },onQuestion:draftFromContext || !config.get<boolean>('askQuestions',true) ? undefined : async details=>{
     if(cancellation||runExpired||modelSwitching)return undefined;
     emit(`Agent question: ${details.question}`);
     const custom={label:'Type a response…',custom:true};

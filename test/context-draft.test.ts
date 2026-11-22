@@ -43,6 +43,33 @@ test('draft insertions use the immutable retrieved line, reject ambiguity and re
   assert.doesNotMatch(compactEvidence(clipped,true),/end of file/);
 });
 
+test('a draft reserves real ends for each editable file before adding optional excerpts', async t => {
+  const root=await mkdtemp(path.join(tmpdir(),'forgelens-tails-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const names=['widget.py','test_widget.py','widget.md'];
+  const saved=names.map((name,i)=>`widget entry ${i}\n` + ('body '+name+' '+ 'q'.repeat(140)+'\n').repeat(65)+`    final boundary ${i}\n`);
+  for(const [i,name] of names.entries())await writeFile(path.join(root,name),saved[i]!);
+  const task=names.map(name=>'@file:'+name).join(' ');
+  const select=(chars:number,tokens:number)=>compactContext(root,task,chars,tokens,()=>false,true);
+  const available=(await select(2600,850))!;
+  assert.deepEqual(new Set(available.items.map(i=>i.path)),new Set(names));
+  for(const [i,name] of names.entries()){
+    assert.equal(draftInsertionOffsets(available,name,saved[i]!).get('end'),saved[i]!.length);
+    assert.ok(available.items.some(item=>item.path===name && item.content.endsWith(`    final boundary ${i}\n`)));
+  }
+  assert.ok(available.usedChars<=2600 && available.usedTokens<=850);
+  const wide='widget\n'+('body '+ 'q'.repeat(55)+'\n').repeat(280)+'    end\n';
+  await writeFile(path.join(root,'wide.py'),wide);
+  const generous=(await compactContext(root,'@file:wide.py',14000,3200,()=>false,true))!;
+  assert.ok(generous.items.some(item=>item.path==='wide.py' && item.endLine===wide.split('\n').length &&
+    item.endLine!-item.startLine!+1>=22));
+  await writeFile(path.join(root,names[0]!),saved[0]!.trimEnd()+'x'.repeat(18000));
+  const limited=(await select(2600,850))!;
+  const changed=await readFile(path.join(root,names[0]!),'utf8');
+  assert.equal(draftInsertionOffsets(limited,names[0]!,changed).has('end'),false);
+  assert.ok(limited.usedChars<=2600 && limited.usedTokens<=850);
+});
+
 test('draft offers one scoped tool, preflights the entire batch and repairs from the current overlay', async t => {
   const root=await mkdtemp(path.join(tmpdir(),'forgelens-draft-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
