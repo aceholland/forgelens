@@ -2,9 +2,9 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.3.1](https://github.com/aceholland/forgelens/releases/download/v0.3.1/forgelens-0.3.1.vsix) · [Watch Task B in VS Code, 1m 29s](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [One-request evidence](docs/evidence/task-b-editor-one-go/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+[Install ForgeLens 0.4.0](https://github.com/aceholland/forgelens/releases/download/v0.4.0/forgelens-0.4.0.vsix) · [Watch Task B in VS Code, 1m 29s](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [One-request evidence](docs/evidence/task-b-editor-one-go/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-Version 0.3.1 is a post-deadline update to the agent and editor verification. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-0.3.1-overview.txt) · [Earlier live review and undo recording](https://github.com/aceholland/forgelens/releases/download/v0.3.0/ForgeLens-0.3.0-review.mp4) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
+Version 0.4.0 adds ordered fallback models, automatic summaries for long conversations and support for desktop VS Code 1.95. The narrated one-request Task B run used v0.3.1. Both releases follow the original competition deadline. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.4.0/ForgeLens-0.4.0-overview.txt) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
 
 ![A ForgeLens review in Windows VS Code. The first hunk is accepted, the second is pending, and both lines are visible in the editor diff.](docs/live-hunk-review.png)
 
@@ -44,7 +44,7 @@ In 0.2.0, the local preview identified Flask's CLI code, tests and documentation
 
 ## Try it in VS Code
 
-**1. Install v0.3.1.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install v0.4.0.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
@@ -67,7 +67,16 @@ HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0
 
 **3. Choose a model.** To keep source on your machine and avoid per-request inference charges, run a coding model in llama.cpp and connect it to local TrueForge. Model size, available memory and CPU speed affect wait times. For a public project you can also use Kilo’s free anonymous gateway, which receives the task and selected source excerpts and enforces a shared request limit. [Local model setup](docs/llama-draft-provider.md) · [Free gateway setup](docs/anonymous-model.md)
 
-To use your own provider, open local TrueForge, add it in **Settings → Models**, and copy its model ID into `forgelens.model` in VS Code User Settings. Provider keys belong in TrueForge. If you have a second model, set `forgelens.fallbackModel` to its ID. An existing TrueForge server listening on IPv6 loopback needs `forgelens.baseUrl` set to `http://[::1]:8790`. [Local TrueForge](http://127.0.0.1:8790) · [Example model configuration](agent/model.example.json)
+To use your own provider, open local TrueForge, add it in **Settings → Models**, and copy its model ID into `forgelens.model` in VS Code User Settings. Provider keys belong in TrueForge. For an IPv6 loopback server, set `forgelens.baseUrl` to `http://[::1]:8790`. [Local TrueForge](http://127.0.0.1:8790) · [Example model configuration](agent/model.example.json)
+
+**Set a fallback order.** Put additional TrueForge model IDs in `forgelens.fallbackModels`, in the order you want them tried. Use IDs from your own catalog. For a free-only setup, choose free or local models for every entry. After an eligible failure, the panel shows which model ForgeLens is trying next. Once the agent has acted on a request, safeguards prevent replaying edits. Existing users can keep their single `forgelens.fallbackModel` setting when the list is empty.
+
+```json
+{
+  "forgelens.model": "my-provider/primary",
+  "forgelens.fallbackModels": ["my-provider/backup", "local-ollama/qwen-local"]
+}
+```
 
 **4. Make a first edit.** Select a function and press **Ctrl+Alt+I** (**Cmd+Alt+I** on macOS), or run **ForgeLens: Edit Selection**. For a multi-file task, run **ForgeLens: Open Agent**, describe the outcome and choose **Run agent**. ForgeLens registers its local editor tools and supplies the agent definition when it creates the TrueForge session. The panel shows the files it chose and streams progress. Accept or reject hunks as they arrive. When the agent finishes, choose **Review hunks** to apply the accepted result. Save the editor buffer and run the project tests. [Agent definition](agent/forgelens.json) · [Session setup](src/client.ts)
 
@@ -89,6 +98,8 @@ Use `@file:src/example.py` or `@symbol:get_debug_flag` to steer discovery. The t
 Enable **ForgeLens › Context Scout** to let TrueForge create a child during multi-file requests. The child can read and search saved source. A parent-connector call from a child is denied before it reaches the editor. Scouting uses additional model calls and is off by default. [Native runtime regression check](checks/native-scout.ts) · [Versioned agent definition](agent/forgelens.json)
 
 For a provider with a small request quota, enable **ForgeLens › Compact Requests**. ForgeLens places the locally selected excerpts in the first model request. The model can propose a plan, exact edits across several files and a pytest check in one tool call. ForgeLens verifies all anchors before the first review. The editor still shows each file and asks before executing tests.
+
+**Long conversations.** TrueForge automatically summarizes earlier messages and continues the turn when input reaches 60,000 tokens. For a model with a known smaller context window, ForgeLens triggers compaction at 80% of that window when this gives a lower threshold. The threshold follows the active model if fallback occurs. The source preview's token budget controls how much code is retrieved for an individual request. [Agent definition](agent/forgelens.json) · [Native compaction check](checks/native-scout.ts)
 
 For a CPU-hosted model that takes several minutes to generate an edit, set **Run Timeout Minutes** and **Model Call Timeout Seconds** in VS Code User Settings. The defaults are 5 minutes per run and 120 seconds per model call. For slower hardware you can raise the limits to 90 minutes per run and 30 minutes per generation. TrueForge's own provider header and body timeouts must also allow that time. Escape still stops a run. [Reproducible CPU integration setup](checks/run-task-b-runner.sh)
 
@@ -131,7 +142,7 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-The extension targets **desktop VS Code 1.101 or newer with a trusted local folder**. The release check builds one VSIX, installs it into isolated Windows, macOS and Linux editor profiles, and verifies its SHA-256. Each editor activates ForgeLens, opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs native Git checks with both a zero and a deliberately nonzero exit. On stable macOS and Linux, the installed extension also connected to real TrueForge with a scripted local model. Both editors accepted two hunks, rejected one, passed two tests in the staged copy and returned the results to the model. The original files kept their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Current package and platform checks](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-0.3.1-package-verification.json)
+The extension targets **desktop VS Code 1.95 or newer with a trusted local folder**. TrueForge runs in a separate Node.js 22.14+ process. The release check installs one VSIX into isolated Windows, macOS and Linux editor profiles. Each editor opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs Git checks with both a zero and a deliberately nonzero exit. The live review check uses a real local TrueForge server and a scripted provider. Two models reject the request. The third receives the hunk decisions and the result of running pytest in the staged copy. The check also verifies that the original files keep their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Tested installer and platform results](https://github.com/aceholland/forgelens/releases/download/v0.4.0/ForgeLens-0.4.0-package-verification.json)
 
 | Editor host | Coverage |
 | --- | --- |
@@ -139,13 +150,14 @@ The extension targets **desktop VS Code 1.101 or newer with a trusted local fold
 | macOS arm64 stable | Context preview, native picker, live hunk decisions, staged pytest and model feedback |
 | Linux x64 stable | Context preview, native picker, live hunk decisions, staged pytest and model feedback |
 | Linux x64 1.101.0 | Installation, activation, context preview and native picker |
+| Linux x64 1.95.0 | Installation, activation, context preview, native picker, ordered fallback, hunk review and staged pytest |
 
 The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot run this build. Full model-driven runs on Remote SSH, WSL, Dev Containers, Codespaces and editor forks remain unverified. [Windows review and repair](docs/live-review-check.md)
 
 ## Build from a clean clone
 
 ```sh
-git clone --branch v0.3.1 https://github.com/aceholland/forgelens.git
+git clone --branch v0.4.0 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 python -m pip install pytest==9.0.2

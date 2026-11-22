@@ -88,7 +88,7 @@ async function main() {
   const launchArgs = [folder, '--disable-gpu', '--skip-welcome', '--skip-release-notes',
     '--disable-workspace-trust', '--remote-debugging-address=127.0.0.1', `--remote-debugging-port=${port}`,
     '--user-data-dir', userData, '--extensions-dir', extensionsDir];
-  const driverManifest = { name: 'desktop-check', publisher: 'fixture', version: '1.0.0', engines: { vscode: '^1.101.0' } };
+  const driverManifest = { name: 'desktop-check', publisher: 'fixture', version: '1.0.0', engines: { vscode: manifest.engines.vscode } };
   if (!liveReview) {
     const driver = path.join(storage, 'test-driver');
     fs.mkdirSync(driver);
@@ -101,7 +101,8 @@ async function main() {
   try {
     const settings = path.join(userData, 'User', 'settings.json');
     fs.writeFileSync(settings, JSON.stringify({ ...JSON.parse(fs.readFileSync(settings, 'utf8')),
-      'forgelens.model': 'fixture/scripted', 'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
+      'forgelens.model': 'fixture/primary', 'forgelens.fallbackModels': ['fixture/first-fallback', 'fixture/scripted'],
+      'forgelens.baseUrl': live.url, 'forgelens.liveReview': true,
       'forgelens.pythonPath': process.env.FORGELENS_QA_PYTHON || 'python',
       'editor.codeLens': true, 'diffEditor.codeLens': true, 'window.dialogStyle': 'custom' }));
     // VS Code's extension-test mode rejects native consent dialogs. Activate a
@@ -137,8 +138,8 @@ async function main() {
     } finally { clearTimeout(timer); if (host.exitCode===null && host.signalCode===null) host.kill(); }
     const result = JSON.parse(fs.readFileSync(resultPath,'utf8'));
     assert.ok(result.evidence, result.error || 'The live editor driver did not finish');
-    live.assertComplete();
-    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS '+JSON.stringify(result.evidence));
+    const modelRequests = live.assertComplete();
+    console.log('FORGELENS_DESKTOP_LIVE_REVIEW_PASS '+JSON.stringify({...result.evidence, modelRequests}));
   } finally { await live.close(); }
 }
 

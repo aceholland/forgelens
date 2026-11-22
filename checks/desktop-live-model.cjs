@@ -28,13 +28,22 @@ async function start(storage, temp) {
   const cli = process.env.TRUEFORGE_CLI || path.join(temp, 'forge-preview-harness/node_modules/@truefoundry/trueforge/dist/cli.js');
   assert.ok(fs.existsSync(cli), 'Install the pinned TrueForge CLI in the harness or set TRUEFORGE_CLI');
   let calls = 0, failure, child;
+  const modelIds = ['primary', 'first-fallback', 'scripted'];
+  const attempted = [];
   const model = http.createServer(async (req, res) => {
     try {
-      if (req.url.endsWith('/models')) return res.writeHead(200, {'content-type':'application/json'}).end(JSON.stringify({object:'list', data:[{id:'scripted', object:'model'}]}));
+      if (req.url.endsWith('/models')) return res.writeHead(200, {'content-type':'application/json'}).end(JSON.stringify({object:'list', data:modelIds.map(id => ({id, object:'model'}))}));
       if (!req.url.endsWith('/chat/completions')) return res.writeHead(404).end();
       const parts = [];
       for await (const chunk of req) parts.push(chunk);
       const input = JSON.parse(Buffer.concat(parts).toString());
+      attempted.push(input.model);
+      assert.ok(modelIds.includes(input.model), 'Unknown fixture model');
+      if (input.model !== 'scripted') {
+        return res.writeHead(401, {'content-type':'application/json'}).end(JSON.stringify({
+          error:{type:'authentication_error', message:'Synthetic unauthorized model for the ordered fallback check'},
+        }));
+      }
       assert.ok(calls < 2, 'Unexpected model request');
       assert.ok(input.tools.some(tool => tool.function.name === 'propose_changes'));
       let delta;
@@ -88,8 +97,13 @@ async function start(storage, temp) {
     const sdk = new TrueForge({baseUrl:url, maxRetries:0});
     await sdk.settings.modelProviders.create({manifest:{type:'custom', name:'fixture',
       baseUrl:'http://127.0.0.1:' + modelPort + '/v1', auth:{apiKey:'synthetic-fixture'},
-      models:[{name:'scripted', modelId:'scripted', properties:{contextLength:32000, maxOutputTokens:2048}}]}});
-    return { url, close, assertComplete() { if (failure) throw failure; assert.equal(calls, 2); } };
+      models:modelIds.map(id => ({name:id, modelId:id, properties:{contextLength:32000, maxOutputTokens:2048}}))}});
+    return { url, close, assertComplete() {
+      if (failure) throw failure;
+      assert.deepEqual(attempted, [...modelIds, 'scripted']);
+      assert.equal(calls, 2);
+      return attempted;
+    } };
   } catch (error) { await close(); throw error; }
 }
 module.exports = { files, start };

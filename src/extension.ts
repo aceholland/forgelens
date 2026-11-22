@@ -430,6 +430,7 @@ export async function activate(context:vscode.ExtensionContext) {
    onFallback:()=>{bridge?.resetExploration();modelSwitching=false;},
    getStagedProposalCount:()=>store.list().length+live.list().length,getRecentToolCalls:()=>recentToolCalls,
    reasoningEffort:config.get<string>('reasoningEffort')||undefined,fallbackModel:config.get<string>('fallbackModel')||undefined,
+   fallbackModels:config.get<string[]>('fallbackModels'),
    mcpName,instructions:sequentialDraft?sequentialDraftInstructions:draftFromContext?draftInstructions:compact&&selected.items.length?compactInstructions:instructionsForTools(preloadTools),
    sourceEvidence:compact&&selected.items.length?compactEvidence(selected,draftFromContext):undefined,onEvent:event=>{
     if(cancellation)return;
@@ -437,7 +438,10 @@ export async function activate(context:vscode.ExtensionContext) {
     else if(event.type==='client.status'){
      if(event.message.startsWith('Run time limit reached.')){runExpired=true;commandAbort?.abort();live.cancel('Run timed out during hunk review.');}
      emit(event.message);
-    }else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);
+    }else if(event.type==='thread.context_compaction_started')
+     emit(`TrueForge is summarizing the conversation (threshold ${event.trigger.thresholdTokens.toLocaleString()} tokens).`);
+    else if(event.type==='thread.context_compaction_finished')emit('TrueForge summarized the conversation. Continuing this turn.');
+    else if(event.type==='turn.done'&&event.state.status==='error')emit(`Model error: ${event.state.message}`);
     else emit(event.type);
    },onQuestion:draftFromContext || !config.get<boolean>('askQuestions',true) ? undefined : async details=>{
     if(cancellation||runExpired||modelSwitching)return undefined;

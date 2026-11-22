@@ -19,6 +19,12 @@
   ],
   "config": {
     "iterationLimit": 40,
+    "contextManagement": {
+      "compaction": {
+        "enabled": true,
+        "trigger": {"type": "input_tokens", "value": 60000}
+      }
+    },
     "dynamicSubAgents": {
       "enabled": false
     },

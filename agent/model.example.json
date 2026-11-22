@@ -42,7 +42,7 @@
   "vscodeUserSettings": {
     "forgelens.baseUrl": "http://127.0.0.1:8790",
     "forgelens.model": "REPLACE_WITH_CLOUD_TRUEFORGE_MODEL_ID",
-    "forgelens.fallbackModel": "local-ollama/qwen-local",
+    "forgelens.fallbackModels": ["local-ollama/qwen-local"],
     "forgelens.contextBudget": 24000,
     "forgelens.tokenBudget": 10000,
     "forgelens.liveReview": true,

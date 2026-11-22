@@ -55,6 +55,47 @@ test('hosted Gemma 4 translates explicit off/minimal into native Google thinking
   }
 });
 
+test('every editor mode sends the native conversation trigger on the wire, capped for small models',async()=>{
+  for (const mode of [{}, {draftFromContext:true}, {sourceEvidence:'Selected source'}]) {
+    for (const [contextLength, threshold] of [[undefined,60_000],[128_000,60_000],[32_000,25_600]] as const) {
+      const f = fixture();
+      Object.assign(f.options, mode);
+      Object.assign(f.options.sdk!, {models:{list:async()=>({data:[
+        {name:'other/model',properties:{contextLength:2000}},
+        {name:f.options.model,properties:{contextLength}},
+      ]})}});
+      assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');
+      const request = f.calls.find(c=>c.method==='create')!.args[0];
+      const wire = await CreateSessionRequest.jsonOrThrow(request,{unrecognizedObjectKeys:'fail'});
+      assert.deepEqual((wire as typeof request).agent.spec.config.context_management.compaction,
+        {enabled:true,trigger:{type:'input_tokens',value:threshold}});
+    }
+  }
+});
+
+test('fallback sessions use their own model window from one catalog lookup',async()=>{
+  const f=fixture([created,failed]);
+  f.options.fallbackModel='backup/small';
+  let lookups=0;
+  Object.assign(f.options.sdk!,{models:{list:async()=>{
+    lookups++;
+    return {data:[{name:f.options.fallbackModel,properties:{contextLength:8192}}]};
+  }}});
+  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'error');
+  const thresholds=f.calls.filter(call=>call.method==='create')
+    .map(call=>call.args[0].agent.spec.config.contextManagement.compaction.trigger.value);
+  assert.deepEqual(thresholds,[60_000,6553]);
+  assert.equal(lookups,1);
+});
+
+test('a catalog error leaves editing available with the default compaction threshold',async()=>{
+  const f=fixture();
+  Object.assign(f.options.sdk!,{models:{list:async()=>{throw new Error('catalog unavailable');}}});
+  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');
+  const spec=f.calls.find(call=>call.method==='create')!.args[0].agent.spec;
+  assert.equal(spec.config.contextManagement.compaction.trigger.value,60_000);
+});
+
 test('compact mode keeps repository text in user-role context and exposes focused tools',async()=>{
  const f=fixture();f.options.sourceEvidence='Untrusted repository excerpt for this test.';
  assert.equal((await new ForgeRunner(f.options).run('Original task')).status,'done');
@@ -266,6 +307,54 @@ test('explicit terminal model error may use configured fallback through a new Tr
  f.options.fallbackModel='test/backup';
  assert.deepEqual(await new ForgeRunner(f.options).run('edit'),{sessionId:'s2',status:'done'});
  assert.deepEqual(f.calls.filter(c=>c.method==='create').map(c=>c.args[0].agent.spec.model.name),['test/model','test/backup']);
+});
+
+test('ordered fallbacks use each distinct configured model until one succeeds', async () => {
+  const f = fixture();
+  Object.assign(f.options, {
+    fallbackModel: 'test/legacy',
+    fallbackModels: [' test/first ', '', 'test/model', 'test/first', 'test/second', 'test/unused'],
+  });
+  f.sessions.createTurnStream = async (sessionId: string) =>
+    stream(sessionId === 's3' ? [created, answer, done] : [created, failed]) as any;
+  let switches = 0;
+  f.options.onFallback = () => { switches++; };
+
+  assert.deepEqual(await new ForgeRunner(f.options).run('edit'), { sessionId: 's3', status: 'done' });
+  const attempted = f.calls.filter(call => call.method === 'create').map(call => call.args[0].agent.spec.model.name);
+  assert.deepEqual(attempted, ['test/model', 'test/first', 'test/second']);
+  assert.equal(switches, 2);
+});
+
+test('empty fallback list preserves an existing single fallback', async () => {
+  const f = fixture([created, failed]);
+  Object.assign(f.options, { fallbackModels: [], fallbackModel: 'test/legacy' });
+  assert.deepEqual(await new ForgeRunner(f.options).run('edit'), { sessionId: 's2', status: 'error' });
+  assert.deepEqual(f.calls.filter(call => call.method === 'create').map(call => call.args[0].agent.spec.model.name),
+    ['test/model', 'test/legacy']);
+});
+
+test('partial output from an intermediate fallback blocks further replay', async () => {
+  const f = fixture();
+  Object.assign(f.options, { fallbackModels: ['test/first', 'test/second'] });
+  f.sessions.createTurnStream = async (sessionId: string) =>
+    stream(sessionId === 's1' ? [created, failed] : [created, answer, failed]) as any;
+
+  assert.deepEqual(await new ForgeRunner(f.options).run('edit'), { sessionId: 's2', status: 'error' });
+  assert.equal(f.calls.filter(call => call.method === 'create').length, 2);
+});
+
+test('invalid model settings are reported before a model session starts', async () => {
+  for (const malformed of [{ fallbackModels:'test/backup' }, { fallbackModels: ['test/backup', 3] },
+      { fallbackModels: null }, { fallbackModel: 42 }, { model: false }]) {
+    const f = fixture();
+    let cleanups = 0;
+    f.options.onScoutFinished = async () => { cleanups++; };
+    Object.assign(f.options, malformed, { contextScout: { mode: 'separate', mcpName: 'reader' } });
+    await assert.rejects(new ForgeRunner(f.options).run('edit'), /list of TrueForge model IDs/);
+    assert.equal(f.calls.length, 0);
+    assert.equal(cleanups, 1);
+  }
 });
 
 test('does not replay a turn after ambiguous transport interruption',async()=>{

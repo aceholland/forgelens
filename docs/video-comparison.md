@@ -14,6 +14,16 @@ Both recordings show TrueForge completing Task B against the required Flask revi
 
 ForgeLens also lets you export only the accepted hunks as a Git patch, preview context without a provider, and request pytest against a temporary copy. A second Windows fixture delivered an actual assertion failure to the running model, reviewed the repair, and passed pytest in the same turn. [Recording and results](live-review-check.md)
 
+### Changes after the Task B recording
+
+| Capability | ForgeLens 0.4.0 |
+| --- | --- |
+| Ordered fallback models | Set a primary and an ordered list of alternates in VS Code. The installed-editor check makes the first two models fail and verifies that the third receives the review and test results. |
+| Long conversations | TrueForge summarizes older messages at 60,000 input tokens by default. ForgeLens also accounts for the active model's reported context window. A loopback test checks that TrueForge creates a summary and uses it to continue the turn. |
+| Older desktop editors | The minimum version is VS Code 1.95. The release checks install the same VSIX on 1.95.0 and current desktop builds. |
+
+[Settings and installation](../README.md#try-it-in-vs-code) · [Native conversation check](../checks/native-scout.ts) · [Package verification](https://github.com/aceholland/forgelens/releases/download/v0.4.0/ForgeLens-0.4.0-package-verification.json)
+
 In installed copies of ForgeLens on Linux and macOS, the editor accepted a calculation change and its test while rejecting an unrelated change to a tag. Two tests passed in the staged copy. The provider received the decisions and the result, and both files kept their original on-disk hashes. These reproducible checks use a scripted model. [Linux run](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134701) · [macOS run](https://github.com/aceholland/forgelens/actions/runs/45004531362/job/137153134793)
 
 For unassisted Task B performance, the real model results include unsuccessful attempts and the files each model actually staged. [Free CPU trials](evidence/task-b-open-models/README.md) · [Historical runs without an operator answer](evidence/task-b-historical/README.md)

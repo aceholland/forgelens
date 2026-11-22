@@ -10,6 +10,7 @@ export interface ApprovalDetails {
 export interface QuestionDetails { sessionId: string; threadId: string; toolCallId: string; question: string; options: string[]; }
 export type ApprovalDecision = boolean | { allowed: boolean; reason: string };
 export type ForgeEvent = TrueForgeApi.TurnStreamingEvent | { type: 'client.status'; message: string };
+type ForgeSdk = Pick<TrueForge,'sessions'|'settings'> & Partial<Pick<TrueForge,'models'>>;
 export interface ForgeOptions {
   /** Locally selected, untrusted source data sent as initial user-role context. */
   sourceEvidence?: string;
@@ -17,6 +18,7 @@ export interface ForgeOptions {
   draftFromContext?: boolean;
   sequentialDraft?: SequentialDraft;
   baseUrl: string; model: string; fallbackModel?: string; preloadTools?: boolean; reasoningEffort?: string; dynamicSubAgents?: boolean; mcpName: string; instructions: string;
+  fallbackModels?: readonly string[];
   onEvent(event: ForgeEvent): void;
   onApproval(details: ApprovalDetails): Promise<ApprovalDecision>;
   onQuestion?(details: QuestionDetails): Promise<string | undefined>;
@@ -34,7 +36,7 @@ export interface ForgeOptions {
   /** Opt in for editing tasks; omit for read-only checks. */
   getStagedProposalCount?(): number;
   getRecentToolCalls?(): string[];
-  sdk?: Pick<TrueForge, 'sessions' | 'settings'>;
+  sdk?: ForgeSdk;
 }
 export const DEFAULT_MODEL_CALL_TIMEOUT_MS = 120000;
 export const CONTEXT_SCOUT_TIMEOUT_MS = 60000;
@@ -113,7 +115,8 @@ export async function registerMcp(baseUrl: string, name: string, url: string, to
 
 /** A transport for the TrueForge agent loop, never a model-provider client. */
 export class ForgeRunner {
-  private readonly sdk: Pick<TrueForge, 'sessions' | 'settings'>;
+  private readonly sdk: ForgeSdk;
+  private readonly contextLengths = new Map<string, number>();
   private controller = new AbortController();
   private sessionId = '';
   private turnId = '';
@@ -166,6 +169,20 @@ export class ForgeRunner {
       void this.cancel();
     },runTimeoutMs);
     try {
+      this.contextLengths.clear();
+      try {
+        const catalog = await this.sdk.models?.list({abortSignal:this.controller.signal,timeoutInSeconds:2,maxRetries:0});
+        for (const entry of catalog?.data ?? []) {
+          const length = entry.properties.contextLength;
+          if (length && Number.isSafeInteger(length) && length > 0) this.contextLengths.set(entry.name,length);
+        }
+      } catch {
+        // Catalog metadata is optional. The session defaults to a 60k compaction trigger.
+      }
+      if (this.cancelled) {
+        if (this.contextScout && this.contextScout.mode !== 'native') await this.options.onScoutFinished?.();
+        return {sessionId:this.sessionId,status:timedOut?'error':'cancelled'};
+      }
       const result = await this.runModels(prompt);
       return timedOut || (result.status==='done' && this.options.getStagedProposalCount?.()===0) ? {sessionId:this.sessionId,status:'error'} : result;
     } catch(error) {
@@ -189,6 +206,14 @@ export class ForgeRunner {
   }
 
   private async runModels(prompt:string):Promise<RunResult> {
+      const {model, fallbackModel, fallbackModels = []} = this.options;
+      const fallbacks = Array.isArray(fallbackModels) && fallbackModels.length === 0
+        ? [fallbackModel ?? ''] : fallbackModels;
+      if (!Array.isArray(fallbacks) || typeof model !== 'string' || fallbacks.some(id => typeof id !== 'string')) {
+        if (this.contextScout && this.contextScout.mode !== 'native') await this.options.onScoutFinished?.();
+        throw new Error('ForgeLens requires string model IDs and a list of TrueForge model IDs for fallbackModels.');
+      }
+      const models = [...new Set([model, ...fallbacks].map(id => id.trim()).filter(Boolean))];
       const scout=this.contextScout;
       if(scout && (!scout.mcpName.trim() || scout.mcpName.trim()===this.options.mcpName.trim())) {
         if(scout.mode!=='native')await this.options.onScoutFinished?.();
@@ -196,7 +221,6 @@ export class ForgeRunner {
       }
       if(scout && scout.mode!=='native' && !await this.runScout(prompt))return {sessionId:this.sessionId,status:this.cancelled?'cancelled':'error'};
       if(this.cancelled)return {sessionId:this.sessionId,status:'cancelled'};
-      const models = [this.options.model, this.options.fallbackModel].filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
       for (let index = 0; index < models.length; index++) {
         try {
           let result = await this.runModelWithDeadline(prompt, models[index]);
@@ -214,13 +238,13 @@ export class ForgeRunner {
             const stopped=await this.confirmTimeoutCancellation();
             if(this.cancelled)return {sessionId:this.sessionId,status:'cancelled'};
             if (!stopped || this.usedTools || this.producedOutput || this.options.getStagedProposalCount?.()!==0 || index===models.length-1) {
-              this.options.onEvent({type:'client.status',message:'Model call timed out. No fallback: cancellation is unconfirmed, staged-edit state is unsafe/unknown, or no second model is configured. Check the TrueForge session.'});
+              this.options.onEvent({type:'client.status',message:'Model call timed out. No fallback: cancellation is unconfirmed, staged-edit state is unsafe/unknown, or the model list is exhausted. Check the TrueForge session.'});
               return {sessionId:this.sessionId,status:'error'};
             }
           } else if (this.sessionId || index === models.length - 1) throw error;
         }
         this.controller=new AbortController();this.cancellationRequest=undefined;this.options.onFallback?.();
-        this.options.onEvent({ type: 'client.status', message: 'The configured model failed. Trying the configured fallback through TrueForge; edits still require review.' });
+        this.options.onEvent({ type: 'client.status', message: `Trying fallback ${index + 1} of ${models.length - 1} through TrueForge (${models[index + 1]}). Edits still require review.` });
       }
       return { sessionId: this.sessionId, status: 'error' };
   }
@@ -334,11 +358,14 @@ export class ForgeRunner {
     const params = hostedGemma && (effort==='none' || effort==='minimal')
       ? {thinking_config:{thinkingLevel:'minimal',includeThoughts:false}}
       : effort ? {reasoningEffort:effort} : undefined;
+    const contextLength = this.contextLengths.get(model);
+    const threshold = contextLength ? Math.min(60_000,Math.max(1,Math.floor(contextLength * 0.8))) : 60_000;
     const create = () => this.sdk.sessions.create({ agent: { spec: {
       model: { name: model, ...(params ? {params} : {}) }, instructions: promptInstructions,
       ...(contextMessages.length?{messages:contextMessages}:{}),
       mcpServers: scout?[readConnector]:native?[parentConnector,readConnector]:[parentConnector],
       config: {iterationLimit:scout?8:40,dynamicSubAgents:{enabled:!!native},sandbox:{enabled:false},
+        contextManagement:{compaction:{enabled:true,trigger:{type:'input_tokens',value:threshold}}},
         askUserQuestions:{enabled:!scout && !draft && !!this.options.onQuestion},webSearch:{enabled:false},generativeUi:{enabled:false},memory:{enabled:false}},
     } } }, { abortSignal: attemptSignal, maxRetries: 0 });
     let session: Awaited<ReturnType<typeof create>> | undefined;

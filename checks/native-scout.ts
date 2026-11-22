@@ -35,6 +35,9 @@ async function main() {
   const parentName='fixture-editor';
   const scoutName='fixture-scout';
   const calls={parent:0,scout:0};
+  const summary='Previous context summarized by the loopback provider.';
+  const history=' archive'.repeat(64_000);
+  const compaction={summaries:0,resumed:false};
   const query={query:task};
   const edit={path:'sample.py',edits:[{oldText:'return False',newText:'return True'}]};
   const tool=(mcp_server:string,tool_name:string,input:unknown)=>({name:'call_tool',args:{mcp_server,tool_name,input}});
@@ -50,13 +53,31 @@ async function main() {
   const provider=http.createServer(async(req,res)=>{
     if(req.url?.endsWith('/models')){
       res.setHeader('content-type','application/json');
-      res.end(JSON.stringify({object:'list',data:[{id:'scripted',object:'model'}]}));
+      res.end(JSON.stringify({object:'list',data:['scripted','long-history'].map(id=>({id,object:'model'}))}));
       return;
     }
     if(!req.url?.endsWith('/chat/completions')){res.writeHead(404).end();return;}
     const chunks:Buffer[]=[];
     for await(const part of req)chunks.push(part as Buffer);
     const input=JSON.parse(Buffer.concat(chunks).toString());
+    if(input.model==='long-history'){
+      const messages=JSON.stringify(input.messages);
+      const summarizing=messages.includes('summary of the conversation') && messages.includes(history);
+      if(summarizing)compaction.summaries++;
+      const resumed=messages.includes(summary) && !messages.includes(history);
+      compaction.resumed ||= resumed;
+      if(!resumed&&!summarizing){res.writeHead(400).end('Expected a summary request or compacted context');return;}
+      const delta={role:'assistant',content:summarizing?summary:'Continued using the summary.'};
+      res.writeHead(200,{'content-type':'text/event-stream'});
+      const packet=(choices:unknown[],usage?:object)=>'data: '+JSON.stringify({
+        id:'history',object:'chat.completion.chunk',created:1,model:input.model,choices,usage,
+      })+'\n\n';
+      res.write(packet([{index:0,delta,finish_reason:null}]));
+      res.write(packet([{index:0,delta:{},finish_reason:'stop'}]));
+      const promptTokens=resumed?100:64_000;
+      res.write(packet([],{prompt_tokens:promptTokens,completion_tokens:12,total_tokens:promptTokens+12}));
+      res.end('data: [DONE]\n\n');return;
+    }
     const scout=input.messages.some((m:{role:string;content:unknown})=>
       m.role==='system' && JSON.stringify(m.content).includes('operating as a sub-agent'));
     const phase=scout?'scout':'parent';
@@ -100,7 +121,10 @@ async function main() {
     }
     const sdk=new TrueForge({baseUrl:url,maxRetries:0,timeoutInSeconds:30});
     await sdk.settings.modelProviders.create({manifest:{type:'custom',name:'local-fixture',baseUrl:'http://127.0.0.1:'+providerPort+'/v1',
-      auth:{apiKey:'synthetic-local-fixture'},models:[{name:'scripted',modelId:'scripted',properties:{contextLength:32000,maxOutputTokens:2048}}]}});
+      auth:{apiKey:'synthetic-local-fixture'},models:[
+        {name:'scripted',modelId:'scripted',properties:{contextLength:32000,maxOutputTokens:2048}},
+        {name:'long-history',modelId:'long-history',properties:{contextLength:128000,maxOutputTokens:2048}},
+      ]}});
     const common={root:workspace,budget:4000,task,requireDiscovery:true,active:()=>true,context:()=>{},
       command:async()=>{throw new Error('Unexpected command');},propose:async()=>{proposals++;return 'Reviewed test proposal';}};
     scoutBridge=await startMcp({...common,readOnly:true,onToolRequest:name=>scoutCalls.push(name)});
@@ -121,8 +145,20 @@ async function main() {
     assert.ok(events.some(e=>e.type==='client.status' && e.message.includes('editor operation was denied')));
     assert.ok(scoutEvents.some(e=>e.type==='thread.done'));
     assert.equal(await readFile(path.join(workspace,'sample.py'),'utf8'),source);
+    const historyEvents:ForgeEvent[]=[];
+    const longRun=await new ForgeRunner({baseUrl:url,model:'local-fixture/long-history',mcpName:parentName,
+      instructions,preloadTools:true,onEvent:event=>historyEvents.push(event),
+      onApproval:async()=>assert.fail('The read-only compaction check requested approval.'),runTimeoutMs:120000,
+    }).run('Summarize this synthetic archive and continue.'+history);
+    assert.equal(longRun.status,'done');
+    const lifecycle=historyEvents.filter(event=>event.type==='thread.context_compaction_started'||event.type==='thread.context_compaction_finished');
+    assert.deepEqual(lifecycle.map(event=>[event.type,event.trigger.thresholdTokens]),[
+      ['thread.context_compaction_started',60_000],['thread.context_compaction_finished',60_000],
+    ]);
+    assert.deepEqual(compaction,{summaries:1,resumed:true});
     console.log(JSON.stringify({provider:'deterministic loopback fixture',result,turns:turns.length,nativeChildren:children.length,
-      childEditorWrite:'denied',scoutCalls,parentCalls,reviewedProposals:proposals,modelCalls:calls,sourceUnchanged:true},null,2));
+      childEditorWrite:'denied',scoutCalls,parentCalls,reviewedProposals:proposals,modelCalls:calls,sourceUnchanged:true,
+      conversationCompaction:{sessionId:longRun.sessionId,threshold:60_000,...compaction}},null,2));
   } catch(error) {
     await writeFile(path.join(scratch,'failure.json'),JSON.stringify({events,scoutEvents,calls,approvals,parentCalls,scoutCalls},null,2));
     console.error('Isolated fixture diagnostics:',scratch);
