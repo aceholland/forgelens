@@ -1,0 +1,145 @@
+[
+  {
+    "attempt": "attempt-01",
+    "sessionId": "01m81qxpwvrhskxqjrx8hjz815",
+    "startedUTC": "2026-11-22T13:42:49.940Z",
+    "finishedUTC": "2026-11-22T13:47:43.953Z",
+    "release": "0.4.0",
+    "model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+    "operatorMessages": 1,
+    "operatorAnswers": 0,
+    "nativeTurnStatus": "error",
+    "singleOriginalTurnCompleted": false,
+    "nativeTurnAttempts": [
+      {
+        "sessionId": "01m81qxpwvrhskxqjrx8hjz815",
+        "status": "error"
+      }
+    ],
+    "passed": false,
+    "upstreamHttpStatuses": [
+      429,
+      200,
+      429,
+      429,
+      429
+    ],
+    "modelFinishReasons": [
+      "tool_calls"
+    ],
+    "reportedGenerationCostsUSD": [
+      0
+    ],
+    "files": [
+      "docs/cli.rst",
+      "src/flask/cli.py",
+      "tests/test_cli.py"
+    ],
+    "cli": "1 failed, 59 passed in 1.09s",
+    "fullSuite": "1 failed, 491 passed in 10.36s",
+    "terminalChecks": {
+      "cli": false,
+      "help": true,
+      "json": true,
+      "threeFiles": true,
+      "independent": false
+    },
+    "savedPatchSha256": "47fb19633ace461dfeb52020776b6951353c80e453600120b6e1a0c837ecaaa7",
+    "nativeProviderRetries": 0
+  },
+  {
+    "attempt": "attempt-02",
+    "sessionId": "01m81rv605qtrprb8k4vsa7azg",
+    "startedUTC": "2026-11-22T13:50:36.215Z",
+    "finishedUTC": "2026-11-22T14:01:35.414Z",
+    "release": "0.4.0",
+    "model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+    "operatorMessages": 1,
+    "operatorAnswers": 0,
+    "nativeTurnStatus": "error",
+    "singleOriginalTurnCompleted": false,
+    "nativeTurnAttempts": [
+      {
+        "sessionId": "01m81rby8t7a48vttr87kfq8bd",
+        "status": "error"
+      },
+      {
+        "sessionId": "01m81rv605qtrprb8k4vsa7azg",
+        "status": "error"
+      }
+    ],
+    "passed": false,
+    "upstreamHttpStatuses": [
+      429,
+      429,
+      429,
+      429,
+      429,
+      429,
+      429,
+      429,
+      429,
+      200
+    ],
+    "modelFinishReasons": [
+      "length"
+    ],
+    "reportedGenerationCostsUSD": [
+      0
+    ],
+    "files": [],
+    "cli": null,
+    "fullSuite": null,
+    "terminalChecks": {},
+    "savedPatchSha256": null,
+    "nativeProviderRetries": 2
+  },
+  {
+    "attempt": "attempt-03",
+    "sessionId": "01m81s1ks2mkzbj8zkw4agysm4",
+    "startedUTC": "2026-11-22T14:02:25.164Z",
+    "finishedUTC": "2026-11-22T14:05:19.635Z",
+    "release": "0.4.0",
+    "model": "anonymous-kilo/particle-ai-particle-1-free",
+    "operatorMessages": 1,
+    "operatorAnswers": 0,
+    "nativeTurnStatus": "done",
+    "singleOriginalTurnCompleted": true,
+    "nativeTurnAttempts": [
+      {
+        "sessionId": "01m81s1ks2mkzbj8zkw4agysm4",
+        "status": "done"
+      }
+    ],
+    "passed": true,
+    "upstreamHttpStatuses": [
+      200,
+      429,
+      200
+    ],
+    "modelFinishReasons": [
+      "tool_calls",
+      "stop"
+    ],
+    "reportedGenerationCostsUSD": [
+      0,
+      0
+    ],
+    "files": [
+      "docs/cli.rst",
+      "src/flask/cli.py",
+      "tests/test_cli.py"
+    ],
+    "cli": "60 passed in 1.11s",
+    "fullSuite": "492 passed in 9.51s",
+    "terminalChecks": {
+      "cli": true,
+      "help": true,
+      "json": true,
+      "threeFiles": true,
+      "independent": true
+    },
+    "savedPatchSha256": "f964d2acf7f7965d0ba972de75ae1c08578a21dd8df75b51f5afb57eb05cd2dc",
+    "nativeProviderRetries": 0
+  }
+]

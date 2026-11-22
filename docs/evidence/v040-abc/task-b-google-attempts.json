@@ -1,0 +1,106 @@
+{
+  "task": "Official Task B",
+  "provider": "Google Gemini Developer API, existing native TrueForge Google connection",
+  "pricing": "https://ai.google.dev/gemini-api/docs/pricing/#gemma-4",
+  "attempts": [
+    {
+      "version": "0.4.0",
+      "model": "google-gemini/gemma-4-31b-it",
+      "platform": "win32",
+      "editor": "1.147.0",
+      "mode": "draft",
+      "flask": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+      "startedAt": "2026-11-22T13:58:28.132Z",
+      "finishedAt": "2026-11-22T13:59:07.921Z",
+      "sessionId": "01m81rtdhfmp7t80761epe77h0",
+      "passed": false,
+      "submitted": 1,
+      "operatorAnswers": 0,
+      "staged": 0,
+      "status": "error",
+      "displayedAutomaticRetries": 1,
+      "packageSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+      "attempt": "attempt-31b-1",
+      "submittedPromptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+      "httpStatusCodesInProviderLog": [
+        503
+      ],
+      "upstreamHighDemand": true,
+      "approvedHunks": 0,
+      "executedTestsInEditor": false,
+      "liveEditorResultSha256": "52422a0810329b4a24d213ba2c1077cf2b27df63129512f06034036b8ee5fa32",
+      "scenes": [
+        "01-request",
+        "02-discovery",
+        "04-session",
+        "failure"
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "model": "google-gemini/gemma-4-26b-a4b-it",
+      "platform": "win32",
+      "editor": "1.147.0",
+      "mode": "draft",
+      "flask": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+      "startedAt": "2026-11-22T14:00:39.565Z",
+      "finishedAt": "2026-11-22T14:00:50.991Z",
+      "sessionId": "01m81rye78p1q3bqy3jzbxqmet",
+      "passed": false,
+      "submitted": 1,
+      "operatorAnswers": 0,
+      "staged": 0,
+      "status": "error",
+      "displayedAutomaticRetries": 2,
+      "packageSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+      "attempt": "attempt-26b-1",
+      "submittedPromptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+      "httpStatusCodesInProviderLog": [
+        503
+      ],
+      "upstreamHighDemand": true,
+      "approvedHunks": 0,
+      "executedTestsInEditor": false,
+      "liveEditorResultSha256": "deec4645b8182c2d96f96d70582467a1cb6d14e3cd6816d21338eb2929912e0c",
+      "scenes": [
+        "01-request",
+        "02-discovery",
+        "04-session",
+        "failure"
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "model": "google-gemini/gemma-4-26b-a4b-it",
+      "platform": "win32",
+      "editor": "1.147.0",
+      "mode": "draft",
+      "flask": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+      "startedAt": "2026-11-22T14:03:17.580Z",
+      "finishedAt": "2026-11-22T14:03:55.317Z",
+      "sessionId": "01m81s3vsctvpp7w6skdp4tzkj",
+      "passed": false,
+      "submitted": 1,
+      "operatorAnswers": 0,
+      "staged": 0,
+      "status": "error",
+      "displayedAutomaticRetries": 2,
+      "packageSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+      "attempt": "attempt-26b-2",
+      "submittedPromptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+      "httpStatusCodesInProviderLog": [
+        503
+      ],
+      "upstreamHighDemand": true,
+      "approvedHunks": 0,
+      "executedTestsInEditor": false,
+      "liveEditorResultSha256": "6f4da85af268f58230e6137fadb675f6143f5b9201aa0a1135b5a83bcad7d763",
+      "scenes": [
+        "01-request",
+        "02-discovery",
+        "04-session",
+        "failure"
+      ]
+    }
+  ]
+}

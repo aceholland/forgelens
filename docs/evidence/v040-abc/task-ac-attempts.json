@@ -1,0 +1,318 @@
+{
+  "recordedAt": "2026-11-22T14:33:54.056847+00:00",
+  "selectedA": "A-nemotron-2",
+  "attempts": [
+    {
+      "task": "A",
+      "model": "qa-local/qwen-local",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T13:45:08.635Z",
+      "finishedAt": "2026-11-22T13:53:11.505Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-01",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "headers timeout",
+        "edit anchor rejected"
+      ]
+    },
+    {
+      "task": "C",
+      "model": "unavailable/offline",
+      "editor": "1.95.0",
+      "startedAt": "2026-11-22T13:52:33.342Z",
+      "finishedAt": "2026-11-22T13:56:47.577Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "cancelled",
+      "staged": 0,
+      "attempt": "C-01",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [],
+      "captureNote": "The capture driver initially required a reviewed edit after fallback. The operator had stopped the run after the handoff. The recorded C-02 run verifies the failure, fallback, cancellation and clean workspace required by Task C."
+    },
+    {
+      "task": "C",
+      "model": "unavailable/offline",
+      "editor": "1.95.0",
+      "startedAt": "2026-11-22T13:54:23.693Z",
+      "finishedAt": "2026-11-22T13:54:33.382Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "cancelled",
+      "staged": 0,
+      "attempt": "C-02",
+      "usedInVideo": true,
+      "editorChecksPassed": true,
+      "messagesObserved": []
+    },
+    {
+      "task": "A",
+      "model": "google-gemini/gemma-4-31b-it",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:01:19.822Z",
+      "finishedAt": "2026-11-22T14:02:28.840Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-google-31b-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 503"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "qa-local/qwen-local",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:02:22.697Z",
+      "finishedAt": "2026-11-22T14:15:37.208Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "done",
+      "staged": 1,
+      "attempt": "A-local-2",
+      "usedInVideo": false,
+      "editorChecksPassed": true,
+      "messagesObserved": [
+        "edit anchor rejected"
+      ],
+      "helperTests": "35 passed in 0.42s",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false
+    },
+    {
+      "task": "A",
+      "model": "google-gemini/gemma-4-31b-it",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:04:13.945Z",
+      "finishedAt": "2026-11-22T14:05:19.248Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-google-31b-2",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 503"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "google-gemini/gemma-4-26b-a4b-it",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:05:53.274Z",
+      "finishedAt": "2026-11-22T14:06:02.706Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-google-26b-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 503"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "free-kilo/particle-ai-particle-1-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:09:18.941Z",
+      "finishedAt": "2026-11-22T14:10:39.856Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-kilo-particle-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "headers timeout"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "free-kilo/particle-ai-particle-1-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:12:39.073Z",
+      "finishedAt": "2026-11-22T14:19:17.206Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 1,
+      "attempt": "A-particle-2",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 429"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "anonymous-kilo/recursive-flint-v1-0-free",
+      "editor": "1.95.0",
+      "startedAt": "2026-11-22T14:13:17.802Z",
+      "finishedAt": "2026-11-22T14:24:42.244Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "done",
+      "staged": 1,
+      "attempt": "A-flint-195-1",
+      "usedInVideo": false,
+      "editorChecksPassed": true,
+      "messagesObserved": [],
+      "helperTests": "35 passed in 0.32s",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false
+    },
+    {
+      "task": "A",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:18:18.733Z",
+      "finishedAt": "2026-11-22T14:20:52.522Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "done",
+      "staged": 1,
+      "attempt": "A-nemotron-1",
+      "usedInVideo": false,
+      "editorChecksPassed": true,
+      "messagesObserved": [],
+      "helperTests": "35 passed in 1.50s",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false
+    },
+    {
+      "task": "A",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:21:03.630Z",
+      "finishedAt": "2026-11-22T14:22:06.970Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "done",
+      "staged": 1,
+      "attempt": "A-nemotron-2",
+      "usedInVideo": true,
+      "editorChecksPassed": true,
+      "messagesObserved": [],
+      "helperTests": "35 passed in 0.38s",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false
+    },
+    {
+      "task": "A",
+      "model": "anonymous-kilo/baidu-ernie-5-5-flash-preview-free",
+      "editor": "1.95.0",
+      "startedAt": "2026-11-22T14:21:20.375Z",
+      "finishedAt": "2026-11-22T14:23:45.599Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-ernie-195-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 429"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "free-ling/inclusionai-ling-3-2-flash-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:24:00.049Z",
+      "finishedAt": "2026-11-22T14:32:18.524Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-ling-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 429"
+      ]
+    },
+    {
+      "task": "A",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:25:56.081Z",
+      "finishedAt": "2026-11-22T14:26:21.809Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-second-pass-nemotron-1",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [],
+      "startingPoint": "A model-produced first-pass candidate, re-created from its verified patch"
+    },
+    {
+      "task": "A",
+      "model": "free-supervl/nvidia-nemotron-3-5-super-vl-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:27:51.257Z",
+      "finishedAt": "2026-11-22T14:30:21.462Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "done",
+      "staged": 1,
+      "attempt": "A-supervl-1",
+      "usedInVideo": false,
+      "editorChecksPassed": true,
+      "messagesObserved": [],
+      "helperTests": "35 passed in 0.48s",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false
+    },
+    {
+      "task": "A",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:27:56.859Z",
+      "finishedAt": "2026-11-22T14:32:10.258Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 1,
+      "attempt": "A-supplement-review-nemotron-1",
+      "usedInVideo": true,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 429"
+      ],
+      "startingPoint": "A model-produced first-pass candidate, re-created from its verified patch"
+    },
+    {
+      "task": "A",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "editor": "1.147.0",
+      "startedAt": "2026-11-22T14:31:46.871Z",
+      "finishedAt": "2026-11-22T14:32:07.822Z",
+      "submitted": 1,
+      "operatorCorrections": 0,
+      "status": "error",
+      "staged": 0,
+      "attempt": "A-supplement-review-nemotron-2",
+      "usedInVideo": false,
+      "editorChecksPassed": false,
+      "messagesObserved": [
+        "upstream HTTP 429"
+      ],
+      "startingPoint": "A model-produced first-pass candidate, re-created from its verified patch"
+    }
+  ]
+}

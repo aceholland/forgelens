@@ -1,0 +1,60 @@
+{
+  "session": "01m81t3nmfrbhk7bpw6hd6yp3m",
+  "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "freeModelCatalog": "https://ai-gateway.kilo.ai/api/v1/models",
+  "pricePerTokenUSD": {
+    "prompt": "0",
+    "completion": "0",
+    "discount": 0
+  },
+  "gateway": "Kilo anonymous, fixed free model, no upstream account or authorization header",
+  "httpAttempts": [
+    {
+      "at": "2026-11-22T14:21:09.376Z",
+      "status": 200
+    },
+    {
+      "at": "2026-11-22T14:21:27.790Z",
+      "status": 200
+    },
+    {
+      "at": "2026-11-22T14:21:45.896Z",
+      "status": 200
+    },
+    {
+      "at": "2026-11-22T14:22:03.835Z",
+      "status": 200
+    }
+  ],
+  "modelCompletions": [
+    {
+      "at": "2026-11-22T14:21:11.441Z",
+      "prompt_tokens": 2906,
+      "completion_tokens": 131,
+      "total_tokens": 3037,
+      "cost": 0
+    },
+    {
+      "at": "2026-11-22T14:21:33.651Z",
+      "prompt_tokens": 3319,
+      "completion_tokens": 369,
+      "total_tokens": 3688,
+      "cost": 0
+    },
+    {
+      "at": "2026-11-22T14:21:46.739Z",
+      "prompt_tokens": 3811,
+      "completion_tokens": 83,
+      "total_tokens": 3894,
+      "cost": 0
+    },
+    {
+      "at": "2026-11-22T14:22:06.576Z",
+      "prompt_tokens": 4218,
+      "completion_tokens": 170,
+      "total_tokens": 4388,
+      "cost": 0
+    }
+  ],
+  "sumReportedCostUSD": 0
+}

@@ -1,0 +1,59 @@
+{
+  "task": "A",
+  "recording": "Offline replay of an accepted model edit",
+  "version": "0.4.0",
+  "editor": "1.147.0",
+  "originalSession": "01m81tg79bzv2zjdncvtdmvzvt",
+  "sourceInputMessagesInReplay": 0,
+  "modelCallsInReplay": 0,
+  "originalFlask": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "firstPatchSha256": "ffb00baea78290c0a27964e4848d5feb4da95915bf5fa0737828889dfd01579e",
+  "docstringPatchSha256": "fed5101eb31694d329aa18e0fc806b6f08b4f3abe92c6373e318f0c182116b42",
+  "cumulativePatchSha256": "f026e89032e4ce4afaba37237ebb24c7f5e31be59e2f903ac45143bbecfd7ede",
+  "tracked": 235,
+  "baselineSha256": "2011e6f681b80be214a483a049225914dc82d8c926ca18bf6656aca00d9342fc",
+  "scenes": [
+    {
+      "id": "01-accepted-hunk-preview",
+      "utc": "2026-11-22T14:34:30.446Z"
+    },
+    {
+      "id": "02-saved-docstring",
+      "utc": "2026-11-22T14:34:31.858Z"
+    },
+    {
+      "id": "03-terminal-tests",
+      "utc": "2026-11-22T14:34:38.201Z"
+    },
+    {
+      "id": "04-undo-and-integrity",
+      "utc": "2026-11-22T14:34:41.342Z"
+    }
+  ],
+  "passed": true,
+  "appliedAndSavedRecordedReplacement": true,
+  "behavior": {
+    "passed": true,
+    "values": {
+      "0": false,
+      "1": true,
+      "off": false,
+      "OFF": false,
+      "OfF": false,
+      "n": false,
+      "N": false,
+      "false": false,
+      "NO": false,
+      "": false,
+      "yes": true
+    },
+    "unset": false,
+    "docstring": "Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is not set, is an empty string,\n    or is (case-insensitively) ``0``, ``false``, ``no``, ``off``, or ``n``.\n    ",
+    "docstringExplicitEmpty": true,
+    "docstringExplicitUnset": true,
+    "pytest": "35 passed in 0.44s"
+  },
+  "editorUndoRestoredFirstPatch": true,
+  "finalFileHashesMatch": true,
+  "finalSha256": "2011e6f681b80be214a483a049225914dc82d8c926ca18bf6656aca00d9342fc"
+}

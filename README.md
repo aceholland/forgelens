@@ -2,22 +2,24 @@
 
 ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install ForgeLens 0.4.0](https://github.com/aceholland/forgelens/releases/download/v0.4.0/forgelens-0.4.0.vsix) · [Watch Task B in VS Code, 1m 29s](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [One-request evidence](docs/evidence/task-b-editor-one-go/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
+[Install ForgeLens 0.4.1](https://github.com/aceholland/forgelens/releases/download/v0.4.1/forgelens-0.4.1.vsix) · [Watch the narrated VS Code demo](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.0-ABC-and-0.4.1-review.mp4) · [Demo evidence and chapters](docs/evidence/v040-abc/README.md) · [Original narrated Round 1 demo](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-Version 0.4.0 adds ordered fallback models, automatic summaries for long conversations and support for desktop VS Code 1.95. The narrated one-request Task B run used v0.3.1. Both releases follow the original competition deadline. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.4.0/ForgeLens-0.4.0-overview.txt) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
+Version 0.4.1 adds **Next pending hunk** and **Export review summary**. The demo runs the three Flask tasks on the published v0.4.0 extension, then shows the two new review controls in v0.4.1. Version 0.4.0 introduced ordered fallback models, automatic summaries for long conversations and support for desktop VS Code 1.95. These releases follow the competition deadline. [Plain-text overview](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.1-overview.txt) · [Original competition release](https://github.com/aceholland/forgelens/releases/tag/v0.1.13)
 
-![A ForgeLens review in Windows VS Code. The first hunk is accepted, the second is pending, and both lines are visible in the editor diff.](docs/live-hunk-review.png)
+![ForgeLens 0.4.1 in Windows VS Code. The reviewer accepted one source edit, rejected another, and used Next pending hunk to open the remaining change in the test file.](docs/evidence/v040-abc/pending-hunk.png)
 
-## Task B and feature evidence
+## Flask tasks and feature evidence
 
 | Question | Observed result |
 | --- | --- |
-| Did Task B finish from one request? | **Yes in the recorded Windows run.** Baidu ERNIE 5.5 Flash Preview received the path-free request in Draft from context, proposed 3 files and completed its native turn. With zero operator answers or code corrections, the saved patch passed **59 CLI tests, all 491 Flask tests and 16 independent masking cases**. [Watch the terminal results](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [Session, patch and checks](docs/evidence/task-b-editor-one-go/README.md) |
+| What happened in Tasks A and C on v0.4.0? | Task A changed the selected function, passed 35 helper tests and restored all 235 tracked files on undo. A follow-up inline review made the empty and unset cases explicit in the docstring. Task C handed off after an unreachable endpoint and an invalid key. The editor stayed responsive, and all 235 file hashes matched after Stop. [Editor sessions, patches and checks](docs/evidence/v040-abc/README.md) |
+| Did Task B finish in one go on v0.4.0? | **Yes.** Particle‑1 received the original instruction once in Windows VS Code. In one TrueForge turn it proposed six hunks across the CLI, tests and documentation. The operator approved edits and tests and supplied zero hints or corrections. The saved patch passed **60 CLI tests, all 492 Flask tests and 16 masking cases**. The provider reported **$0**. [Recording and attempt history](docs/evidence/v040-abc/README.md) · [Exact patch](docs/evidence/v040-abc/task-b/candidate.patch) |
+| What did the earlier v0.3.1 Task B run verify? | Baidu ERNIE 5.5 Flash Preview received one path-free request in Windows VS Code and proposed changes to three files. With zero operator answers or code corrections, the saved patch passed **59 CLI tests, all 491 Flask tests and 16 independent masking cases**. [v0.3.1 video](https://github.com/aceholland/forgelens/releases/download/v0.3.1/ForgeLens-task-b-one-go.mp4) · [Session, patch and checks](docs/evidence/task-b-editor-one-go/README.md) |
 | Can I test accepted changes before applying? | In an earlier four-file Flash Lite replay, the staged validator passed **59 CLI and 491 full-suite tests** with Flask’s public test fixture explicitly pinned. All 235 tracked files kept their original hashes. The default copy excludes dotenv files. [Staged replay and fixture setup](docs/evidence/task-b-flash-lite/staged-replay.md) |
 | Does live feedback change what the agent sees? | In real Windows VS Code, a scripted model received the exact accepted and rejected hunks, then read the accepted overlay. In a second fixture it received an actual pytest failure and repaired the change in the same turn. The original three file hashes stayed unchanged. [Review and repair evidence](docs/live-review-check.md) |
 | Does allocating context across more files help? | On an independently selected set of 40 Flask changes, every target file appeared in the context for **16/40** changes versus **3/40** with whole-file BM25. ForgeLens used 5,016 excerpt tokens on average. The report includes the queries, both methods, scores and the separate published 79-change sample. [Retrieval evaluation](docs/flask-retrieval.md) |
 
-The recorded Windows run took **4 minutes 18 seconds**. The provider reported **$0** for the two model responses. Other free configurations timed out, hit quotas or produced an incomplete change. [Earlier attempts](docs/evidence/task-b-windows-one-go/attempts.md) · [Use the recorded settings](docs/repeat-task-b.md#recorded-configuration)
+The v0.3.1 Windows run took **4 minutes 18 seconds**. The provider reported **$0** for its two responses. Other free configurations timed out, hit quotas or produced an incomplete change. [Earlier attempts](docs/evidence/task-b-windows-one-go/attempts.md) · [Reproduce the v0.3.1 settings](docs/repeat-task-b.md#recorded-configuration)
 
 ## What you can do
 
@@ -30,6 +32,8 @@ The recorded Windows run took **4 minutes 18 seconds**. The provider reported **
 | **Draft from context** | ForgeLens selects excerpts and gives the model their line numbers. It can replace an exact match or insert at a line it saw. For small models, turn on **Sequential Draft** to review one planned file at a time and test the assembled changes. Choose **Run agent** when the task needs broader discovery. |
 | **Edit selection** | Select code and press **Ctrl+Alt+I** or **Cmd+Alt+I**. The editor checks the proposed changes stay inside the selection. |
 | **Review a proposal** | Accept or reject an individual hunk, the pending hunks in a file, or all pending hunks. Use the panel or open the editor hunk controls. The running agent receives the decisions and can read the accepted version. |
+| **Find the next pending hunk** | Choose **Next pending hunk** to open the next undecided change in the editor. Repeated clicks cycle across the available hunks without changing a decision. |
+| **Export a review summary** | Choose **Export review summary…** to save JSON with the latest accepted, rejected and pending counts for each file. The report records the most recent staged pytest exit code, its completion time and whether subsequent review activity occurred. It contains relative file names and counts. It stays available after Apply until the next run or workspace change. |
 | **Test before applying** | If an accepted draft changes a Python test, ForgeLens offers to run that test file. The model can also request tests. Approving the run executes pytest on a temporary copy. The exit status and output return to the model so it can repair a failing change in the same turn. |
 | **Apply, export or undo** | Export the accepted hunks as a Git patch, or confirm Apply. Existing-file edits go into an unsaved buffer. New files require a separate creation confirmation. Undo checks for intervening changes. |
 | **Verify saved changes** | Choose Git status, Git diff checks, or Flask CLI tests from the native picker. The task terminal shows the output. The panel reports exit status and duration. |
@@ -44,7 +48,7 @@ In 0.2.0, the local preview identified Flask's CLI code, tests and documentation
 
 ## Try it in VS Code
 
-**1. Install v0.4.0.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
+**1. Install v0.4.1.** Download the VSIX at the top of this page. In desktop VS Code, open the Command Palette, choose **Extensions: Install from VSIX…** and select the downloaded file. Open a local project folder you trust.
 
 **2. Start TrueForge.** Install Node.js 22.14 or newer and npm on the machine running the extension. The commands below start the version used in the demo. The loopback exception lets TrueForge reach ForgeLens’s local editor tools.
 
@@ -142,7 +146,7 @@ A separate cancellation at **2:39** preserved the earlier reviewed edits. The re
 
 ## Which VS Code setups were checked?
 
-The extension targets **desktop VS Code 1.95 or newer with a trusted local folder**. TrueForge runs in a separate Node.js 22.14+ process. The release check installs one VSIX into isolated Windows, macOS and Linux editor profiles. Each editor opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs Git checks with both a zero and a deliberately nonzero exit. The live review check uses a real local TrueForge server and a scripted provider. Two models reject the request. The third receives the hunk decisions and the result of running pytest in the staged copy. The check also verifies that the original files keep their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Tested installer and platform results](https://github.com/aceholland/forgelens/releases/download/v0.4.0/ForgeLens-0.4.0-package-verification.json)
+The extension targets **desktop VS Code 1.95 or newer with a trusted local folder**. TrueForge runs in a separate Node.js 22.14+ process. The release check installs one VSIX into isolated Windows, macOS and Linux editor profiles. Each editor opens the panel, checks all eight public commands, previews allowed and ignored paths, and runs Git checks with both a zero and a deliberately nonzero exit. The live review check uses a real local TrueForge server and a scripted provider. Two models reject the request. The third receives the hunk decisions and the result of running pytest in the staged copy. The check also verifies that the original files keep their hashes. [Installation workflow](.github/workflows/desktop-preview.yml) · [Tested installer and platform results](https://github.com/aceholland/forgelens/releases/download/v0.4.1/ForgeLens-0.4.1-package-verification.json)
 
 | Editor host | Coverage |
 | --- | --- |
@@ -157,7 +161,7 @@ The TrueForge SDK requires a Node extension host. Browser-only VS Code cannot ru
 ## Build from a clean clone
 
 ```sh
-git clone --branch v0.4.0 https://github.com/aceholland/forgelens.git
+git clone --branch v0.4.1 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
 python -m pip install pytest==9.0.2

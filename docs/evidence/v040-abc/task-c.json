@@ -1,0 +1,111 @@
+{
+  "task": "C",
+  "vscode": "1.95.0",
+  "release": "0.4.0",
+  "vsixSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+  "workspace": "pallets/flask",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "originalPrompt": "Treat the values 'off' and 'n' as false as well, case-insensitively, and update the docstring to list every value that is treated as false.",
+  "operatorSubmissions": 1,
+  "operatorCorrections": 0,
+  "models": [
+    "unavailable/offline",
+    "invalid-key/invalid",
+    "qa-local/qwen-local"
+  ],
+  "modelDescription": "Qwen3.5-4B-Q4_K_M",
+  "startedAtUTC": "2026-11-22T13:54:23.693Z",
+  "finishedAtUTC": "2026-11-22T13:54:33.382Z",
+  "firstDiffSeconds": null,
+  "decisions": [],
+  "trackedFiles": 235,
+  "cleanGitStatus": true,
+  "allOriginalFileHashesMatch": true,
+  "baselineAndFinalTreeContentDigest": "16f4c612406e4822ad2289179fc6a7443079f252001f438653978f58d5ee2ed4",
+  "sessions": [
+    {
+      "session": "01m81rjsa6e1w437kcqjm4bk0d",
+      "turn": "01m81rjsavx0wcvp8shhe5a6py",
+      "model": "unavailable/offline",
+      "status": "error",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [],
+      "writes": [],
+      "failureWasConnection": true,
+      "failureWasAuth": false
+    },
+    {
+      "session": "01m81rjt9m4c4sd5ew8024af1r",
+      "turn": "01m81rjtawkhn6c853fmadwww3",
+      "model": "unavailable/offline",
+      "status": "error",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [],
+      "writes": [],
+      "failureWasConnection": true,
+      "failureWasAuth": false
+    },
+    {
+      "session": "01m81rjw5ndtvk5pkmnz113pzz",
+      "turn": "01m81rjw690jvsxymm1eknrffe",
+      "model": "unavailable/offline",
+      "status": "error",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [],
+      "writes": [],
+      "failureWasConnection": true,
+      "failureWasAuth": false
+    },
+    {
+      "session": "01m81rjwabqfrx3t188pmaxasg",
+      "turn": "01m81rjwb30cjvq2c4hgkwmb0r",
+      "model": "invalid-key/invalid",
+      "status": "error",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [],
+      "writes": [],
+      "failureWasConnection": false,
+      "failureWasAuth": true
+    },
+    {
+      "session": "01m81rjwemk2vt34dzxs76fgcb",
+      "turn": "01m81rjwf5cdex0mpmvb8qqbr3",
+      "model": "qa-local/qwen-local",
+      "status": "cancelled",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [],
+      "writes": [],
+      "failureWasConnection": false,
+      "failureWasAuth": false
+    }
+  ],
+  "editorResponsiveDuringFailure": true,
+  "secondFallbackObserved": true,
+  "stoppedAfterHandoff": true,
+  "fallbackElapsedSeconds": 5.2
+}

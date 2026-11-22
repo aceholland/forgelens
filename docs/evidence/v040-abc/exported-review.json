@@ -1,0 +1,21 @@
+{
+  "files": [
+    {
+      "path": "src/doubles.py",
+      "accepted": 1,
+      "rejected": 1,
+      "pending": 0
+    },
+    {
+      "path": "tests/test_doubles.py",
+      "accepted": 1,
+      "rejected": 0,
+      "pending": 0
+    }
+  ],
+  "latestStagedPytest": {
+    "exitCode": 0,
+    "completedAt": "2026-11-22T13:50:31.553Z",
+    "reviewChangedSinceTest": false
+  }
+}

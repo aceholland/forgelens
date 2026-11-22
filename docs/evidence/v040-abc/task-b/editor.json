@@ -1,0 +1,104 @@
+{
+  "version": "0.4.0",
+  "desktopVSCode": "1.147.0",
+  "platform": "win32",
+  "installerSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+  "model": "particle-ai/particle-1:free",
+  "provider": "Kilo anonymous free gateway",
+  "sessionId": "01m81s1ks2mkzbj8zkw4agysm4",
+  "turnsInCompletedSession": 1,
+  "totalNativeSessions": 1,
+  "totalNativeTurns": 1,
+  "nativeAttemptStates": [
+    {
+      "sessionId": "01m81s1ks2mkzbj8zkw4agysm4",
+      "status": "done"
+    }
+  ],
+  "operatorMessages": 1,
+  "operatorAnswers": 0,
+  "clarifications": 0,
+  "startedUTC": "2026-11-22T14:02:25.164Z",
+  "finishedUTC": "2026-11-22T14:05:19.635Z",
+  "elapsedSeconds": 174.5,
+  "providerRequests": [
+    {
+      "utc": "2026-11-22T14:02:34.225Z",
+      "http": 200,
+      "attempt": 1
+    },
+    {
+      "utc": "2026-11-22T14:04:15.238Z",
+      "http": 429,
+      "attempt": 1
+    },
+    {
+      "utc": "2026-11-22T14:05:17.884Z",
+      "http": 200,
+      "attempt": 2
+    }
+  ],
+  "generations": [
+    {
+      "request": 1,
+      "finish": "tool_calls",
+      "inputTokens": 6021,
+      "outputTokens": 6498,
+      "costUSD": 0
+    },
+    {
+      "request": 3,
+      "finish": "stop",
+      "inputTokens": 12865,
+      "outputTokens": 269,
+      "costUSD": 0
+    }
+  ],
+  "providerReportedTotalUSD": 0,
+  "approvals": [
+    "Review files",
+    "Accept all pending hunks",
+    "Accept all pending hunks",
+    "Accept all pending hunks",
+    "Run candidate tests",
+    "Apply accepted",
+    "Apply accepted",
+    "Apply accepted"
+  ],
+  "toolCalls": [
+    "propose_changes"
+  ],
+  "terminal": {
+    "checks": {
+      "cli": true,
+      "help": true,
+      "json": true,
+      "threeFiles": true,
+      "independent": true
+    },
+    "files": [
+      "docs/cli.rst",
+      "src/flask/cli.py",
+      "tests/test_cli.py"
+    ],
+    "patchSha256": "f964d2acf7f7965d0ba972de75ae1c08578a21dd8df75b51f5afb57eb05cd2dc",
+    "cli": "60 passed in 1.11s",
+    "full": "492 passed in 9.51s",
+    "sensitiveKeys": 16,
+    "passed": true
+  },
+  "checksAgainstSavedPatch": {
+    "appearsInGlobalHelp": true,
+    "printsJSONObject": true,
+    "masksAll16SyntheticKeys": true,
+    "preservesOrdinaryTypesAndValues": true,
+    "includesFlaskDefaults": true,
+    "documentedAlongsideBuiltins": true,
+    "addedTestsExecuted": true,
+    "addedTestsFailAgainstUnchangedFlask": true,
+    "existingTestNodesRetained": true,
+    "candidateTestCollectionSucceeds": true,
+    "flaskCliTestsPass": true,
+    "fullFlaskSuitePasses": true
+  }
+}

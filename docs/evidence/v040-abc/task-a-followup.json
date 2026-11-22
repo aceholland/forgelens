@@ -1,0 +1,62 @@
+{
+  "officialColdStart": {
+    "prompt": "Treat the values 'off' and 'n' as false as well, case-insensitively, and update the docstring to list every value that is treated as false.",
+    "nativeSession": "01m81t3nmfrbhk7bpw6hd6yp3m",
+    "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+    "patchSha256": "ffb00baea78290c0a27964e4848d5feb4da95915bf5fa0737828889dfd01579e",
+    "checks": {
+      "passed": true,
+      "values": {
+        "0": false,
+        "1": true,
+        "off": false,
+        "OFF": false,
+        "OfF": false,
+        "n": false,
+        "N": false,
+        "false": false,
+        "NO": false,
+        "": false,
+        "yes": true
+      },
+      "unset": false,
+      "docstring": "Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is (case-insensitively) ``0``,\n    ``false``, ``no``, ``off``, or ``n``.\n    ",
+      "docstringExplicitEmpty": false,
+      "docstringExplicitUnset": false,
+      "pytest": "35 passed in 0.38s"
+    }
+  },
+  "supplementaryModelReview": {
+    "prompt": "Compare this function's implementation with its docstring. Update the docstring to accurately describe every input for which the function returns false. Preserve the implementation.",
+    "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+    "session": "01m81tg79bzv2zjdncvtdmvzvt",
+    "turn": "01m81tg7ar5n5xm273gta42p57",
+    "timeUTC": "2026-11-22T14:27:56.859Z",
+    "vscode": "1.147.0",
+    "version": "0.4.0",
+    "releaseVSIX": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+    "inputSubmissions": 1,
+    "operatorCorrections": 0,
+    "modelTool": "propose_edit",
+    "recordedNativeAcceptance": {
+      "timeUTC": "2026-11-22T14:32:09.686Z",
+      "control": "Accept",
+      "label": "hunk-1 \u00b7 pendingView diffAcceptReject"
+    },
+    "filesStaged": 1,
+    "terminalNativeStatus": "error",
+    "terminalEditorStatus": "error",
+    "upstreamHTTP": 429,
+    "outcome": "The reviewer accepted the model edit in VS Code. Kilo rate-limited the next model request. The saved review hunk was recovered from that native turn for a separately recorded offline replay."
+  },
+  "file": "src/flask/helpers.py",
+  "exactNativeReplacement": {
+    "oldText": "def get_debug_flag() -> bool:\n    \"\"\"Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is (case-insensitively) ``0``,\n    ``false``, ``no``, ``off``, or ``n``.\n    \"\"\"",
+    "newText": "def get_debug_flag() -> bool:\n    \"\"\"Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is not set, is an empty string,\n    or is (case-insensitively) ``0``, ``false``, ``no``, ``off``, or ``n``.\n    \"\"\""
+  },
+  "beforeFileSha256": "af01ecd7eea19674569f24b5b3cbad8d8a7a04547a37c7a62ed525cda32aee7d",
+  "afterFileSha256": "2994921f5ca1b2f92aea9187d2c5aecaf866ff485c81b368903c8e3015b8fa67",
+  "docstringPatchSha256": "fed5101eb31694d329aa18e0fc806b6f08b4f3abe92c6373e318f0c182116b42",
+  "cumulativePatchSha256": "f026e89032e4ce4afaba37237ebb24c7f5e31be59e2f903ac45143bbecfd7ede",
+  "onlyDocstringChangedInSupplement": true
+}

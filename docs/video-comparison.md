@@ -1,6 +1,6 @@
 # ForgeLens and the Countersign demo
 
-Both recordings show TrueForge completing Task B against the required Flask revision. Countersign shows a native scout and 25 tool calls. The ForgeLens recording shows Baidu ERNIE 5.5 Flash Preview receiving the original request once in Windows VS Code, then the saved candidate passing 59 CLI tests and all 491 Flask tests. Each project added its own tests. [Countersign demo notes](https://github.com/kinnuworks/countersign#countersign) · [ForgeLens recording and independent checks](evidence/task-b-editor-one-go/README.md)
+The comparison below uses Countersign’s published demo and the ForgeLens **v0.3.1** Task B recording. Countersign shows a native scout and 25 tool calls. In ForgeLens, Baidu ERNIE 5.5 Flash Preview received the original request once in Windows VS Code. Its saved changes passed 59 CLI tests and all 491 Flask tests. Each project added its own tests. For the later v0.4.0 replay and the v0.4.1 review controls, see the versioned evidence. [Countersign demo notes](https://github.com/kinnuworks/countersign#countersign) · [v0.3.1 independent checks](evidence/task-b-editor-one-go/README.md) · [v0.4.0 and v0.4.1 evidence](evidence/v040-abc/README.md)
 
 | What the Countersign recording demonstrates | What you can inspect in ForgeLens |
 | --- | --- |
@@ -14,7 +14,7 @@ Both recordings show TrueForge completing Task B against the required Flask revi
 
 ForgeLens also lets you export only the accepted hunks as a Git patch, preview context without a provider, and request pytest against a temporary copy. A second Windows fixture delivered an actual assertion failure to the running model, reviewed the repair, and passed pytest in the same turn. [Recording and results](live-review-check.md)
 
-### Changes after the Task B recording
+### Changes after the v0.3.1 recording
 
 | Capability | ForgeLens 0.4.0 |
 | --- | --- |

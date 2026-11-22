@@ -1,0 +1,42 @@
+{
+  "provider": "Kilo anonymous free gateway",
+  "model": "particle-ai/particle-1:free",
+  "trueforgeModel": "anonymous-kilo/particle-ai-particle-1-free",
+  "pricing": "https://kilo.ai/docs/gateway/usage-and-billing",
+  "anonymous": true,
+  "upstreamAuthorizationHeader": false,
+  "providerReportedTotalUSD": 0,
+  "generations": [
+    {
+      "request": 1,
+      "finish": "tool_calls",
+      "inputTokens": 6021,
+      "outputTokens": 6498,
+      "costUSD": 0
+    },
+    {
+      "request": 3,
+      "finish": "stop",
+      "inputTokens": 12865,
+      "outputTokens": 269,
+      "costUSD": 0
+    }
+  ],
+  "upstreamHttpStatuses": [
+    200,
+    429,
+    200
+  ],
+  "mode": "draft",
+  "contextWindowTokens": 64000,
+  "maxOutputTokens": 24576,
+  "settings": {
+    "forgelens.model": "anonymous-kilo/particle-ai-particle-1-free",
+    "forgelens.fallbackModel": "",
+    "forgelens.liveReview": true,
+    "forgelens.draftModelIntervalSeconds": 70,
+    "forgelens.sequentialDraft": false,
+    "forgelens.runTimeoutMinutes": 45,
+    "forgelens.modelCallTimeoutSeconds": 1800
+  }
+}

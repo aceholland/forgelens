@@ -1,0 +1,150 @@
+{
+  "sessionId": "01m81s1ks2mkzbj8zkw4agysm4",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "packageSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+  "bundleSha256": "e6b250c930d21aa1bf09c89be926123f088fd70e74c7b113515ee478d780f972",
+  "generatorGitHead": "ddb429fba0885493ec444525c2bf38ae2fc9b660",
+  "model": "anonymous-kilo/particle-ai-particle-1-free",
+  "mode": "draft",
+  "firstEventUTC": "2026-11-22T14:02:31.679Z",
+  "lastEventUTC": "2026-11-22T14:05:19.414Z",
+  "turns": 1,
+  "turnStatus": "done",
+  "promptSha256": "adf0a71141397baaec45456103eec636889bfb57789532a01a7d9daa5d793fd1",
+  "onlyOriginalTurnInput": true,
+  "modelMessages": 2,
+  "additionalInitialMessages": 1,
+  "initialMessagesAllPinnedSource": true,
+  "systemInstructionsMatchInstalledMode": true,
+  "selectedSourceLineRanges": {
+    "src/flask/cli.py": [
+      [
+        549,
+        639
+      ],
+      [
+        1115,
+        1136
+      ],
+      [
+        293,
+        299
+      ],
+      [
+        942,
+        949
+      ],
+      [
+        1007,
+        1015
+      ],
+      [
+        1067,
+        1075
+      ],
+      [
+        1,
+        12
+      ]
+    ],
+    "tests/test_cli.py": [
+      [
+        364,
+        479
+      ],
+      [
+        700,
+        703
+      ],
+      [
+        36,
+        43
+      ],
+      [
+        321,
+        328
+      ],
+      [
+        352,
+        359
+      ],
+      [
+        1,
+        12
+      ]
+    ],
+    "docs/cli.rst": [
+      [
+        243,
+        392
+      ],
+      [
+        554,
+        557
+      ],
+      [
+        1,
+        12
+      ]
+    ]
+  },
+  "toolCalls": {
+    "propose_changes": 1
+  },
+  "nativeApprovals": {
+    "allow": 1
+  },
+  "clarificationRequests": 0,
+  "operatorAnswers": 0,
+  "denialsWithBuiltInMessage": 0,
+  "installedTypedShapeDenials": 0,
+  "noClarificationsRequested": true,
+  "otherUserFeedback": {},
+  "noHumanHintsOrPromptCorrections": true,
+  "writeCalls": [
+    {
+      "tool": "propose_changes",
+      "approval": "allow",
+      "paths": [
+        "src/flask/cli.py",
+        "tests/test_cli.py",
+        "docs/cli.rst"
+      ],
+      "nativeArgumentsSha256CanonicalJSON": "cd6081ea3c51374009c3f8c5b37c1c9707ddd5f4dd1dd92450b207a42f8531cb",
+      "reviewedFiles": 3,
+      "receivedAllFileReceipts": true
+    }
+  ],
+  "editorHunkDecisions": {
+    "accepted": 6
+  },
+  "files": {
+    "src/flask/cli.py": {
+      "modelSha256LF": "69596b5ed188d2ee76318991eb8ad929367a63623ce585fd15dab65d6368b481",
+      "workingSha256LF": "69596b5ed188d2ee76318991eb8ad929367a63623ce585fd15dab65d6368b481",
+      "workingSha256Raw": "69596b5ed188d2ee76318991eb8ad929367a63623ce585fd15dab65d6368b481",
+      "same": true
+    },
+    "tests/test_cli.py": {
+      "modelSha256LF": "226e5eee6301a2b9345779180ae4f90f4d4589a416627cc3ab82c9b654760004",
+      "workingSha256LF": "226e5eee6301a2b9345779180ae4f90f4d4589a416627cc3ab82c9b654760004",
+      "workingSha256Raw": "226e5eee6301a2b9345779180ae4f90f4d4589a416627cc3ab82c9b654760004",
+      "same": true
+    },
+    "docs/cli.rst": {
+      "modelSha256LF": "2cef5dc493ad2ad6583eaf886eb408cd0a07609020c7d49103d1d7a2262e8f47",
+      "workingSha256LF": "2cef5dc493ad2ad6583eaf886eb408cd0a07609020c7d49103d1d7a2262e8f47",
+      "workingSha256Raw": "2cef5dc493ad2ad6583eaf886eb408cd0a07609020c7d49103d1d7a2262e8f47",
+      "same": true
+    }
+  },
+  "changedPaths": [
+    "docs/cli.rst",
+    "src/flask/cli.py",
+    "tests/test_cli.py"
+  ],
+  "savedCandidateMatchesModel": true,
+  "gitPatchMatchesSavedDriverArtifact": true,
+  "gitPatchSha256": "f964d2acf7f7965d0ba972de75ae1c08578a21dd8df75b51f5afb57eb05cd2dc",
+  "replayIssues": []
+}

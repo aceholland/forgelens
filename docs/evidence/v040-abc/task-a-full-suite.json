@@ -1,0 +1,31 @@
+{
+  "source": "Independent, offline replay of the cold edit and the accepted supplementary model docstring. The supplementary native turn ended with HTTP 429 after hunk acceptance.",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "releasedVSIX": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+  "coldSession": "01m81t3nmfrbhk7bpw6hd6yp3m",
+  "supplementarySession": "01m81tg79bzv2zjdncvtdmvzvt",
+  "coldPatchSha256": "ffb00baea78290c0a27964e4848d5feb4da95915bf5fa0737828889dfd01579e",
+  "supplementaryPatchSha256": "fed5101eb31694d329aa18e0fc806b6f08b4f3abe92c6373e318f0c182116b42",
+  "fullPatchSha256": "f026e89032e4ce4afaba37237ebb24c7f5e31be59e2f903ac45143bbecfd7ede",
+  "fileSha256": "2994921f5ca1b2f92aea9187d2c5aecaf866ff485c81b368903c8e3015b8fa67",
+  "changedFiles": [
+    "src/flask/helpers.py"
+  ],
+  "checks": {
+    "behaviorCases": 12,
+    "explicitlyDocumentsEmptyString": true,
+    "explicitlyDocumentsUnset": true,
+    "listsAllFiveNamedFalseValues": true,
+    "docstring": "Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is not set, is an empty string,\n    or is (case-insensitively) ``0``, ``false``, ``no``, ``off``, or ``n``.\n    "
+  },
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "exitCode": 0,
+  "pytest": "490 passed in 3.50s"
+}

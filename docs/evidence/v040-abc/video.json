@@ -1,0 +1,30 @@
+{
+  "duration": 230.98,
+  "sha256": "546a544c7e86f7e26cdf34bf849e629d854ba9ab48d59145bc2cfc9584e252d7",
+  "subtitleSha256": "b68219f2fa1dccb67286bf6c0e4d4976823a810cf3c42aef9fc8d17fb0ec4a98",
+  "audioMeanDb": -22.3,
+  "englishNarration": "Microsoft Heera",
+  "chapters": [
+    {
+      "name": "Task A \u00b7 Inline edit",
+      "seconds": 0
+    },
+    {
+      "name": "Task B \u00b7 Multi-file agent",
+      "seconds": 65.042
+    },
+    {
+      "name": "Task C \u00b7 Failure recovery",
+      "seconds": 152.625
+    },
+    {
+      "name": "Long conversations \u00b7 VS Code 1.95",
+      "seconds": 184.083
+    },
+    {
+      "name": "New in 0.4.1 \u00b7 Review tools",
+      "seconds": 205.083
+    }
+  ],
+  "fullDecode": "passed"
+}

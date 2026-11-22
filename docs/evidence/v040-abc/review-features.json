@@ -1,0 +1,60 @@
+{
+  "editor": "1.147.0",
+  "os": "win32",
+  "arch": "x64",
+  "vsix": "aa5cfaa8a95b956d393ea6631fae75720bba7a69f47cebcceb0eb5252627a5bf",
+  "provider": "deterministic loopback",
+  "accepted": 2,
+  "rejected": 1,
+  "pytestPassed": 2,
+  "originalsUnchanged": true,
+  "pendingHunkVisits": [
+    {
+      "file": "src/doubles.py",
+      "hunk": "hunk-1",
+      "line": 2
+    },
+    {
+      "file": "src/doubles.py",
+      "hunk": "hunk-2",
+      "line": 5
+    },
+    {
+      "file": "src/doubles.py",
+      "hunk": "hunk-1",
+      "line": 2
+    },
+    {
+      "file": "tests/test_doubles.py",
+      "hunk": "hunk-1",
+      "line": 4
+    }
+  ],
+  "exportedReview": {
+    "files": [
+      {
+        "path": "src/doubles.py",
+        "accepted": 1,
+        "rejected": 1,
+        "pending": 0
+      },
+      {
+        "path": "tests/test_doubles.py",
+        "accepted": 1,
+        "rejected": 0,
+        "pending": 0
+      }
+    ],
+    "latestStagedPytest": {
+      "exitCode": 0,
+      "completedAt": "2026-11-22T13:50:31.553Z",
+      "reviewChangedSinceTest": false
+    }
+  },
+  "modelRequests": [
+    "primary",
+    "first-fallback",
+    "scripted",
+    "scripted"
+  ]
+}

@@ -1,0 +1,116 @@
+diff --git a/docs/cli.rst b/docs/cli.rst
+index a72e6d51cbcc3c1423018a6c219a6f1283fe68bc..c6d38a93a1b3c08552547d953db989061b6e0048 100644
+--- a/docs/cli.rst
++++ b/docs/cli.rst
+@@ -554,3 +554,17 @@ PyCharm window and click the play button next to it to run the server.
+ 
+ Now that you have a configuration for ``flask run``, you can copy that configuration and
+ change the *Parameters* argument to run a different CLI command.
++
++
++.. _cli-config:
++
++Show Configuration
++------------------
++
++The ``config`` command prints the loaded application's configuration as JSON.
++Values for keys containing ``SECRET``, ``PASSWORD``, ``TOKEN``, or ``KEY`` are
++masked as ``***``.
++
++.. code-block:: text
++
++    $ flask config
+diff --git a/src/flask/cli.py b/src/flask/cli.py
+index ed11f256a153300887657e51b0b2f00543ca5229..e9843c16a13354ccea752bbca9625f7b6f237586 100644
+--- a/src/flask/cli.py
++++ b/src/flask/cli.py
+@@ -4,6 +4,7 @@ import ast
+ import collections.abc as cabc
+ import importlib.metadata
+ import inspect
++import json
+ import os
+ import platform
+ import re
+@@ -594,6 +595,7 @@ class FlaskGroup(AppGroup):
+             self.add_command(run_command)
+             self.add_command(shell_command)
+             self.add_command(routes_command)
++            self.add_command(config_command)
+ 
+         self._loaded_plugin_commands = False
+ 
+@@ -1115,6 +1117,28 @@ def routes_command(sort: str, all_methods: bool) -> None:
+         click.echo(template.format(*row))
+ 
+ 
++@click.command("config", short_help="Show the config.")
++@with_appcontext
++def config_command() -> None:
++    """Show the loaded application's configuration as JSON.
++
++    Values for keys containing ``SECRET``, ``PASSWORD``, ``TOKEN``, or
++    ``KEY`` are masked as ``***``.
++    """
++    config = {}
++
++    for key, value in current_app.config.items():
++        if any(
++            marker in key.upper()
++            for marker in ("SECRET", "PASSWORD", "TOKEN", "KEY")
++        ):
++            config[key] = "***"
++        else:
++            config[key] = value
++
++    click.echo(json.dumps(config, indent=2, sort_keys=True, default=str))
++
++
+ cli = FlaskGroup(
+     name="flask",
+     help="""\
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index e254c1dd8ee1783503b10d5d89e355448949236e..e6b85ebf689feceb638744486d0106d23e74859e 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -1,6 +1,7 @@
+ # This file was part of Flask-CLI and was modified under the terms of
+ # its Revised BSD License. Copyright © 2015 CERN.
+ import importlib.metadata
++import json
+ import os
+ import platform
+ import ssl
+@@ -443,6 +444,32 @@ def test_help_echo_exception():
+     assert "Usage:" in result.stdout
+ 
+ 
++def test_config_command(app, runner):
++    app.config.update(
++        SECRET_KEY="dev",
++        PASSWORD="hunter2",
++        API_TOKEN="abc",
++        PUBLIC_KEY="xyz",
++        NORMAL_VALUE="visible",
++    )
++
++    result = runner.invoke(FlaskGroup(create_app=lambda: app), ["config"])
++    assert result.exit_code == 0
++
++    data = json.loads(result.output)
++    assert data["SECRET_KEY"] == "***"
++    assert data["PASSWORD"] == "***"
++    assert data["API_TOKEN"] == "***"
++    assert data["PUBLIC_KEY"] == "***"
++    assert data["NORMAL_VALUE"] == "visible"
++
++
++def test_config_command_in_help(app, runner):
++    result = runner.invoke(FlaskGroup(create_app=lambda: app), ["--help"])
++    assert result.exit_code == 0
++    assert "config" in result.output
++
++
+ class TestRoutes:
+     @pytest.fixture
+     def app(self):

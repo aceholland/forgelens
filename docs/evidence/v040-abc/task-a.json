@@ -1,0 +1,103 @@
+{
+  "task": "A",
+  "vscode": "1.147.0",
+  "release": "0.4.0",
+  "vsixSha256": "0f14baf19581d6b87f5711bcbb2b41b2238a346d1b1a419764d03e72dff94fc3",
+  "workspace": "pallets/flask",
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "originalPrompt": "Treat the values 'off' and 'n' as false as well, case-insensitively, and update the docstring to list every value that is treated as false.",
+  "operatorSubmissions": 1,
+  "operatorCorrections": 0,
+  "models": [
+    "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free"
+  ],
+  "modelDescription": "Kilo anonymous nvidia/nemotron-3-ultra-550b-a55b:free; native tool calls through the unmodified release helper",
+  "startedAtUTC": "2026-11-22T14:21:03.630Z",
+  "finishedAtUTC": "2026-11-22T14:22:06.970Z",
+  "firstDiffSeconds": 32.0,
+  "decisions": [
+    {
+      "control": "Allow staging",
+      "file": "src/flask/helpers.py"
+    },
+    {
+      "control": "Accept",
+      "file": "src/flask/helpers.py",
+      "label": "hunk-1 \u00c2\u00b7 pending"
+    },
+    {
+      "control": "Accept",
+      "file": "src/flask/helpers.py",
+      "label": "hunk-2 \u00c2\u00b7 pending"
+    }
+  ],
+  "trackedFiles": 235,
+  "cleanGitStatus": true,
+  "allOriginalFileHashesMatch": true,
+  "baselineAndFinalTreeContentDigest": "16f4c612406e4822ad2289179fc6a7443079f252001f438653978f58d5ee2ed4",
+  "sessions": [
+    {
+      "session": "01m81t3nmfrbhk7bpw6hd6yp3m",
+      "turn": "01m81t3npb19m75carx7k6tetx",
+      "model": "free-nemotron/nvidia-nemotron-3-ultra-550b-a55b-free",
+      "modelParams": {
+        "reasoning_effort": "high"
+      },
+      "status": "done",
+      "events": {
+        "turn.created": 1,
+        "mcp.initialize": 1,
+        "model.message": 4,
+        "tool.response": 3,
+        "tool.approval_required": 1,
+        "turn.update": 2,
+        "user.tool_approval": 1,
+        "turn.done": 1
+      },
+      "originalPromptInSingleInput": true,
+      "modelTools": [
+        "read_file",
+        "propose_edit",
+        "read_file"
+      ],
+      "writes": [
+        {
+          "tool": "propose_edit",
+          "argsSha256": "c5eadf3e58459ed7e74b73891be00f954edc2b60bb1e7fd678c97a1759b5b6aa"
+        }
+      ],
+      "approvalResponses": [
+        {
+          "tool": "propose_edit",
+          "status": "allow",
+          "reason": ""
+        }
+      ],
+      "failureWasConnection": false,
+      "failureWasAuth": false
+    }
+  ],
+  "undoAndSaveRestoredOriginal": true,
+  "checks": {
+    "passed": true,
+    "values": {
+      "0": false,
+      "1": true,
+      "off": false,
+      "OFF": false,
+      "OfF": false,
+      "n": false,
+      "N": false,
+      "false": false,
+      "NO": false,
+      "": false,
+      "yes": true
+    },
+    "unset": false,
+    "docstring": "Get whether debug mode should be enabled for the app, indicated by the\n    :envvar:`FLASK_DEBUG` environment variable. The default is ``False``.\n\n    The value is treated as false if it is (case-insensitively) ``0``,\n    ``false``, ``no``, ``off``, or ``n``.\n    ",
+    "docstringExplicitEmpty": false,
+    "docstringExplicitUnset": false,
+    "pytest": "35 passed in 0.38s"
+  },
+  "acceptedPatchSha256": "ffb00baea78290c0a27964e4848d5feb4da95915bf5fa0737828889dfd01579e"
+}

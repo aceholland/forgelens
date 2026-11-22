@@ -47,10 +47,37 @@ node checks/task-b-desktop-launch.cjs D:\runs\fresh-task-b .\forgelens-0.3.1.vsi
 
 The driver configures Flask’s committed public dotenv fixture in this disposable profile so that the full suite can also run before apply. Use a new output directory each time. It contains the local session receipt, saved patch, terminal results and editor captures. Inspect the result before sharing files from it. The model and provider can produce a different outcome on a repeat.
 
+## Recorded v0.4.0 run with Particle-1
+
+The Windows recording used VS Code 1.147.0, TrueForge 0.185.1 and the [published ForgeLens v0.4.0 installer](https://github.com/aceholland/forgelens/releases/download/v0.4.0/forgelens-0.4.0.vsix). From the v0.4.0 source checkout, start the free gateway in its own terminal and leave it running.
+
+```powershell
+node scripts/anonymous-model-provider.mjs kilo particle-ai/particle-1:free 18940
+```
+
+In TrueForge, add an OpenAI-compatible provider named `anonymous-kilo` using the local URL and token printed by the gateway. Register `particle-ai/particle-1:free` under the local model name `particle-ai-particle-1-free`. Set the context window to 64,000 tokens and the output limit to 24,576. The recording used the TrueForge server settings [below](#recorded-configuration).
+
+Use the local paths in the PowerShell example above and save the v0.4.0 installer in the source checkout. These commands launch the recorded check in a fresh directory. The driver enables live hunk review, uses a 1,800-second model-call timeout and leaves fallback models empty.
+
+```powershell
+$env:TRUEFORGE_MODEL = 'anonymous-kilo/particle-ai-particle-1-free'
+$env:FORGELENS_EDITOR_MODE = 'draft'
+$env:FORGELENS_EDITOR_MINUTES = '45'
+$env:FORGELENS_SEQUENTIAL_DRAFT = 'false'
+$env:FORGELENS_DRAFT_MODEL_INTERVAL_SECONDS = '70'
+node checks/task-b-desktop-launch.cjs D:\runs\particle-task-b-v040 .\forgelens-0.4.0.vsix
+```
+
+The original request above completed in one editor turn with no follow-up messages or manual edits. The gateway retried one HTTP 429 automatically and reported $0 for both completed model calls. The saved patch passed 60 CLI tests, 492 tests across Flask and all 16 masking cases. To repeat the independent checks on that same patch, use a fresh output path. [Versioned evidence](evidence/v040-abc/README.md)
+
+```powershell
+& $env:FORGELENS_PYTHON checks/run-task-b-verification.py $env:FLASK_ROOT D:\runs\particle-task-b-regrade --patch D:\runs\particle-task-b-v040\candidate.patch
+```
+
 
 ## Recorded configuration
 
-Open the pinned Flask folder in desktop VS Code and configure the provider in local TrueForge. The recorded model ID and editor settings are below. Select **Draft from context** and enter the original request once.
+The settings below reproduce the **v0.3.1** recording. For the v0.4.0 replay, see the [versioned run evidence](evidence/v040-abc/README.md). Open the pinned Flask folder in desktop VS Code and configure the provider in local TrueForge. Select **Draft from context** and enter the original request once.
 
 ```json
 {

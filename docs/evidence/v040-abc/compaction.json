@@ -1,0 +1,24 @@
+{
+  "editor": "1.95.0",
+  "extension": "0.4.0",
+  "os": "win32",
+  "source": "installed VSIX and loopback scripted provider",
+  "events": [
+    "TrueForge is summarizing the conversation (threshold 60,000 tokens).",
+    "Model error: [Model Error] Request failed (401): Synthetic unauthorized model for the ordered fallback check",
+    "Trying fallback 1 of 2 through TrueForge (fixture/first-fallback). Edits still require review.",
+    "TrueForge is summarizing the conversation (threshold 60,000 tokens).",
+    "Model error: [Model Error] Request failed (401): Synthetic unauthorized model for the ordered fallback check",
+    "Trying fallback 2 of 2 through TrueForge (fixture/scripted). Edits still require review.",
+    "TrueForge is summarizing the conversation (threshold 60,000 tokens).",
+    "TrueForge summarized the conversation. Continuing this turn.",
+    "Candidate pytest exited 0; 2 staged file(s) in a temporary copy.",
+    "2 passed in 0.01s"
+  ],
+  "review": {
+    "accepted": 2,
+    "rejected": 1,
+    "pytestPassed": 2,
+    "originalsUnchanged": true
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "flaskCommit": "22d924701a6ae2e4cd01e9a15bbaf3946094af65",
+  "python": "3.12.14",
+  "upstreamTestsCollected": 490,
+  "candidateTestsCollected": 492,
+  "proposedFiles": [
+    "docs/cli.rst",
+    "src/flask/cli.py",
+    "tests/test_cli.py"
+  ],
+  "addedTests": [
+    "tests/test_cli.py::test_config_command",
+    "tests/test_cli.py::test_config_command_in_help"
+  ],
+  "sensitiveKeysChecked": 16,
+  "cliTests": "60 passed in 1.11s",
+  "cliExitCode": 0,
+  "fullTests": "492 passed in 9.51s",
+  "fullExitCode": 0,
+  "checks": {
+    "appearsInGlobalHelp": true,
+    "printsJSONObject": true,
+    "masksAll16SyntheticKeys": true,
+    "preservesOrdinaryTypesAndValues": true,
+    "includesFlaskDefaults": true,
+    "documentedAlongsideBuiltins": true,
+    "addedTestsExecuted": true,
+    "addedTestsFailAgainstUnchangedFlask": true,
+    "existingTestNodesRetained": true,
+    "candidateTestCollectionSucceeds": true,
+    "flaskCliTestsPass": true,
+    "fullFlaskSuitePasses": true
+  },
+  "passed": true
+}
