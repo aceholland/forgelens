@@ -15,10 +15,36 @@ test('read-only scout bridge exposes only saved-source tools and rejects every m
  const client=new Client({name:'scout-readonly',version:'1'});t.after(()=>client.close());await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:`Bearer ${bridge.token}`}}}));
  assert.deepEqual((await client.listTools()).tools.map(t=>t.name).sort(),['find_relevant_files','read_file','search_workspace','select_context']);
  const read=JSON.stringify(await client.callTool({name:'read_file',arguments:{path:'code.py'}}));assert.match(read,/saved target/);assert.doesNotMatch(read,/private staged overlay|STAGED/);
- for(const name of ['propose_write','propose_edit','run_command','report_plan'])assert.equal((await client.callTool({name,arguments:{path:'code.py',edits:[{oldText:'saved',newText:'changed'}],command:'pytest',args:[],files:[{path:'code.py',reason:'plan'}]}})).isError,true,name);
+ for(const name of ['create_file','validate_candidate','propose_write','propose_edit','run_command','report_plan'])assert.equal((await client.callTool({name,arguments:{path:'code.py',edits:[{oldText:'saved',newText:'changed'}],command:'pytest',args:[],files:[{path:'code.py',reason:'plan'}]}})).isError,true,name);
  assert.equal(mutations,0);assert.equal(await readFile(path.join(root,'code.py'),'utf8'),'saved target implementation\n');
  assert.equal((await client.callTool({name:'read_file',arguments:{path:'.env'}})).isError,true);
  const search=JSON.stringify(await client.callTool({name:'search_workspace',arguments:{query:'target'}}));assert.match(search,/saved target/);assert.doesNotMatch(search,/private staged overlay/);
+});
+
+test('new files stay in the reviewed overlay and candidate validation calls the configured bridge',async t=>{
+ const root=await mkdtemp(path.join(tmpdir(),'forgelens-created-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ await writeFile(path.join(root,'saved.py'),'saved');
+ const staged=new Map<string,string>();
+ const calls:string[][]=[];
+ const bridge=await startMcp({root,budget:4000,active:()=>true,pending:file=>staged.get(file),
+  create:async(file,content)=>{staged.set(file,content);return 'accepted in review';},
+  propose:async(file,content,base)=>{assert.equal(base,staged.get(file));staged.set(file,content);return 'accepted in review';},
+  validate:async tests=>{calls.push(tests);return 'Candidate pytest exited 1';},command:async()=>'',context:()=>{}});
+ t.after(()=>bridge.close());
+ const client=new Client({name:'candidate-tools',version:'1'});t.after(()=>client.close());
+ await client.connect(new StreamableHTTPClientTransport(new URL(bridge.url),{requestInit:{headers:{Authorization:'Bearer '+bridge.token}}}));
+ const names=(await client.listTools()).tools.map(tool=>tool.name);
+ assert.ok(names.includes('create_file')&&names.includes('validate_candidate'));
+ const create=(file:string,content='draft')=>client.callTool({name:'create_file',arguments:{path:file,content}});
+ assert.ok(!(await create('new.py')).isError);
+ for(const file of ['new.py','saved.py','.env','../escape.py']) assert.equal((await create(file)).isError,true,file);
+ assert.equal((await create('binary.txt','bad\0data')).isError,true);
+ const read=await client.callTool({name:'read_file',arguments:{path:'new.py'}});
+ assert.match(JSON.stringify(read),/STAGED PROPOSAL.*draft/);
+ assert.ok(!(await client.callTool({name:'propose_edit',arguments:{path:'new.py',edits:[{oldText:'draft',newText:'reviewed'}]}})).isError);
+ assert.equal(staged.get('new.py'),'reviewed');
+ assert.match(JSON.stringify(await client.callTool({name:'validate_candidate',arguments:{tests:['tests/test_cli.py']}})),/pytest exited 1/);
+ assert.deepEqual(calls,[['tests/test_cli.py']]);await assert.rejects(readFile(path.join(root,'new.py')),{code:'ENOENT'});
 });
 
 test('scout discovery never satisfies the separate parent bridge discovery gate',async t=>{

@@ -40,7 +40,6 @@ async function main() {
   const temp = process.env.RUNNER_TEMP || os.tmpdir();
   const { runTests } = require(path.join(temp, 'forge-preview-harness/node_modules/@vscode/test-electron'));
   const extension = path.resolve(__dirname, '..');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(extension, 'package.json'), 'utf8')).version, '0.2.0');
   assert.ok(fs.existsSync(path.join(extension, 'dist', 'extension.js')), 'Build the source before launching the desktop check');
   const { storage, folder } = createFixture(temp);
   const userData = path.join(storage, 'user-data');

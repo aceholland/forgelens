@@ -14,7 +14,7 @@ function quotePath(value: string): string {
 
 /** Pure text export of accepted hunks against their immutable review originals.
  * Does not apply, save, remove proposals, change decisions or read the workspace.
- * Existing files only: empty results truncate a file, never delete its path.
+ * New files use /dev/null as their patch base. Empty edits to existing files truncate them.
  * Returns an empty string when there are no accepted content changes.
  */
 export function exportAcceptedPatch(store: Pick<ReviewStore, 'list'>): string {
@@ -26,10 +26,10 @@ export function exportAcceptedPatch(store: Pick<ReviewStore, 'list'>): string {
     if (!isSafeContextPath(file) || file.includes('\0') || file.split('/').some(part => !part) || Buffer.from(file, 'utf8').toString('utf8') !== file) throw new Error('Cannot export an unsafe patch path');
     if (proposal.original.includes('\0') || after.includes('\0')) throw new Error('Cannot export binary content as a text patch');
     const beforeName = quotePath('a/' + file), afterName = quotePath('b/' + file);
-    const patch = createTwoFilesPatch(beforeName, afterName, proposal.original, after, undefined, undefined, {
+    const patch = createTwoFilesPatch(proposal.kind === 'create' ? '/dev/null' : beforeName, afterName, proposal.original, after, undefined, undefined, {
       context: 3, headerOptions: { includeIndex: false, includeUnderline: false, includeFileHeaders: true }
     });
-    patches.push(`diff --git ${beforeName} ${afterName}\n${patch}`);
+    patches.push(`diff --git ${beforeName} ${afterName}\n${proposal.kind === 'create' ? 'new file mode 100644\n' : ''}${patch}`);
   }
   return patches.join('');
 }

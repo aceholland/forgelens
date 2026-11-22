@@ -69,6 +69,21 @@ test('export is explicitly empty for no accepted changes',()=>{
  store.stage('unchanged.ts','same','same');assert.equal(exportAcceptedPatch(store),'');
 });
 
+test('an approved new file produces a real Git creation patch and retains its undo kind after revision',async t=>{
+ const root=await fixture(t),store=new ReviewStore();
+ const p=store.stage('new file.txt','','created\n','create');
+ assert.equal(exportAcceptedPatch(store),'');
+ store.decide(p.path,'hunk-1','accepted');
+ const prior=store.get(p.path)!;
+ const {createProposal,decideHunk}=await import('../src/review');
+ store.commitReviewed('',prior,decideHunk(createProposal(p.path,'created\n','revised\n'),'hunk-1','accepted'));
+ assert.equal(store.prepare(p.path,'').kind,'create');
+ const patch=exportAcceptedPatch(store);
+ assert.match(patch,/new file mode 100644/);assert.match(patch,/--- \/dev\/null/);
+ apply(root,patch,true);apply(root,patch,false);
+ assert.equal(await readFile(path.join(root,p.path),'utf8'),'revised\n');
+});
+
 test('export refuses unsafe paths and binary content rather than emitting a misleading patch',()=>{
  for(const file of ['../outside','/absolute','C:/outside','a\\b','a//b','bad\0name','.env']){
   const store=new ReviewStore();const proposal=store.stage(file,'old','new');store.decide(file,proposal.hunks[0]!.id,'accepted');

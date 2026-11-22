@@ -5,6 +5,7 @@ import { startMcp } from './src/mcp';
 import { ReviewStore } from './src/review';
 import { resolveAgentProposal } from './src/patch';
 import { readWorkspace } from './src/workspace';
+import { validateCandidate } from './src/candidateValidation';
 import { instructionsForTools } from './src/instructions';
 import { writeFile, mkdir, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
@@ -42,12 +43,21 @@ async function main() {
  const preloadTools=process.env.PRELOAD_TOOLS!=='false';
  const prompt=TASK_B_PROMPT;
  const store=new ReviewStore(); let active=true,modelSwitching=false;
+ const validateStaged=process.env.FORGELENS_VALIDATE_STAGED==='true';
+ if(validateStaged&&!python)throw new Error('Set FORGELENS_PYTHON for staged pytest validation.');
+ const persistProposals=()=>writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));
  try {
  const baseUrl=loopbackUrl(process.env.TRUEFORGE_URL??'http://127.0.0.1:8790');
  if(!model)throw new Error('Set TRUEFORGE_MODEL.');
  phase='mcp_start';
  mcp=await startMcp({root,budget,task:prompt,requireDiscovery:true,active:()=>active&&!modelSwitching,pending:p=>store.get(p)?.proposed,
-  propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const original=await readWorkspace(root,p); if(store.get(p))store.revise(p,original,c);else store.stage(p,original,c);await writeFile(path.join(out,'proposals.json'),JSON.stringify(Object.fromEntries(store.list().map(p=>[p.path,p.proposed])),null,2));return `Staged ${p}; not applied. Continue any remaining requested work. Validation sees disk only.`;},
+  propose:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);const current=store.get(p);const original=current?.original??await readWorkspace(root,p); if(current)store.revise(p,original,c);else store.stage(p,original,c);await persistProposals();return `Staged ${p}; not applied. Continue any remaining requested work.`;},
+  create:async(p,c)=>{if(python&&p.endsWith('.py'))checkPythonSyntax(python,c);store.stage(p,'',c,'create');await persistProposals();return `Staged new file ${p}; not applied.`;},
+  validate:validateStaged?async tests=>{
+   const result=await validateCandidate(root,store.list().map(p=>({path:p.path,original:p.original,content:p.proposed,isNew:p.kind==='create'})),tests,python!);
+   metadata.events.push({type:'candidate.validation',tests,exitCode:Number(result.match(/pytest exited (\d+)/)?.[1]??-1)});
+   return result;
+  }:undefined,
   command:async()=> 'Not run: target files remain unchanged. Validate after human review.',context:r=>{const paths=metadata.paths('discovery',r.items.map(i=>i.path));const event={type:'retrieval.context',fileCount:r.items.length,paths};metadata.events.push(event);console.log(JSON.stringify(event));},
   onInitialized:()=>{metadata.initialized++;console.log(JSON.stringify({type:'mcp.initialized'}));},
   onToolRequest:name=>{const safe=toolName(name);metadata.calls.push(safe);console.log(JSON.stringify({type:'mcp.tool_request',name:safe,count:metadata.calls.length}));},
@@ -78,6 +88,10 @@ async function main() {
    },
    onApproval:async d=>{
     const file=d.arguments.path;
+    if(d.name==='validate_candidate'&&validateStaged)return true;
+    if(d.name==='create_file'&&typeof file==='string'&&typeof d.arguments.content==='string'){
+     try{if(python&&file.endsWith('.py'))checkPythonSyntax(python,d.arguments.content);return true;}catch{return {allowed:false,reason:'The proposed Python does not parse.'};}
+    }
     if(!['propose_edit','propose_write'].includes(d.name)||typeof file!=='string'){
      return {allowed:false,reason:'Validation deferred; no target files have been changed.'};
     }

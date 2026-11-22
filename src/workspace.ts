@@ -47,7 +47,7 @@ function excluded(relative: string, paths: string[]): boolean {
 }
 
 /** One read-only Git process, with bounded output/time; no per-file commands. */
-async function gitFiles(base: string, paths: string[]): Promise<string[] | undefined> {
+async function gitFiles(base: string, paths: string[], requireComplete: boolean): Promise<string[] | undefined> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-C', base, 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '.'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, LC_ALL: 'C' } });
     const files = new Set<string>();
@@ -71,6 +71,7 @@ async function gitFiles(base: string, paths: string[]): Promise<string[] | undef
     child.once('close', code => {
       clearTimeout(timer);
       if (failure) reject(failure);
+      else if (limited && requireComplete) reject(new Error('Workspace exceeds the candidate validation file limit.'));
       else if (limited || code === 0) resolve([...files]);
       else if (/not a git repository/i.test(stderr)) resolve(undefined);
       else reject(new Error('Git workspace discovery failed: ' + stderr.trim()));
@@ -103,11 +104,11 @@ export async function readWorkspace(root: string, relative: string): Promise<str
   if (text.includes('\0') || text.length > 250000) throw new Error('Binary or oversized file excluded');
   return text;
 }
-export async function listWorkspace(root: string): Promise<string[]> {
+export async function listWorkspace(root: string, requireComplete = false): Promise<string[]> {
   const base = await realpath(root);
   const paths = await exclusions(base);
   const result: string[] = [];
-  const candidates = await gitFiles(base, paths);
+  const candidates = await gitFiles(base, paths, requireComplete);
   if (candidates) {
     for (const name of candidates) {
       const target = path.join(base, name);
@@ -122,7 +123,10 @@ export async function listWorkspace(root: string): Promise<string[]> {
   let visited = 0;
   async function walk(dir: string) {
     for await (const entry of await opendir(path.join(base, dir))) {
-      if (++visited > MAX_DISCOVERY_ENTRIES || result.length >= MAX_FILES) return;
+      if (++visited > MAX_DISCOVERY_ENTRIES || result.length >= MAX_FILES) {
+        if (requireComplete) throw new Error('Workspace exceeds the candidate validation file limit.');
+        return;
+      }
       const name = path.posix.join(dir, entry.name);
       if (!isSafeContextPath(name) || excluded(name, paths) || entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) await walk(name);

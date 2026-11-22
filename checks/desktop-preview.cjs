@@ -69,7 +69,7 @@ exports.run = async () => {
     assert.equal(config.get('contextScout'), false);
     const extension = vscode.extensions.getExtension('forgelens-team.forgelens');
     assert.ok(extension, 'Editor did not discover the source extension');
-    assert.equal(extension.packageJSON.version, '0.2.0');
+    assert.equal(extension.packageJSON.version, require('../package.json').version);
     await extension.activate();
     assert.equal(extension.isActive, true);
     const commands = await vscode.commands.getCommands(true);
@@ -80,6 +80,8 @@ exports.run = async () => {
     const selectedPaths = selected.items.map(item => item.path);
     for (const name of ['src/visible.ts', 'src/tracked.tmp', 'nested/keep.drop']) assert.ok(selectedPaths.includes(name), `Missing allowed/tracked path ${name}`);
     assert.ok(selected.usedChars > 0 && selected.usedChars <= selected.budgetChars);
+    assert.ok(selected.usedTokens > 0 && selected.usedTokens <= selected.budgetTokens);
+    assert.equal(selected.encoding, 'o200k_base');
     for (const item of selected.items) {
       assert.ok(Number.isInteger(item.startLine) && item.startLine >= 1);
       assert.ok(Number.isInteger(item.endLine) && item.endLine >= item.startLine);
@@ -90,6 +92,7 @@ exports.run = async () => {
     assert.ok(excluded, 'Excluded-only preview must return an explicit empty selection');
     assert.deepEqual(excluded.items, [], 'An explicit mention must not bypass ignored/protected paths');
     assert.equal(excluded.usedChars, 0);
+    assert.equal(excluded.usedTokens, 0);
     const panelIsOpen = () => vscode.window.tabGroups.all.some(group =>
       group.tabs.some(tab => tab.label === 'ForgeLens' && tab.input instanceof vscode.TabInputWebview));
     const tabDeadline = Date.now() + 5000;

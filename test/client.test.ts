@@ -185,7 +185,7 @@ test('malformed approval arguments never dispatch an approval',async()=>{
 });
 
 test('optional schema preloading preserves MCP approvals while default remains deferred',async()=>{
- const f=fixture();f.options.preloadTools=true;await new ForgeRunner(f.options).run('edit');const m=f.calls[0].args[0].agent.spec.mcpServers[0];assert.equal(m.preload,true);assert.deepEqual(m.requireApprovalForTools,['propose_edit','propose_write','run_command']);
+ const f=fixture();f.options.preloadTools=true;await new ForgeRunner(f.options).run('edit');const m=f.calls[0].args[0].agent.spec.mcpServers[0];assert.equal(m.preload,true);assert.deepEqual(m.requireApprovalForTools,['propose_edit','propose_write','create_file','validate_candidate','run_command']);
 });
 
 test('optional reasoning effort passes through TrueForge agent spec only',async()=>{
@@ -223,7 +223,7 @@ test('explicit direct mode disables dynamic delegation while retaining TrueForge
  await new ForgeRunner(f.options).run('edit');
  const spec=f.calls[0].args[0].agent.spec;
  assert.deepEqual(spec.config.dynamicSubAgents,{enabled:false});
- assert.deepEqual(spec.mcpServers[0].requireApprovalForTools,['propose_edit','propose_write','run_command']);
+ assert.deepEqual(spec.mcpServers[0].requireApprovalForTools,['propose_edit','propose_write','create_file','validate_candidate','run_command']);
 });
 
 // These tests exercise the real runner; only the external SDK stream is substituted.
@@ -432,4 +432,97 @@ test('late events from timed-out attempt cannot approve tools or affect fallback
  assert.equal(approvals,0);assert.equal(f.calls.filter(c=>c.method==='events').length,0);
  const requests=f.calls.filter(c=>c.method==='stream');
  assert.equal(requests[0].args[2].abortSignal.aborted,true);assert.equal(requests[1].args[2].abortSignal.aborted,false);
+});
+
+test('native scout uses one turn and keeps inherited editor tools behind a root-thread approval gate',async()=>{
+ const child='context-scout';
+ const f=fixture();
+ const scoutEvents:any[]=[];
+ let cleanups=0,reviewed=0;
+ f.options.contextScout={mode:'native',mcpName:'saved-source'};
+ f.options.onScoutEvent=e=>scoutEvents.push(e);
+ f.options.onScoutFinished=async()=>{cleanups++;};
+ f.options.onApproval=async details=>{reviewed++;assert.equal(details.threadId,'main');assert.equal(details.name,'validate_candidate');return false;};
+ const toolCalls=[
+  {thread:child,requested:child,name:'propose_write',connector:'editor'},
+  {thread:child,requested:'main',name:'create_file',connector:'editor'},
+  {thread:'main',requested:'main',name:'read_file',connector:'editor'},
+  {thread:'main',requested:'main',name:'unknown',connector:'editor'},
+  {thread:'main',requested:'main',name:'report_plan',connector:'unexpected'},
+  {thread:'main',requested:'main',name:'validate_candidate',connector:'editor'}
+ ];
+ const initial:any[]=[created,{id:'child',type:'thread.created',threadId:child,parent:{threadId:'main'}}];
+ toolCalls.forEach(({thread,requested,name,connector},i)=>{
+  initial.push({id:'m'+i,type:'model.message',threadId:thread,toolCalls:[{id:'c'+i,function:{arguments:'{}'},toolInfo:{type:'mcp',name,serverName:connector}}]},
+   {id:'a'+i,type:'tool.approval_required',threadId:requested,toolCalls:[{id:'c'+i,sourceEventId:'m'+i}]});
+ });
+ initial.push({id:'paused',type:'turn.update',state:{status:'paused'}});
+ f.sessions.createTurnStream=async(...args:any[])=>{f.calls.push({method:'stream',args});return stream(initial) as any;};
+ f.sessions.subscribeToTurn=async(...args:any[])=>{f.calls.push({method:'subscribe',args});return stream([{id:'child-done',type:'thread.done',threadId:child},answer,done]) as any;};
+ assert.equal((await new ForgeRunner(f.options).run('original task')).status,'done');
+ const requests=f.calls.filter(c=>c.method==='create');
+ assert.equal(requests.length,1);assert.equal(f.calls.filter(c=>c.method==='stream').length,1);
+ const request=requests[0].args[0];await CreateSessionRequest.jsonOrThrow(request,{unrecognizedObjectKeys:'fail'});
+ const spec=request.agent.spec;
+ assert.equal(spec.config.dynamicSubAgents.enabled,true);
+ assert.equal(spec.config.sandbox.enabled,false);assert.equal(spec.config.webSearch.enabled,false);
+ assert.deepEqual(spec.mcpServers[0].requireApprovalForTools,['@all']);
+ assert.deepEqual(spec.mcpServers[1].enableTools,['find_relevant_files','select_context','read_file','search_workspace']);
+ assert.deepEqual(spec.mcpServers[1].requireApprovalForTools,[]);
+ assert.match(spec.instructions,/create_sub_agent once/);assert.match(spec.instructions,/saved-source/);
+ assert.ok(scoutEvents.some(e=>e.type==='thread.done'));
+ assert.ok(!f.events.some((e:any)=>e.type==='model.message'&&e.threadId===child));
+ assert.equal(reviewed,1);assert.equal(cleanups,1);
+ assert.deepEqual(f.calls.find(c=>c.method==='events')!.args[2].events.map((e:any)=>e.approval.status),['deny','deny','allow','deny','deny','deny']);
+});
+
+test('native mode cancels a second child instead of allowing unlimited delegation',async()=>{
+ const f=fixture([created,...['first','second'].map(threadId=>({id:threadId,type:'thread.created',threadId,parent:{threadId:'main'}}))]);
+ f.options.contextScout={mode:'native',mcpName:'read-only'};
+ assert.equal((await new ForgeRunner(f.options).run('task')).status,'cancelled');
+ assert.equal(f.calls.filter(c=>c.method==='cancel').length,1);
+});
+
+const busy={id:'busy',type:'turn.done',state:{status:'error',message:'HTTP 503 Service Unavailable'}};
+test('confirmed rejected generations retry twice with measured backoff before switching models',async()=>{
+ const f=fixture(); f.options.fallbackModel='test/backup';
+ let attempts=0;
+ f.sessions.createTurnStream=async()=>stream(++attempts<4?[created,busy]:[created,answer,done]) as any;
+ assert.equal((await new ForgeRunner(f.options).run('edit')).status,'done');
+ assert.deepEqual(f.calls.filter(c=>c.method==='create').map(c=>c.args[0].agent.spec.model.name),['test/model','test/model','test/model','test/backup']);
+ const messages=f.events.filter((e:any)=>e.type==='client.status').map((e:any)=>e.message);
+ assert.match(messages[0],/Retry 1\/2 in 0\.8 s/);assert.match(messages[2],/Retry 2\/2 in 1\.6 s/);
+ assert.ok(Number(messages[1].match(/after (\d+) ms/)[1])>=790);
+ assert.ok(Number(messages[3].match(/after (\d+) ms/)[1])>=1590);
+ assert.match(messages[4],/fallback/);
+});
+
+test('cancellation during retry backoff never starts another paid turn',async()=>{
+ const f=fixture([created,busy]);
+ let ready!:()=>void;const scheduled=new Promise<void>(resolve=>ready=resolve);
+ f.options.onEvent=e=>{if(e.type==='client.status' && e.message.includes('Retry 1/2 in'))ready();};
+ const runner=new ForgeRunner(f.options);
+ const run=runner.run('task');await scheduled;await runner.cancel();
+ assert.equal((await run).status,'cancelled');assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+});
+
+test('staged changes, generated text, tool activity and reported usage prevent provider replay',async()=>{
+ for(const scenario of ['staged','generated','reasoning','tools','metrics']){
+  const events:any[]=[created];
+  if(scenario==='generated')events.push(answer);
+  if(scenario==='reasoning')events.push({id:'m',type:'model.message.delta',threadId:'main',reasoningContent:'thinking'});
+  if(scenario==='tools')events.push({id:'r',type:'tool.response',threadId:'main'});
+  events.push(scenario==='metrics'?{...busy,state:{...busy.state,metrics:{totalInputTokens:7}}}:busy);
+  const f=fixture(events);f.options.fallbackModel='test/backup';f.options.getStagedProposalCount=()=>scenario==='staged'?1:0;
+  assert.equal((await new ForgeRunner(f.options).run('task')).status,'error',scenario);
+  assert.equal(f.calls.filter(c=>c.method==='create').length,1,scenario);
+ }
+});
+
+test('permanent zero quota and ambiguous gateway statuses skip same-model retries',async()=>{
+ for(const message of ['429 quota exceeded: limit: 0','HTTP 504 Gateway Timeout','invalid API key']){
+  const f=fixture([created,{...busy,state:{...busy.state,message}}]);
+  assert.equal((await new ForgeRunner(f.options).run('task')).status,'error');
+  assert.equal(f.calls.filter(c=>c.method==='create').length,1);
+ }
 });

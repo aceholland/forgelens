@@ -81,3 +81,15 @@ test('plan paths and reasons render as text nodes',()=>{
   assert.deepEqual(row!.children.map(c=>c.textContent),['<img>',': <script>']);
   ui.receive({type:'plan',files:[]});assert.equal(ui.nodes.plan!.hidden,true);
 });
+test('live queue exposes new files, file and group controls, and the token meter uses its own limit',()=>{
+  const ui=load();
+  ui.receive({type:'queue',editable:true,version:17,files:[{path:'fresh.py',kind:'create',editable:true,hunks:[{id:'h1',status:'pending'}]}]});
+  assert.match(ui.nodes.hunks!.children[0]!.textContent,/New file.*fresh.py/);
+  const group=ui.nodes.hunks!.children[2]!;
+  group.children[0]!.onclick!(); assert.equal(ui.sent.at(-1).type,'reviewSource');
+  group.children[1]!.onclick!(); assert.deepEqual({...ui.sent.at(-1)},{type:'hunks',version:17,path:'fresh.py',action:'accepted'});
+  ui.nodes['reject-all']!.onclick!();assert.deepEqual({...ui.sent.at(-1)},{type:'allHunks',version:17,action:'rejected'});
+  ui.receive({type:'context',preview:{items:[],usedChars:40,budgetChars:100,usedTokens:9,budgetTokens:21,encoding:'o200k_base'}});
+  assert.match(ui.nodes.budget!.textContent,/9 \/ 21 excerpt tokens \(o200k_base\).*40 \/ 100 characters/);
+  assert.equal((ui.nodes.meter as any).value,9); assert.equal((ui.nodes.meter as any).max,21);
+});

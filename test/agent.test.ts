@@ -6,6 +6,8 @@ import {instructions, instructionsForTools} from '../src/instructions';
 test('published agent definition uses the same instructions as the runtime',()=>{
  const manifest=JSON.parse(readFileSync(new URL('../agent/forgelens.json',import.meta.url),'utf8'));
  assert.equal(manifest.instructions,instructions);
+ assert.deepEqual(manifest.mcpServers[0].requireApprovalForTools,['propose_edit','propose_write','create_file','validate_candidate','run_command']);
+ assert.equal(manifest.config.dynamicSubAgents.enabled,false);
 });
 
  test('tool instructions match deferred or preloaded capabilities',()=>{
@@ -21,6 +23,8 @@ test('multi-file instruction transitions from bounded discovery to an exposed pl
  assert.match(instructions,/Use focused reads with exact line ranges/);
  assert.match(instructions,/report_plan/);
  assert.match(instructions,/call propose_write/);
+ assert.match(instructions,/validate_candidate/);
+ assert.match(instructions,/create_file/);
  assert.match(instructions,/Targeted recovery reads are allowed/);
  assert.doesNotMatch(instructions,/After 6 exploration calls|read at most 2 files/);
  assert.doesNotMatch(instructions,/(?:tests|docs|src)\/[\w./-]+/);

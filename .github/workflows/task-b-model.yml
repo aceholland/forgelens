@@ -1,0 +1,44 @@
+name: Task B live model
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/task-b-workflow-20261122]
+    paths:
+      - '.github/workflows/task-b-model.yml'
+      - 'checks/run-task-b-runner.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  flask:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Generate and independently grade the candidate
+        run: bash checks/run-task-b-runner.sh
+      - name: Preserve model and benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-b-model-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/task-b-evidence/run.json
+            ${{ runner.temp }}/task-b-evidence/result.json
+            ${{ runner.temp }}/task-b-evidence/events.json
+            ${{ runner.temp }}/task-b-evidence/candidate-verification.json
+            ${{ runner.temp }}/task-b-evidence/candidate.patch

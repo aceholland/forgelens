@@ -2,7 +2,7 @@
   "name": "forgelens",
   "displayName": "ForgeLens",
   "description": "Safe editor-native coding assistant powered by local TrueForge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "forgelens-team",
   "repository": {
     "type": "git",
@@ -71,10 +71,22 @@
     "configuration": {
       "title": "ForgeLens",
       "properties": {
+        "forgelens.liveReview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Pause each proposal for hunk decisions and send the result back to the running agent."
+        },
+        "forgelens.tokenBudget": {
+          "type": "integer",
+          "default": 10000,
+          "minimum": 1,
+          "maximum": 100000,
+          "description": "Maximum o200k_base tokens in source excerpts per retrieval. Other model inputs and provider tokenization are separate."
+        },
         "forgelens.contextScout": {
           "type": "boolean",
           "default": false,
-          "description": "Run a separate read-only TrueForge session to gather context before a multi-file task. This uses the configured model for an additional session."
+          "description": "Allow the agent to delegate discovery to a read-only native TrueForge child during a multi-file task. This uses additional model calls."
         },
         "forgelens.pythonPath": {
           "type": "string",
@@ -150,6 +162,7 @@
     "@modelcontextprotocol/sdk": "1.32.2",
     "@truefoundry/trueforge-sdk": "0.185.0",
     "diff": "8.0.4",
+    "gpt-tokenizer": "4.1.2",
     "undici": "7.30.2",
     "zod": "4.6.7"
   },

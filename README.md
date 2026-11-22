@@ -1,20 +1,21 @@
 # ForgeLens
 
-ForgeLens is a VS Code extension for reviewing AI-assisted changes in a local repository. Select a function to request a focused edit, or ask the agent panel for a change that spans source code, tests and documentation. TrueForge runs the agent. You choose which hunks to apply and when to save them.
+ForgeLens is a desktop VS Code extension for making reviewed changes across source, tests and documentation. Describe the outcome in the agent panel or select a function to edit inline. TrueForge runs the model and tool loop. Each proposed change opens for review in your editor.
 
-[Install the v0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/forgelens-0.2.0.vsix) · [Watch the narrated 0.2.0 preview](https://github.com/aceholland/forgelens/releases/download/v0.2.0/ForgeLens-0.2.0-preview.mp4) · [Watch the original Round 1 demo (3:59)](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Read the Round 1 write-up](docs/technical-writeup.pdf) · [Download the recorded v0.1.13 build](https://github.com/aceholland/forgelens/releases/download/v0.1.13/forgelens-0.1.13.vsix)
+[Install ForgeLens 0.3.0](https://github.com/aceholland/forgelens/releases/download/v0.3.0/forgelens-0.3.0.vsix) · [Release downloads](https://github.com/aceholland/forgelens/releases/tag/v0.3.0) · [Original narrated Round 1 demo, 3m 59s](https://drive.google.com/file/d/1XiT8MMKxJyZTAejPxJvrqI8tOzk0gSjs/view) · [Round 1 PDF](docs/technical-writeup.pdf)
 
-### What's new in the 22 November preview
+## What you can do
 
-This preview was developed after the Round 1 recording. Its new video demonstrates local context preview; the original video remains the Windows A/B/C model-run evidence. To try the new workflow, open a trusted local folder in **desktop VS Code 1.101 or newer** and run **ForgeLens: Open Agent**.
-
-1. **Preview context before calling a model.** Type a task and choose **Preview context**. The panel shows each selected file, line range, selection reason and the excerpt budget used. Click a path to open those lines. This preview runs locally, including when no model is configured.
-2. **Choose what the agent can see.** In Git repositories automatic discovery follows Git's standard ignore rules and includes tracked files. Add a root-level `.forgelensignore` to exclude files or folders even when tracked or explicitly requested. Use one literal workspace-relative path per line, such as `fixtures/private/`. Blank lines and `#` comments are accepted. Glob patterns and negation produce a configuration error.
-3. **Choose hunks in any order.** When the run ends, open each diff from **Staged changes**, then accept or reject it. **Export accepted patch** saves exactly those hunks as a Git-compatible patch at the location you choose. You can share it or run `git apply --check` before applying any changes. **Review hunks** takes you through any outstanding decisions and asks before applying to the editor buffer.
-4. **Verify saved changes in a real terminal.** Choose **Verify saved changes** for Git status, Git diff checks, or Flask CLI tests when `tests/test_cli.py` is present. The panel reports elapsed time and exit status. The VS Code task terminal shows the command and its actual output. Set `forgelens.pythonPath` in User Settings to use a particular Python environment. Save edits first.
-5. **Stop from the keyboard.** Press **Escape** in the agent panel during a run. The output reports the local time to block editing and discard proposals. TrueForge cancellation runs separately.
-
-For multi-file tasks, you can also enable `forgelens.contextScout` in Settings. This starts a **separate read-only TrueForge session**. Its endpoint permits discovery, reading and search; it cannot stage edits or run commands. The session is limited to eight iterations and sixty seconds, with at most 4,000 characters of notes. It closes before the editing session starts. The editing agent must still discover and verify files and obtain edit approvals. The scout is off by default and uses additional provider quota when enabled.
+| In the editor | What happens |
+| --- | --- |
+| **Preview context** | See which paths, line ranges and selection reasons would reach the agent. Local ranking combines text relevance (BM25), file roles, symbols and static imports. Two limits bound the excerpts, initially 24,000 characters and 10,000 reference tokens. Preview works offline. |
+| **Run agent** | Give a multi-file request without naming paths. The editor shows discovery, the file plan, tool activity, review requests and the run result. An optional native TrueForge child can investigate supporting code inside the same turn. |
+| **Edit selection** | Select code and press **Ctrl+Alt+I** or **Cmd+Alt+I**. The editor checks the proposed changes stay inside the selection. |
+| **Review a proposal** | Accept or reject an individual hunk, the pending hunks in a file, or all pending hunks. Use the panel or open the editor hunk controls. The running agent receives the decisions and can read the accepted version. |
+| **Test before applying** | Approve a pytest request to run against a temporary copy containing the staged candidate. A failure and its output go back to the agent so it can revise the proposal in the same turn. |
+| **Apply, export or undo** | Export the accepted hunks as a Git patch, or confirm Apply. Existing-file edits go into an unsaved buffer. New files require a separate creation confirmation. Undo checks for intervening changes. |
+| **Verify saved changes** | Choose Git status, Git diff checks, or Flask CLI tests from the native picker. The task terminal shows the output. The panel reports exit status and duration. |
+| **Stop or recover** | Escape in the panel stops the run and clears pending proposals. The panel reports cancellation time. Two bounded retries precede a configured fallback after qualifying early failures. Once an edit may have been staged, the runner avoids automatic replay. |
 
 ## Try it in VS Code
 
@@ -41,57 +42,51 @@ HOST=127.0.0.1 NETWORK_POLICY_ENABLED=true OUTBOUND_URL_ALLOWED_HOSTS='["127.0.0
 
 **3. Choose a model.** Open [local TrueForge](http://127.0.0.1:8790), add your provider in **Settings → Models**, and copy its model ID. Set `forgelens.model` to that ID in VS Code User Settings. Provider keys belong in TrueForge. If you have a second model, set `forgelens.fallbackModel` to its ID. An existing TrueForge server listening on IPv6 loopback needs `forgelens.baseUrl` set to `http://[::1]:8790`. [Example model configuration](agent/model.example.json)
 
-**4. Make a first edit.** Select a function and press **Ctrl+Alt+I** (**Cmd+Alt+I** on macOS), or run **ForgeLens: Edit Selection**. For a multi-file task, run **ForgeLens: Open Agent**, describe the outcome and choose **Run agent**. The panel shows the files it chose and streams progress. After the run, choose **Review hunks**. Apply the hunks you accept, save, then run your tests.
+**4. Make a first edit.** Select a function and press **Ctrl+Alt+I** (**Cmd+Alt+I** on macOS), or run **ForgeLens: Edit Selection**. For a multi-file task, run **ForgeLens: Open Agent**, describe the outcome and choose **Run agent**. The panel shows the files it chose and streams progress. Accept or reject hunks as they arrive. When the agent finishes, choose **Review hunks** to apply the accepted result. Save the editor buffer and run the project tests.
 
-## How a request reaches the editor
+## How discovery works
+
+```mermaid
+flowchart LR
+    Task["Task or selected code"] --> Parent["TrueForge editing agent"]
+    Parent --> Search["Local discovery and focused reads"]
+    Parent -->|Optional| Scout["Native read-only child"]
+    Scout --> Search
+    Search --> Clips["Ranked excerpts with paths, lines and reasons"]
+    Clips --> Plan["File plan"]
+    Plan --> Review["Proposed changes in VS Code"]
+```
+
+Use `@file:src/example.py` or `@symbol:get_debug_flag` to steer discovery. The token meter counts source excerpts using `o200k_base`. The provider may use a different tokenizer and also receives instructions, tool definitions and responses. Git ignore rules apply to automatic discovery. Put one literal file or folder path per line in a root `.forgelensignore` to exclude it even from explicit tool requests.
+
+Enable **ForgeLens › Context Scout** to let TrueForge create a child during multi-file requests. The child can read and search saved source. A parent-connector call from a child is denied before it reaches the editor. Scouting uses additional model calls and is off by default. [Native runtime regression check](checks/native-scout.ts) · [Versioned agent definition](agent/forgelens.json)
+
+## What happens to proposed changes
 
 ```mermaid
 flowchart TD
-    User["Task in VS Code"] --> Preview["Preview context: local, no model call"]
-    Preview --> Retrieval["Local retrieval: exclusions, ranking and budget"]
-    Retrieval --> Evidence["Selected paths, lines and reasons"]
-    User --> Run["Run agent"]
-    Run -->|Optional| Scout["Separate read-only TrueForge scout"]
-    Scout <-->|Discovery and reads only| ReadTools["Isolated read-only MCP endpoint"]
-    Scout --> Notes["Close scout; pass bounded untrusted notes"]
-    Run -->|Default| Parent["TrueForge editing session"]
-    Notes --> Parent
-    Parent <-->|Inference| Model["Configured model"]
-    Parent <-->|Discovery and approved proposals| Tools["Editing MCP endpoint"]
-    Tools --> Retrieval
-    Tools --> Queue["Staged hunks for review"]
-    Parent --> Events["Stream progress to the editor"]
+    Edit["Propose a change or a new file"] --> Hunk{"Review hunks"}
+    Hunk -->|Reject| Feedback["Tell the running agent which hunks were rejected"]
+    Hunk -->|Accept| Candidate["Accepted changes in memory"]
+    Feedback --> Agent["Agent can revise"]
+    Candidate -->|Approve pytest| Copy["Test a temporary project copy"]
+    Copy -->|Failure output| Agent
+    Agent --> Edit
+    Candidate -->|Export| Patch["Git patch"]
+    Candidate -->|Confirm Apply| Buffer["Existing editor buffer"]
+    Buffer --> Save["Save to disk"]
+    Candidate -->|Confirm Create| New["Create a new file"]
+    Save --> Verify["Verify saved changes"]
+    New --> Verify
 ```
 
-TrueForge decides which tools to call. ForgeLens ranks paths and symbols, selects short excerpts, and displays the file, line range and reason for each choice. You can steer retrieval with `@file:src/example.py` or `@symbol:get_debug_flag`. The default excerpt budget is **24,000 characters**. Tool metadata, later reads and model output consume additional context.
+The agent can propose a new text file in an existing directory. Inline requests stay within the selected text. Apply and Undo check the current contents before changing anything. Set **ForgeLens › Live Review** off if you prefer to review after the run.
 
-In a local preview of pinned Flask 3.1.3, the original Task B request supplied **no file paths**. Retrieval selected `src/flask/cli.py` (lines 496–692), `tests/test_cli.py` (lines 292–552) and `docs/cli.rst` (lines 166–470), using **23,960 of 24,000 excerpt characters**. This was local retrieval, with no provider call or edit; it is separate from the recorded agent run below.
+Candidate tests execute trusted project code with your local account's permissions. ForgeLens copies the allowed project files into a temporary directory, applies the accepted overlays there, runs pytest with the configured **Python Path**, returns its exit and output, and removes the copy. A changed original, a protected path or a conflicting new file stops validation. [Candidate validation](src/candidateValidation.ts) · [Review controls](src/editorReview.ts)
 
-The extension uses the official TrueForge SDK. At session creation it fills in the selected model and temporary MCP connector, then sends the agent specification to TrueForge. Tools load on demand by default. Set `forgelens.preloadTools` for a model that needs their schemas up front. [Versioned agent definition](agent/forgelens.json)
+## Round 1 recording
 
-## What Accept, Apply and Save do
-
-```mermaid
-flowchart TD
-    Request["Model proposes an exact edit"] --> Stage{"Allow staging?"}
-    Stage -->|No| Drop["Discard proposal"]
-    Stage -->|Yes| Review{"Review each hunk"}
-    Review -->|Reject| Skip["Skip hunk"]
-    Review -->|Accept| Accepted["Accepted hunks"]
-    Accepted -->|Export accepted patch| Patch["Git patch at a user-chosen path"]
-    Accepted -->|Confirm Apply| Buffer["Unsaved editor buffer"]
-    Buffer -->|Save| Disk["File on disk"]
-    Buffer -->|Guarded Undo| Restore["Restore prior text"]
-    Disk --> Verify["Verify saved changes: choose a check"]
-    Verify --> Terminal["Actual process in VS Code task terminal"]
-    Terminal --> Result["Command output, exit status and elapsed time"]
-```
-
-ForgeLens checks that the expected text still matches before it applies or undoes a change. It preserves line endings and keeps inline edits within the selected scope. Exporting an accepted patch does not apply it to the source files. **Stop** cancels the active run and discards pending proposals. To reverse an applied edit, use **ForgeLens: Undo Last Accepted Change**, then save the restored text. Agent-requested commands require separate approval. **Verify saved changes** runs the check you choose against saved files in the task terminal.
-
-## The three Flask tasks
-
-The demo uses [Flask 3.1.3 at the required commit](https://github.com/pallets/flask/tree/22d924701a6ae2e4cd01e9a15bbaf3946094af65). The times below point to the evidence in the narrated recording.
+The original Windows recording shows v0.1.13 on [Flask 3.1.3 at the required commit](https://github.com/pallets/flask/tree/22d924701a6ae2e4cd01e9a15bbaf3946094af65). The times below point to the evidence in the narrated recording.
 
 | Task | What happened | Where to look |
 | --- | --- | --- |
@@ -100,19 +95,6 @@ The demo uses [Flask 3.1.3 at the required commit](https://github.com/pallets/fl
 | **C · Model failure** | An unreachable primary triggered the configured fallback. We rejected one hunk and applied the other to an unsaved buffer, then used Undo and Save. Git was clean and all **235** tracked-file hashes matched the starting state. | Failure and fallback **3:36** · review **3:40** · clean workspace **3:55** |
 
 A separate cancellation at **2:39** preserved the earlier reviewed edits. The recording shows captured command output for verification. [Detailed run evidence](docs/STATUS.md) · [Feature and test register](docs/FEATURES.txt)
-
-## Additional features and limits
-
-| Feature | Behavior and verification |
-| --- | --- |
-| **Model fallback and deadlines** | A second configured model can take over after a confirmed failure with no staged edits. Task C shows the switch. Tests cover model timeouts, ambiguous interruptions and late events. |
-| **Focused retrieval and recovery** | Ranked source, test and documentation snippets guide multi-file work. Tests cover explicit mentions, repeat reads and recovery when an edit’s anchor fails. |
-| **Workspace protections** | The authenticated loopback bridge filters protected paths, symlinks, binary and oversized files. It limits requests to 2 MiB and 512 input elements. These checks cannot identify every secret embedded in ordinary source. |
-| **Command review** | The agent can request approved validation commands, including pytest, Git status or diff, and Flask help. Workspace code can run during a test, so use a trusted folder. |
-| **Optional diagnostics** | The Windows rehearsal can parse a proposed Python edit before staging. The optional Groq gateway passed offline forwarding, retry and streaming checks. Live Groq inference remains unverified. |
-| **Optional read-only scout** | A real local TrueForge 0.185.1 runtime and its SDK completed scout and parent discovery against a deterministic loopback provider fixture. The scout endpoint closed before the parent; no file changed and no approval or mutation callback ran. This verifies integration, not a real-model Task B or a recorded UI workflow. |
-
-ForgeLens edits existing files in the first local workspace folder. File creation and deletion are outside the current feature set. Model quality and provider quotas affect whether a request finishes.
 
 ## Which VS Code setups were checked?
 
@@ -134,9 +116,10 @@ Browser-only editors such as `vscode.dev` cannot host this Node extension. Remot
 ## Build from a clean clone
 
 ```sh
-git clone --branch codex/postdeadline-20261122 https://github.com/aceholland/forgelens.git
+git clone --branch v0.3.0 https://github.com/aceholland/forgelens.git
 cd forgelens
 npm ci
+python -m pip install pytest==9.0.2
 npm run check
 npm test
 npm run compile

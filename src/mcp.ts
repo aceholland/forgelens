@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { isJSONRPCRequest, isJSONRPCResultResponse } from '@modelcontextprotocol/sdk/types.js';
-import { stat } from 'node:fs/promises';
+import { lstat, stat } from 'node:fs/promises';
 import http from 'node:http';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -11,11 +11,13 @@ import { isSafeContextPath, selectContext } from './context';
 import { resolveAgentProposal } from './patch';
 
 export interface EditorBridge {
- root:string; budget:number; task?:string; requireDiscovery?:boolean; active():boolean;
+ root:string; budget:number; tokenBudget?:number; task?:string; requireDiscovery?:boolean; active():boolean;
  /** Separate scout endpoint: saved-source reads only; never plans, proposals or commands. */
  readOnly?:boolean;
  pending?(path:string):string|undefined;
- propose(path:string, content:string):Promise<string>;
+ propose(path:string, content:string, expectedBase?:string, signal?:AbortSignal):Promise<string>;
+ create?(path:string,content:string,signal?:AbortSignal):Promise<string>;
+ validate?(tests:string[],signal?:AbortSignal):Promise<string>;
  command(command:string,args:string[]):Promise<string>;
  onPlan?(files:{path:string;reason:string}[]):void;
  onToolCall?(summary:string):void;
@@ -62,7 +64,11 @@ export async function startMcp(bridge: EditorBridge) {
  function build() {
   const mcp=new McpServer({name:'forgelens-editor',version:'0.1.0'},{maxToolInputElements:512});
   mcp.server.oninitialized=()=>bridge.onInitialized?.();
-  const readView=async(path:string)=>{const disk=await readWorkspace(bridge.root,path);return readOnly?disk:bridge.pending?.(path)??disk;};
+  const readView=async(path:string)=>{
+   await confinedPath(bridge.root,path);
+   const pending=readOnly?undefined:bridge.pending?.(path);
+   return pending??await readWorkspace(bridge.root,path);
+  };
   const guard=()=>{verifyGeneration();if(closed||!bridge.active()) throw new Error('Run cancelled or inactive');};
   mcp.registerTool('read_file',{
    description:'Read staged or saved source in exact line ranges. Defaults to 80 lines. Broad exploration is compacted; follow startLine to paginate. Unchanged repeated reads return a locator unless refresh=true. Use search_workspace or select_context first to find relevant ranges. Staged text is not applied; protected files are excluded.',
@@ -73,13 +79,13 @@ export async function startMcp(bridge: EditorBridge) {
    const usedCall=take();if(!usedCall)return missingContext();
    try {
    const diskPath=await confinedPath(bridge.root,path);
-   const info=await stat(diskPath,{bigint:true});
-   if(info.size>1000000n)throw new Error('Oversized file excluded');
-   guard();
    const pending=readOnly?undefined:bridge.pending?.(path);
+   const info=pending===undefined?await stat(diskPath,{bigint:true}):undefined;
+   if(info&&info.size>1000000n)throw new Error('Oversized file excluded');
+   guard();
    const staged=pending!==undefined?'[STAGED PROPOSAL, not applied or saved] ':'';
    const key=digest('read',path,diskPath,startLine,lineCount,
-    pending===undefined?`${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`:digest('staged',pending));
+    pending===undefined?`${info!.ino}:${info!.size}:${info!.mtimeNs}:${info!.ctimeNs}`:digest('staged',pending));
    if(!refresh&&exploration.has(key)){report('read_file',details,'repeat');return show(exploration.get(key)!,usedCall);}
    const lines=(pending??await readWorkspace(bridge.root,path)).split('\n');
    if(startLine>lines.length)throw new Error('startLine exceeds file length.');
@@ -158,7 +164,7 @@ export async function startMcp(bridge: EditorBridge) {
     // Preserve requested test/docs coverage even if the model abbreviates its
     // discovery query. Focused select_context queries remain independent.
     const contextQuery=discovery&&bridge.task?`${bridge.task}\n${query}`:query;
-    const result=selectContext(files,contextQuery,discovery?Math.min(4000,bridge.budget):bridge.budget,discovery?{maxFiles:5,maxLines:40}:undefined);
+    const result=selectContext(files,contextQuery,discovery?Math.min(4000,bridge.budget):bridge.budget,discovery?{maxFiles:5,maxLines:40}:undefined,bridge.tokenBudget);
     guard();
     bridge.context(result);
     guard();if(discovery)discoveryComplete=true;
@@ -186,7 +192,16 @@ export async function startMcp(bridge: EditorBridge) {
    report('report_plan','',`${files.length} files`);
    return show(`Plan recorded for ${files.length} files. Call propose_write to stage changes.`);
   });
-  for(const name of ['propose_write','propose_edit'] as const)mcp.registerTool(name,{description:'Stage or revise exact replacements in an existing file for human per-hunk review; never writes disk. Supply edits:[{oldText,newText}], not file content. Each oldText must match exactly once. Include unchanged surrounding lines only to make an anchor unique. Unchanged file contents are preserved automatically. read_file/search show the staged view, so base revisions on that view.',inputSchema:{path:z.string(),edits:z.array(z.object({oldText:z.string().min(1).max(250000).describe('Exact unique text already present in the current file or staged view.'),newText:z.string().max(250000).describe('Replacement for oldText only; do not reproduce the whole file.')})).min(1).max(20)}},async({path,edits})=>{guard();report(name,safeLabel(path));const original=await readView(path);const proposed=resolveAgentProposal(original,{edits});guard();const result=await bridge.propose(path,proposed);guard();if(bridge.pending?.(path)===proposed)hasProposed=true;return show(result);});
+  for(const name of ['propose_write','propose_edit'] as const)mcp.registerTool(name,{description:'Propose exact replacements for human hunk review. Each oldText must match once in the saved or staged view. After review use the returned decisions and read the accepted overlay before revising.',inputSchema:{path:z.string(),edits:z.array(z.object({oldText:z.string().min(1).max(250000).describe('Exact unique text already present in the current file or staged view.'),newText:z.string().max(250000).describe('Replacement for oldText only; do not reproduce the whole file.')})).min(1).max(20)}},async({path,edits},extra)=>{guard();report(name,safeLabel(path));const original=await readView(path);const proposed=resolveAgentProposal(original,{edits});guard();const result=await bridge.propose(path,proposed,original,extra.signal);guard();if(bridge.pending?.(path)!==undefined)hasProposed=true;return show(result);});
+  if(bridge.create)mcp.registerTool('create_file',{description:'Propose a new workspace text file for human review. Use an existing parent directory. The file is created only after the user applies it.',inputSchema:{path:z.string().min(1).max(400),content:z.string().min(1).max(250000)}},async({path,content},extra)=>{
+   guard();const target=await confinedPath(bridge.root,path);
+   if(content.includes('\0')||bridge.pending?.(path)!==undefined)throw new Error('Creation requires a new text file.');
+   try{await lstat(target);throw new Error('File already exists.');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+   guard();report('create_file',safeLabel(path));const result=await bridge.create!(path,content,extra.signal);guard();if(bridge.pending?.(path)!==undefined)hasProposed=true;return show(result);
+  });
+  if(bridge.validate)mcp.registerTool('validate_candidate',{description:'Request approval to test staged edits in a temporary copy using pytest and return its actual exit and output. Use failures to repair the current overlay in this turn.',inputSchema:{tests:z.array(z.string().min(1).max(400)).max(20).describe('Workspace-relative pytest paths or node IDs, or [] for the full suite.')}},async({tests},extra)=>{
+   guard();report('validate_candidate');const result=await bridge.validate!(tests,extra.signal);guard();return show(result);
+  });
   mcp.registerTool('run_command',{description:'Request an explicitly approved validation command. Restricted to pytest, git status/diff, and flask --help; no shell.',inputSchema:{command:z.string(),args:z.array(z.string()).max(20)}},async({command,args})=>{guard();report('run_command');return show('Validation executes saved disk files, NOT staged proposals.\n'+await bridge.command(command,args));});
   }
   return mcp;

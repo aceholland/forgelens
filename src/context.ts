@@ -1,6 +1,9 @@
+import { bm25Scores, importNeighbours } from './retrievalIndex';
+import { fitExcerpt } from './tokenBudget';
+
 export interface ContextFile { path: string; content: string; symbols?: string[] }
 export interface ContextItem extends ContextFile { reason: string; score: number; truncated: boolean; startLine?: number; endLine?: number }
-export interface ContextSelection { items: ContextItem[]; usedChars: number; budgetChars: number }
+export interface ContextSelection { items: ContextItem[]; usedChars: number; budgetChars: number; usedTokens:number; budgetTokens:number; encoding:'o200k_base' }
 
 export function isSafeContextPath(path: string): boolean {
   if (!path || path.startsWith('/') || path.includes('\\') || /^[A-Za-z]:/.test(path)) return false;
@@ -40,8 +43,9 @@ function fileIdentity(path: string): { role: Role; family: string } {
 }
 
 /** Stable lexical retrieval with explicit mentions first, returning bounded snippets. */
-export function selectContext(files: ContextFile[], query: string, budgetChars: number, options?: {maxFiles:number;maxLines:number}): ContextSelection {
+export function selectContext(files: ContextFile[], query: string, budgetChars: number, options?: {maxFiles:number;maxLines:number}, budgetTokens=10000): ContextSelection {
   if (!Number.isSafeInteger(budgetChars) || budgetChars < 0) throw new Error('Context budget must be a nonnegative integer.');
+  if (!Number.isSafeInteger(budgetTokens) || budgetTokens < 0) throw new Error('Token budget must be a nonnegative integer.');
   const mentions = parseMentions(query);
   const keywords = terms(query.replace(/@(file:|symbol:)?[\w./-]+/g, ''));
   const safeFiles = files.filter(file => isSafeContextPath(file.path));
@@ -67,7 +71,8 @@ export function selectContext(files: ContextFile[], query: string, budgetChars: 
   // can otherwise dominate unrelated constructs and sections.
   const featureWords = createsFeature ? keywords.slice(0, 6) : keywords;
   const requestedKinds = new Set([...featureWords,...(keywords.includes('commands')?['command']:[])]);
-  const candidates = safeFiles.map((file,index) => {
+  const bm25 = bm25Scores(safeFiles, keywords);
+  const scored = safeFiles.map((file,index) => {
     const {role,family} = identities[index]!;
     const reasons: string[] = [];
     let score = 0;
@@ -78,10 +83,21 @@ export function selectContext(files: ContextFile[], query: string, budgetChars: 
     const pathTerms = lowerPath.split(/[^a-z0-9]+/);
     const matches = keywords.filter(term => pathTerms.includes(term) || lowerContent.includes(term));
     for (const term of matches) score += pathTerms.includes(term) ? 6 : 1;
+    score += bm25[index]!;
     if (matches.length) reasons.push(`lexical relevance: ${matches.join(', ')}`);
     if (family === coherentFamily && role !== 'other') { score += 30; reasons.push(`matching ${role} module: ${family}`); }
     return { ...file, role, family, reason: reasons.join('; '), score };
-  }).filter(file => file.score > 0).sort((a,b) => b.score-a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  });
+  const rank = (a:typeof scored[number],b:typeof scored[number])=>b.score-a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  if(automatic && !coherentFamily) {
+    const seeds=scored.filter(f=>f.score>0).sort(rank).slice(0,2);
+    const links=importNeighbours(safeFiles,new Set(seeds.map(f=>f.path)));
+    for(const file of scored) {
+      const link=links.get(file.path);
+      if(link){ file.score+=4; file.reason=[file.reason,link].filter(Boolean).join('; '); }
+    }
+  }
+  const candidates=scored.filter(file=>file.score>0).sort(rank);
   // Diversify automatic retrieval across top-level areas (implementation, tests, docs)
   // without baking in any repository-specific filenames. Explicit mentions retain rank.
   if (!mentions.files.length && !mentions.symbols.length) {
@@ -100,12 +116,13 @@ export function selectContext(files: ContextFile[], query: string, budgetChars: 
   }
   const items: ContextItem[] = [];
   let usedChars = 0;
+  let usedTokens = 0;
   const seen = new Set<string>();
   const maxFiles=options?.maxFiles??4, maxLines=options?.maxLines??Infinity;
   const hasMentions=!!(mentions.files.length || mentions.symbols.length);
   const snippetBudget = !options&&hasMentions ? budgetChars : Math.ceil(budgetChars / Math.min(maxFiles, Math.max(1,candidates.length)));
   for (const file of candidates) {
-    if (usedChars >= budgetChars) break;
+    if (usedChars >= budgetChars || usedTokens >= budgetTokens) break;
     // Avoid low-value leftover fragments beyond the configured window count.
     if ((options || !hasMentions) && items.length >= maxFiles) break;
     if (seen.has(file.path) || !file.content.length) continue;
@@ -156,8 +173,14 @@ export function selectContext(files: ContextFile[], query: string, budgetChars: 
       }
     }
     const {role,family,...contextFile} = file;
+    const remainingFiles = Math.max(1, Math.min(maxFiles,candidates.length)-items.length);
+    const perFile = hasMentions && !options ? budgetTokens-usedTokens : Math.ceil((budgetTokens-usedTokens)/remainingFiles);
+    const fit = fitExcerpt(snippet, anchor-first, perFile);
+    if (!fit.text.length) continue;
+    first += fit.startOffset; snippet = fit.text; last = first + snippet.split('\n').length-1;
+    usedTokens += fit.tokens;
     items.push({ ...contextFile, content: snippet, startLine:first+1, endLine:last+1, truncated: snippet.length < file.content.length });
     usedChars += snippet.length;
   }
-  return { items, usedChars, budgetChars };
+  return { items, usedChars, budgetChars, usedTokens, budgetTokens, encoding:'o200k_base' };
 }

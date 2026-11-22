@@ -16,8 +16,8 @@ summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(
 <label for="task">What would you like to change?</label><textarea id="task" placeholder="Describe the change, or include @file:path or @symbol:name."></textarea>
 <div class="bar"><button id="run">Run agent</button><button id="inspect">Preview context</button><button id="stop">Stop</button></div>
 <section><h2>Review &amp; verify</h2><div class="bar"><button id="review">Review hunks</button><button id="undo">Undo last</button><button id="verify">Verify saved changes</button></div></section>
-<section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2><div id="hunks"></div><button id="export">Export accepted patch</button></section>
-<section id="context" hidden><div class="context-head"><h2 id="context-title">Context preview</h2><span id="budget"></span></div><progress id="meter" aria-label="Excerpt character budget"></progress><ul class="files" id="files"></ul></section>
+<section id="queue" hidden aria-label="Staged changes"><h2>Staged changes</h2><div class="bar"><button id="accept-all">Accept all pending hunks</button><button id="reject-all">Reject all pending hunks</button></div><div id="hunks"></div><button id="export">Export accepted patch</button></section>
+<section id="context" hidden><div class="context-head"><h2 id="context-title">Context preview</h2><span id="budget"></span></div><progress id="meter" aria-label="Source excerpt budget"></progress><ul class="files" id="files"></ul></section>
 <section id="plan" aria-label="Agent file plan" hidden></section>
 <details open><summary>Run output</summary><pre id="events" role="log">Ready.</pre></details>
 <script nonce="${nonce}">
@@ -55,9 +55,16 @@ window.addEventListener('message', ({data}) => {
     const list=el('hunks');
     list.replaceChildren();
     el('queue').hidden=!data.files.length;
+    const pending=file=>(file.editable ?? data.editable) && file.hunks.some(h=>h.status==='pending');
+    for (const [id,action] of [['accept-all','accepted'],['reject-all','rejected']]) {
+      const button=el(id);
+      button.disabled=!data.files.some(pending);
+      button.onclick=()=>api.postMessage({type:'allHunks',version:data.version,action});
+    }
     for (const file of data.files) {
+      const editable=file.editable ?? data.editable;
       const heading=document.createElement('h3');
-      heading.textContent=file.path;
+      heading.textContent=(file.kind==='create'?'New file · ':'')+file.path;
       list.appendChild(heading);
       for(const hunk of file.hunks) {
         const row=document.createElement('div');
@@ -68,20 +75,31 @@ window.addEventListener('message', ({data}) => {
         for (const [label,action] of [['View diff','preview'],['Accept','accepted'],['Reject','rejected']]) {
           const button=document.createElement('button');
           button.textContent=label;
-          button.disabled=!data.editable || hunk.status===action;
+          button.disabled=!editable || hunk.status===action;
           button.onclick=()=>api.postMessage({type:'hunk',version:data.version,path:file.path,id:hunk.id,action});
           row.appendChild(button);
         }
         list.appendChild(row);
       }
+      const actions=document.createElement('div');
+      actions.className='bar';
+      for(const [label,type,action] of [['Open editor hunk controls','reviewSource','preview'],['Accept pending in file','hunks','accepted'],['Reject pending in file','hunks','rejected']]) {
+        const button=document.createElement('button');
+        button.textContent=label;
+        button.disabled=type==='reviewSource'?!editable:!pending(file);
+        button.onclick=()=>api.postMessage({type,version:data.version,path:file.path,action});
+        actions.appendChild(button);
+      }
+      list.appendChild(actions);
     }
   } else if (data.type === 'context') {
-    const {items,usedChars,budgetChars} = data.preview;
+    const {items,usedChars,budgetChars,usedTokens,budgetTokens,encoding} = data.preview;
     el('context').hidden = false;
     el('context-title').textContent = data.label;
-    el('budget').textContent = usedChars.toLocaleString()+' / '+budgetChars.toLocaleString()+' characters';
-    el('meter').max = Math.max(1,budgetChars);
-    el('meter').value = usedChars;
+    const chars=usedChars.toLocaleString()+' / '+budgetChars.toLocaleString()+' characters';
+    el('budget').textContent = usedTokens===undefined ? chars : usedTokens.toLocaleString()+' / '+budgetTokens.toLocaleString()+' excerpt tokens ('+encoding+') · '+chars;
+    el('meter').max = Math.max(1,budgetTokens ?? budgetChars);
+    el('meter').value = usedTokens ?? usedChars;
     el('files').replaceChildren();
     for (const [index,item] of items.entries()) {
       const row = document.createElement('li');

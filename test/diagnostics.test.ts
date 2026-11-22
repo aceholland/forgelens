@@ -83,9 +83,10 @@ test('diagnostic syntax gate rejects invalid combined proposals before changing 
  const original='x = a + b\n';await writeFile(path.join(root,'sample.py'),original);
  const source=await readFile(path.join(process.cwd(),'test-local-b.ts'),'utf8');
  const tree=ts.createSourceFile('test-local-b.ts',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
- let syntaxCheck='',approve='',propose='';
+ let syntaxCheck='',persist='',approve='',propose='';
  const visit=(node:import('typescript').Node)=>{
   if(ts.isFunctionDeclaration(node)&&node.name?.text==='checkPythonSyntax')syntaxCheck=node.getText(tree);
+  if(ts.isVariableDeclaration(node)&&node.name.getText(tree)==='persistProposals')persist=node.getText(tree);
   if(ts.isPropertyAssignment(node)){
    if(node.name.getText(tree)==='onApproval')approve=node.initializer.getText(tree);
    if(node.name.getText(tree)==='propose')propose=node.initializer.getText(tree);
@@ -94,8 +95,8 @@ test('diagnostic syntax gate rejects invalid combined proposals before changing 
  };
  visit(tree);assert.ok(syntaxCheck&&approve&&propose,'Use the actual diagnostic callbacks without running a model.');
  const store=new ReviewStore();
- const compiled=ts.transpileModule(`${syntaxCheck}\n({approve:${approve},propose:${propose}})`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
- const gate=runInNewContext(compiled,{spawnSync,readWorkspace,resolveAgentProposal,writeFile,path,root,out,python,store});
+ const compiled=ts.transpileModule(`${syntaxCheck}\nconst ${persist};\n({approve:${approve},propose:${propose}})`,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+ const gate=runInNewContext(compiled,{spawnSync,readWorkspace,resolveAgentProposal,writeFile,path,root,out,python,store,validateStaged:false});
  const a={path:'sample.py',edits:[{oldText:'a + b',newText:'a if cond else + b'}]};
  const b={path:'sample.py',edits:[{oldText:'+ b',newText:''}]};
  // TrueForge requests approvals for a batch before dispatching either tool.

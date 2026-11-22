@@ -9,8 +9,8 @@ export interface ReviewHunk {
   after: string;
   status: HunkDecision;
 }
-export interface FileProposal { path: string; original: string; proposed: string; hunks: ReviewHunk[] }
-export interface AppliedEdit { path: string; before: string; after: string }
+export interface FileProposal { path: string; original: string; proposed: string; hunks: ReviewHunk[]; kind?: 'create' }
+export interface AppliedEdit { path: string; before: string; after: string; kind?: 'create' }
 
 /** Pure staging: all offsets address the immutable original, never the filesystem. */
 export function createProposal(path: string, original: string, proposed: string): FileProposal {
@@ -49,7 +49,7 @@ export function renderProposal(proposal: FileProposal, mode: 'accepted' | 'all' 
 
 export function prepareApply(proposal: FileProposal, current: string): AppliedEdit {
   if (current !== proposal.original) throw new Error('File changed since review began. Refresh the proposal before applying.');
-  return { path: proposal.path, before: current, after: renderProposal(proposal) };
+  return { path: proposal.path, before: current, after: renderProposal(proposal), ...(proposal.kind && {kind: proposal.kind}) };
 }
 
 export function undoEdit(edit: AppliedEdit, current: string): string {
@@ -60,9 +60,10 @@ export function undoEdit(edit: AppliedEdit, current: string): string {
 /** Caller applies returned text through VS Code WorkspaceEdit, then calls remove. */
 export class ReviewStore {
   private readonly proposals = new Map<string, FileProposal>();
-  stage(path: string, original: string, proposed: string): FileProposal {
+  stage(path: string, original: string, proposed: string, kind?: 'create'): FileProposal {
     if (this.proposals.has(path)) throw new Error(`A proposal is already staged for ${path}. Review it first.`);
     const proposal = createProposal(path, original, proposed);
+    if (kind) proposal.kind = kind;
     this.proposals.set(path, proposal);
     return proposal;
   }
@@ -70,7 +71,22 @@ export class ReviewStore {
     const previous=this.require(path);
     if(previous.original!==current)throw new Error('File changed since staging.');
     if(previous.hunks.some(h=>h.status!=='pending'))throw new Error('Cannot revise after hunk review.');
-    const next=createProposal(path,previous.original,proposed);this.proposals.set(path,next);return next;
+    const next=createProposal(path,previous.original,proposed);
+    if(previous.kind)next.kind=previous.kind;
+    this.proposals.set(path,next);return next;
+  }
+  /** A live tool reviews its delta against the previously accepted overlay. */
+  commitReviewed(original: string, previous: FileProposal | undefined, delta: FileProposal): void {
+    if (this.get(delta.path) !== previous || (previous && previous.original !== original)
+      || delta.original !== (previous ? renderProposal(previous) : original)) throw new Error('Staged text changed during hunk review.');
+    if (delta.hunks.some(h => h.status === 'pending')) throw new Error('Hunk review is incomplete.');
+    if (!delta.hunks.some(h => h.status === 'accepted')) return;
+    if (!previous) { this.proposals.set(delta.path, delta); return; }
+    const combined = createProposal(delta.path, original, renderProposal(delta));
+    if (previous.kind) combined.kind = previous.kind;
+    for (const hunk of combined.hunks) hunk.status = 'accepted';
+    if (combined.hunks.length) this.proposals.set(delta.path, combined);
+    else this.proposals.delete(delta.path);
   }
   get(path: string): FileProposal | undefined { return this.proposals.get(path); }
   list(): FileProposal[] { return [...this.proposals.values()]; }

@@ -1,8 +1,8 @@
-name: Post-deadline source context preview in desktop VS Code
+name: Desktop VS Code and staged-edit checks
 
 on:
   push:
-    branches: [codex/postdeadline-20261122]
+    branches: [main, codex/task-b-workflow-20261122]
   workflow_dispatch:
 
 permissions:
@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   preview-without-provider:
-    if: github.ref == 'refs/heads/codex/postdeadline-20261122'
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +33,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install candidate-validation test runner
+        run: python -m pip install pytest==9.0.2
       - name: Build current source and install the isolated editor harness
         shell: pwsh
         run: |
@@ -43,11 +47,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run compile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm install --prefix "$env:RUNNER_TEMP/forge-preview-harness" --cache "$cache" --ignore-scripts --no-audit --no-fund '@vscode/test-electron@3.1.0' 'playwright-core@1.58.2'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Activate 0.2.0 and preview a disposable Git workspace without a provider
+      - name: Activate the extension and preview a disposable Git workspace without a provider
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == Linux ]]; then
