@@ -4,7 +4,6 @@ const http = require('node:http');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
-const { TrueForge } = require('@truefoundry/trueforge-sdk');
 
 const files = {
   'src/doubles.py': 'def double(n):\n    return n\n\n\nTAG = "stable"\n',
@@ -25,6 +24,7 @@ async function listen(server) {
 
 // The model response is scripted; the HTTP server, SDK turn, MCP, editor and pytest are real.
 async function start(storage, temp) {
+  const { TrueForge } = await import('@truefoundry/trueforge-sdk');
   const cli = process.env.TRUEFORGE_CLI || path.join(temp, 'forge-preview-harness/node_modules/@truefoundry/trueforge/dist/cli.js');
   assert.ok(fs.existsSync(cli), 'Install the pinned TrueForge CLI in the harness or set TRUEFORGE_CLI');
   let calls = 0, failure, child;

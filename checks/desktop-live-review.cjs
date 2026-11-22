@@ -20,10 +20,10 @@ exports.run = async () => {
   const original = snapshot(folder);
   const files = ['src/doubles.py','tests/test_doubles.py'];
   assert.deepEqual(Object.keys(original).sort(), files);
-  assert.equal(fs.realpathSync(vscode.workspace.workspaceFolders[0].uri.fsPath), fs.realpathSync(folder));
+  assert.equal(path.relative(fs.realpathSync(vscode.workspace.workspaceFolders[0].uri.fsPath), fs.realpathSync(folder)), '');
   assert.ok(vscode.workspace.isTrusted);
   const extension = vscode.extensions.getExtension('forgelens-team.forgelens');
-  assert.equal(fs.realpathSync(path.dirname(extension.extensionPath)), fs.realpathSync(process.env.FORGELENS_INSTALLED_EXTENSIONS));
+  assert.equal(path.relative(fs.realpathSync(path.dirname(extension.extensionPath)), fs.realpathSync(process.env.FORGELENS_INSTALLED_EXTENSIONS)), '');
   await extension.activate();
   const { chromium } = require(path.join(process.env.RUNNER_TEMP, 'forge-preview-harness/node_modules/playwright-core'));
   const browser = await chromium.connectOverCDP('http://127.0.0.1:' + process.env.FORGELENS_PICKER_PORT);
