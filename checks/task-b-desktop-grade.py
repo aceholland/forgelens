@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
+from urllib.request import urlopen
 
 
 def main():
@@ -25,6 +27,32 @@ def main():
     def git(*args):
         return subprocess.check_output(["git", "-c", "core.autocrlf=false", *args], cwd=repo)
 
+    def wait_for_camera(name):
+        until = time.monotonic() + 12
+        while not (output / name).is_file() and time.monotonic() < until:
+            time.sleep(.1)
+
+    retained = output / "result.json"
+    if retained.is_file():
+        capture = json.loads(retained.read_text(encoding="utf-8"))
+        session = capture["sessionId"]
+        assert re.fullmatch(r"[a-zA-Z0-9_-]+", session)
+        endpoint = setup["base"].rstrip("/") + "/api/v1/sessions/" + session + "/turns"
+        with urlopen(endpoint, timeout=8) as response:
+            turns = json.load(response)["data"]
+        trace = capture.get("trace", {})  # from the same native turn's paginated events endpoint
+        print("TrueForge native session receipt\nGET /api/v1/sessions/" + session + "/turns", flush=True)
+        print("Session", session, "|", len(turns), "turn(s)", flush=True)
+        for turn in turns:
+            print("Turn", turn["id"], "|", turn["state"]["status"], flush=True)
+        print("Model", setup["model"], flush=True)
+        print("Native model messages:", trace.get("modelCalls"), flush=True)
+        for name in dict.fromkeys(trace.get("toolCalls", [])):
+            print("  ", name, "x", trace["toolCalls"].count(name), flush=True)
+        print("Operator answers:", trace.get("userToolResponses"), flush=True)
+        (output / "native-checked.json").write_text(json.dumps({"session":session,"turns":len(turns)}), encoding="utf-8")
+        wait_for_camera("camera-native")
+
     untracked = git("ls-files", "--others", "--exclude-standard", "-z").decode().strip("\0")
     if untracked:
         git("add", "--intent-to-add", "--", *untracked.split("\0"))
@@ -37,11 +65,6 @@ def main():
     (output / "cli.txt").write_text(pytest.stdout, encoding="utf-8")
     (output / "cli-checked.json").write_text(json.dumps({"exit":pytest.returncode}), encoding="utf-8")
     # Coordinate the camera independently of the test outcomes.
-    import time
-    def wait_for_camera(name):
-        until = time.monotonic() + 12
-        while not (output / name).is_file() and time.monotonic() < until:
-            time.sleep(.1)
     wait_for_camera("camera-cli")
     help_output = command([sys.executable, "-m", "flask", "--help"])
     fixtures = output / "fixtures"

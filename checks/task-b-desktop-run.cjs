@@ -203,6 +203,8 @@ exports.run = async dir => {
     await vscode.commands.executeCommand('workbench.action.toggleMaximizedPanel');
     const command=windows?'"%FORGELENS_GRADE_PYTHON%" "%FORGELENS_GRADE_SCRIPT%"':'"$FORGELENS_GRADE_PYTHON" "$FORGELENS_GRADE_SCRIPT"';
     term.sendText(command);
+    await until(()=>fs.existsSync(path.join(dir,'native-checked.json')),'native session readback',30000);
+    await delay(500);await shot('04b-native-session');fs.writeFileSync(path.join(dir,'camera-native'),'');
     await until(()=>fs.existsSync(path.join(dir,'cli-checked.json')),'CLI tests',180000);
     await delay(500);await shot('05-cli-tests');fs.writeFileSync(path.join(dir,'camera-cli'),'');
     await until(()=>fs.existsSync(path.join(dir,'json-checked.json')),'CLI help and JSON',90000);
